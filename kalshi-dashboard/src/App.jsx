@@ -1,7 +1,17 @@
 // File: src/App.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Settings, Play, Pause, RefreshCw, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Globe } from 'lucide-react';
+import { Settings, Play, Pause, RefreshCw, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Globe, Trophy, Clock, Loader2 } from 'lucide-react';
+
+// --- Configuration ---
+// Fallback options for Simulation Mode or before API load
+const DEFAULT_SPORTS = [
+    { key: 'americanfootball_nfl', title: 'Football (NFL)' },
+    { key: 'basketball_nba', title: 'Basketball (NBA)' },
+    { key: 'baseball_mlb', title: 'Baseball (MLB)' },
+];
+
+const REFRESH_COOLDOWN = 60000; // 60 Seconds minimum between API calls
 
 // --- Utility Functions ---
 
@@ -54,11 +64,11 @@ const generateInitialMarket = (id) => {
   
   return {
     id: `mkt-${id}`,
-    event: `${match.away} @ ${match.home}`,
+    event: `${match.away} to win vs ${match.home}`, 
     americanOdds: probabilityToAmerican(baseProb),
     impliedProb: baseProb,
-    bestBid, // Simulated Kalshi Best Bid
-    bestAsk, // Simulated Kalshi Best Ask
+    bestBid, 
+    bestAsk, 
     volatility: (Math.random() * 0.02) + 0.005, 
     history: [{ time: 0, price: baseProb * 100 }]
   };
@@ -71,73 +81,168 @@ const KalshiDashboard = () => {
   const [balance, setBalance] = useState(10000); 
   const [isRunning, setIsRunning] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [errorMsg, setErrorMsg] = useState(''); 
+  const [lastUpdated, setLastUpdated] = useState(null);
   
   // Strategy Settings
   const [marginPercent, setMarginPercent] = useState(15); 
   const [holdStrategy, setHoldStrategy] = useState('sell_limit');
   const [apiKey, setApiKey] = useState('');
   const [dataSource, setDataSource] = useState('SIMULATION'); // 'SIMULATION' | 'LIVE'
+  const [selectedSport, setSelectedSport] = useState('americanfootball_nfl'); 
   
+  // Dynamic Sports List State
+  const [sportsList, setSportsList] = useState(DEFAULT_SPORTS);
+  const [isLoadingSports, setIsLoadingSports] = useState(false);
+
+  // Refs for Rate Limiting
+  const lastFetchTimeRef = useRef(0);
+  const isFetchingRef = useRef(false);
+
   // --- Initialization Effect ---
-  // Ensure data exists on load or when switching modes
   useEffect(() => {
     if (dataSource === 'SIMULATION') {
         const initialMarkets = Array.from({ length: 5 }).map((_, i) => generateInitialMarket(i));
         setMarkets(initialMarkets);
+        setErrorMsg('');
+        // Reset to defaults in simulation
+        setSportsList(DEFAULT_SPORTS); 
     } else {
-        // Optional: Clear markets when switching to LIVE to prevent stale data
         setMarkets([]);
+        // Reset fetch timer when switching modes so we can fetch immediately
+        lastFetchTimeRef.current = 0; 
     }
   }, [dataSource]);
 
-  // --- Engine Effect ---
-  // Handles updates (ticking) and live fetching
+  // --- Fetch Available Sports List (Dynamic) ---
   useEffect(() => {
-    let interval;
+      const fetchSportsList = async () => {
+          if (!apiKey || apiKey.length < 10 || dataSource !== 'LIVE') return;
+          
+          setIsLoadingSports(true);
+          try {
+              // Fetch all sports
+              const response = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${apiKey}`);
+              const data = await response.json();
+              
+              if (Array.isArray(data)) {
+                  // Filter to ensure we only get valid sports objects
+                  const validSports = data.filter(s => s.key && s.title);
+                  
+                  // Only update if we found valid sports
+                  if (validSports.length > 0) {
+                      setSportsList(validSports);
+                      
+                      // If currently selected sport is not in the new list, switch to the first one
+                      // This handles the "Out of Season" case automatically
+                      if (!validSports.find(s => s.key === selectedSport)) {
+                          setSelectedSport(validSports[0].key);
+                      }
+                  }
+              } else if (data.message) {
+                  console.warn("Sports fetch warning:", data.message);
+              }
+          } catch (e) {
+              console.error("Failed to load sports list", e);
+          } finally {
+              setIsLoadingSports(false);
+          }
+      };
 
-    const fetchLiveOdds = async () => {
-        if (!apiKey) return;
-        try {
-            const response = await fetch(`https://api.the-odds-api.com/v4/sports/americanfootball_nfl/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${apiKey}`);
-            const data = await response.json();
-            
-            if (!Array.isArray(data)) return;
+      // specific debounce/check for API key existence
+      const timer = setTimeout(() => {
+          fetchSportsList();
+      }, 500); // 500ms delay to stop request while typing
 
-            const newMarkets = data.slice(0, 10).map(game => {
-                const bookmaker = game.bookmakers[0];
-                if (!bookmaker) return null;
-                
-                const outcome = bookmaker.markets[0].outcomes.find(o => o.price < 0) || bookmaker.markets[0].outcomes[0];
-                const prob = americanToProbability(outcome.price);
-                
-                // IMPORTANT: Since we don't have a live Kalshi API, we must still SIMULATE the Kalshi order book
-                // relative to the real sportsbook odds to test the bidding logic.
-                const { bestBid, bestAsk } = generateMarketStructure(prob);
+      return () => clearTimeout(timer);
+  }, [apiKey, dataSource]); // Re-run if key changes or we switch mode
 
-                return {
-                    id: game.id,
-                    event: `${game.away_team} @ ${game.home_team}`,
-                    americanOdds: outcome.price,
-                    impliedProb: prob,
-                    bestBid, 
-                    bestAsk,
-                    volatility: 0, 
-                    history: [] 
-                };
-            }).filter(Boolean);
-            
-            setMarkets(newMarkets);
-        } catch (error) {
-            console.error("Failed to fetch odds", error);
-        }
-    };
 
-    if (isRunning) {
-      if (dataSource === 'LIVE' && apiKey) {
-          fetchLiveOdds(); 
-          interval = setInterval(fetchLiveOdds, 30000); 
-      } else if (dataSource === 'SIMULATION') {
-          // SIMULATION LOOP
+  // --- LIVE DATA ENGINE ---
+  const fetchLiveOdds = useCallback(async (force = false) => {
+      if (!apiKey || dataSource !== 'LIVE') return;
+      
+      const now = Date.now();
+      // Guard: Don't fetch if too soon (unless forced)
+      if (!force && (now - lastFetchTimeRef.current < REFRESH_COOLDOWN)) {
+          console.log("Skipping fetch: Cooldown active");
+          return;
+      }
+      
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      setErrorMsg('');
+
+      try {
+          const response = await fetch(`https://api.the-odds-api.com/v4/sports/${selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${apiKey}`);
+          const data = await response.json();
+          
+          lastFetchTimeRef.current = Date.now();
+          setLastUpdated(new Date());
+
+          if (data.message) throw new Error(data.message);
+          if (!Array.isArray(data)) throw new Error("Unexpected API format");
+          
+          // Special handling for empty array - it's not strictly an error, just no games
+          if (data.length === 0) {
+               // Don't throw error, just clear markets and show message
+               setMarkets([]);
+               setErrorMsg(`No active games found for ${sportsList.find(s=>s.key === selectedSport)?.title || selectedSport}.`);
+               return; 
+          }
+
+          const newMarkets = data.slice(0, 10).map(game => {
+              const bookmaker = game.bookmakers && game.bookmakers[0];
+              if (!bookmaker) return null;
+              
+              const markets = bookmaker.markets[0];
+              if (!markets || !markets.outcomes) return null;
+
+              const outcome = markets.outcomes.find(o => o.price < 0) || markets.outcomes[0];
+              const prob = americanToProbability(outcome.price);
+              
+              const { bestBid, bestAsk } = generateMarketStructure(prob);
+
+              return {
+                  id: game.id,
+                  event: `${outcome.name} to win`, 
+                  americanOdds: outcome.price,
+                  impliedProb: prob,
+                  bestBid, 
+                  bestAsk,
+                  volatility: 0, 
+                  history: [] 
+              };
+          }).filter(Boolean);
+          
+          setMarkets(newMarkets);
+      } catch (error) {
+          console.error("Fetch error", error);
+          setErrorMsg(error.message || "Network error");
+          if (error.message && error.message.toLowerCase().includes('quota')) {
+              setIsRunning(false);
+          }
+      } finally {
+          isFetchingRef.current = false;
+      }
+  }, [apiKey, dataSource, selectedSport, sportsList]);
+
+  // Live Mode Interval
+  useEffect(() => {
+      let interval;
+      if (isRunning && dataSource === 'LIVE') {
+          fetchLiveOdds(); // Initial fetch
+          // 2 Minute Interval to save quota
+          interval = setInterval(() => fetchLiveOdds(false), 120000); 
+      }
+      return () => clearInterval(interval);
+  }, [isRunning, dataSource, fetchLiveOdds]);
+
+
+  // --- SIMULATION ENGINE ---
+  useEffect(() => {
+      let interval;
+      if (isRunning && dataSource === 'SIMULATION') {
           interval = setInterval(() => {
             setCurrentTime(t => t + 1);
             
@@ -147,7 +252,6 @@ const KalshiDashboard = () => {
                 let newProb = Math.max(0.01, Math.min(0.99, market.impliedProb + change));
                 if (newProb > 0.9 || newProb < 0.1) newProb = (newProb + market.impliedProb) / 2;
                 
-                // Update Order Book based on new prob
                 const { bestBid, bestAsk } = generateMarketStructure(newProb);
 
                 return {
@@ -160,33 +264,50 @@ const KalshiDashboard = () => {
                 };
               });
             });
-    
-            // Check for exits
-            setPositions(prevPositions => {
-                return prevPositions.map(pos => {
-                    if (pos.status !== 'OPEN') return pos;
-                    const market = markets.find(m => m.id === pos.marketId);
-                    if (!market) return pos;
-    
-                    // Sell Logic: We sell into the "Best Bid" of the market (simplified as FairValue here for arb check)
-                    const currentFairValue = market.impliedProb * 100;
-                    
-                    if (holdStrategy === 'sell_limit') {
-                        const targetSellPrice = pos.avgEntryPrice * (1 + (marginPercent / 100));
-                        if (currentFairValue >= targetSellPrice) {
-                            const profit = (currentFairValue - pos.avgEntryPrice) * pos.quantity;
-                            setBalance(b => b + (currentFairValue * pos.quantity));
-                            return { ...pos, status: 'CLOSED', exitPrice: currentFairValue, profit: profit };
-                        }
-                    }
-                    return pos;
-                });
-            });
           }, 1000);
       }
+      return () => clearInterval(interval);
+  }, [isRunning, dataSource, currentTime]);
+
+
+  // --- Trade Management Effect ---
+  useEffect(() => {
+    if (!isRunning) return;
+    
+    let balanceAdjustment = 0;
+    let positionsUpdated = false;
+
+    const newPositions = positions.map(pos => {
+        if (pos.status !== 'OPEN') return pos;
+        
+        const market = markets.find(m => m.id === pos.marketId);
+        if (!market) return pos;
+
+        const currentFairValue = Math.floor(market.impliedProb * 100);
+        
+        let shouldSell = false;
+        if (holdStrategy === 'sell_limit') {
+             const targetSellPrice = pos.avgEntryPrice * (1 + (marginPercent / 100));
+             if (currentFairValue >= targetSellPrice) shouldSell = true;
+        }
+
+        if (shouldSell) {
+            const profit = (currentFairValue - pos.avgEntryPrice) * pos.quantity;
+            const revenue = currentFairValue * pos.quantity;
+            balanceAdjustment += revenue;
+            positionsUpdated = true;
+            return { ...pos, status: 'CLOSED', exitPrice: currentFairValue, profit: profit };
+        }
+        return pos;
+    });
+
+    if (positionsUpdated) {
+        setPositions(newPositions);
+        setBalance(prev => prev + balanceAdjustment);
     }
-    return () => clearInterval(interval);
-  }, [isRunning, currentTime, dataSource, holdStrategy, marginPercent, apiKey]);
+
+  }, [markets, isRunning, holdStrategy, marginPercent]); 
+
 
   // --- Smart Bidding Logic ---
 
@@ -195,10 +316,6 @@ const KalshiDashboard = () => {
       const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
       const marketBestBid = market.bestBid;
 
-      // Strategy:
-      // 1. If Market Bid >= Our Max Limit -> We can't compete. Bid our Max Limit (or sit out).
-      // 2. If Market Bid < Our Max Limit  -> Bid Market Bid + 1 (Price Improvement).
-      
       let smartBid = 0;
       let reason = "";
 
@@ -243,8 +360,15 @@ const KalshiDashboard = () => {
     const market = markets.find(m => m.id === position.marketId);
     const currentPrice = market ? Math.floor(market.impliedProb * 100) : position.avgEntryPrice;
     const profit = (currentPrice - position.avgEntryPrice) * position.quantity;
-    setBalance(b => b + (currentPrice * position.quantity));
-    setPositions(prev => prev.map(p => p.id === position.id ? { ...p, status: 'CLOSED', exitPrice: currentPrice, profit: profit } : p));
+    const revenue = currentPrice * position.quantity;
+    
+    setBalance(b => b + revenue);
+    
+    setPositions(prev => prev.map(p => 
+      p.id === position.id 
+        ? { ...p, status: 'CLOSED', exitPrice: currentPrice, profit: profit }
+        : p
+    ));
   };
 
   return (
@@ -261,9 +385,9 @@ const KalshiDashboard = () => {
              <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${dataSource === 'LIVE' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-amber-100 text-amber-700 border-amber-200'}`}>
                 {dataSource === 'LIVE' ? 'LIVE FEED (ODDS API)' : 'SIMULATION MODE'}
              </span>
-             {dataSource === 'LIVE' && (
-                 <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500 border-slate-200">
-                    KALSHI ORDERBOOK: SIMULATED
+             {dataSource === 'LIVE' && lastUpdated && (
+                 <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500 border-slate-200">
+                    <Clock size={10} /> Updated: {lastUpdated.toLocaleTimeString()}
                  </span>
              )}
           </div>
@@ -274,6 +398,16 @@ const KalshiDashboard = () => {
                 <DollarSign size={16} className="text-emerald-600"/>
                 <span className="font-mono font-bold text-lg">{(balance / 100).toFixed(2)}</span>
             </div>
+            {dataSource === 'LIVE' && (
+                <button 
+                    onClick={() => fetchLiveOdds(true)} 
+                    disabled={!apiKey}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors"
+                    title="Force Refresh (Uses 1 API Credit)"
+                >
+                    <RefreshCw size={18} />
+                </button>
+            )}
             <button 
                 onClick={() => setIsRunning(!isRunning)}
                 className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium text-white transition-all shadow-sm active:scale-95 ${isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}
@@ -282,6 +416,14 @@ const KalshiDashboard = () => {
             </button>
         </div>
       </header>
+
+      {/* Error Banner */}
+      {errorMsg && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
+            <AlertCircle size={20} />
+            <span className="text-sm font-medium">{errorMsg}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
@@ -292,6 +434,11 @@ const KalshiDashboard = () => {
                     <h2 className="font-semibold text-slate-700 flex items-center gap-2">
                         <Activity size={16} className={isRunning ? "text-emerald-500" : "text-slate-400"}/>
                         Market Scanner
+                        {dataSource === 'LIVE' && (
+                             <span className="text-xs font-normal text-slate-400 ml-2">
+                                ({sportsList.find(s => s.key === selectedSport)?.title || selectedSport})
+                             </span>
+                        )}
                     </h2>
                     
                     {/* Source Toggle */}
@@ -365,7 +512,7 @@ const KalshiDashboard = () => {
                     </table>
                     {markets.length === 0 && (
                         <div className="p-8 text-center text-slate-400 text-sm">
-                            {dataSource === 'LIVE' && !apiKey ? 'Enter API Key to load live data.' : 'Loading markets...'}
+                            {dataSource === 'LIVE' && !apiKey ? 'Enter API Key to load live data.' : errorMsg || 'Loading markets...'}
                         </div>
                     )}
                 </div>
@@ -439,7 +586,24 @@ const KalshiDashboard = () => {
                     </div>
 
                     {dataSource === 'LIVE' && (
-                        <div className="pt-2">
+                        <div className="pt-2 border-t border-slate-100 mt-4">
+                            <label className="text-xs font-bold text-slate-400 uppercase mb-2 block flex items-center justify-between gap-1">
+                                <span className="flex items-center gap-1"><Trophy size={12}/> Select Sport</span>
+                                {isLoadingSports && <Loader2 size={12} className="animate-spin text-blue-500"/>}
+                            </label>
+                            <select 
+                                value={selectedSport}
+                                onChange={(e) => setSelectedSport(e.target.value)}
+                                disabled={!apiKey || isLoadingSports}
+                                className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 mb-4 disabled:opacity-50"
+                            >
+                                {sportsList.map(sport => (
+                                    <option key={sport.key} value={sport.key}>
+                                        {sport.title}
+                                    </option>
+                                ))}
+                            </select>
+
                             <label className="text-xs font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label>
                             <input 
                                 type="password" 
