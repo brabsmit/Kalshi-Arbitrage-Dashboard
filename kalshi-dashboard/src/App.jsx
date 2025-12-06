@@ -1,8 +1,7 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-// ADDED: Bot to imports
-import { Settings, Play, Pause, RefreshCw, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Bug, TrendingDown, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Ban, Bot } from 'lucide-react';
+import { Settings, Play, Pause, RefreshCw, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Bug, TrendingDown, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot } from 'lucide-react';
 import forge from 'node-forge'; // REQUIRED: npm install node-forge
 
 // ==========================================
@@ -96,6 +95,8 @@ const calculateStrategy = (market, marginPercent) => {
         };
     }
 
+    // Target Price = Fair Value * (1 - Margin)
+    // Example: 68c * 0.85 = 57.8 -> 57c
     const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
     const currentBestBid = market.bestBid || 0;
     const edge = fairValue - currentBestBid;
@@ -103,12 +104,23 @@ const calculateStrategy = (market, marginPercent) => {
     let smartBid = 0;
     let reason = "";
 
+    // AUTO-BID STRATEGY:
+    // If Market Bid is LOWER than our Max Willing Price, we bid AT our Max Willing Price.
+    // This "sets the floor" or takes liquidity up to our valuation.
+    // Example: Bid is 20c. Max is 56c. We bid 56c.
+    
     if (currentBestBid >= maxWillingToPay) {
+        // Market is expensive (e.g. 60c). We can't profit enough.
+        // We default to our max limit just in case it dips.
         smartBid = maxWillingToPay;
         reason = "Max Limit";
     } else {
-        smartBid = currentBestBid + 1;
-        reason = "Beat Market (+1)";
+        // Market is cheap (e.g. 20c).
+        // We bid at our calculated target (56c) to capture it.
+        // Note: You could also do 'currentBestBid + 1' (Penny Up), 
+        // but per your request ("auto smart bid at 56c"), we bid the target.
+        smartBid = maxWillingToPay; 
+        reason = "Target Value";
     }
 
     return { smartBid, maxWillingToPay, edge, reason };
@@ -254,7 +266,9 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                 Kalshi ArbBot
             </h1>
             <div className="flex items-center gap-2 mt-2">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-green-100 text-green-700 border-green-200">LIVE MARKET DATA</span>
+                <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500 border-slate-200">
+                    <Activity size={10} /> HTTP POLLING
+                </span>
                 {lastUpdated && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500 border-slate-200"><Clock size={10} /> {lastUpdated.toLocaleTimeString()}</span>}
                 {isTurboMode && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-200 animate-pulse"><Zap size={10} fill="currentColor"/> TURBO</span>}
             </div>
@@ -303,8 +317,18 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
                         <span>{market.event}</span>
                     </div>
                     <div className="flex items-center gap-1 mt-1 ml-14">
-                        {market.isMatchFound ? <span className="flex items-center gap-1 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded"><LinkIcon size={10} /> Live Match</span> : <span className="flex items-center gap-1 text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded"><Unlink size={10} /> No Market</span>}
-                        <span className="text-[10px] text-slate-400 font-mono">Odds: {market.americanOdds > 0 ? `+${market.americanOdds}` : market.americanOdds}</span>
+                        {market.isMatchFound ? (
+                            <span className="flex items-center gap-1 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
+                                <LinkIcon size={10} /> Live Match
+                            </span>
+                        ) : (
+                            <span className="flex items-center gap-1 text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded">
+                                <Unlink size={10} /> No Market
+                            </span>
+                        )}
+                        <span className="text-[10px] text-slate-400 font-mono">
+                            Odds: {market.americanOdds > 0 ? `+${market.americanOdds}` : market.americanOdds}
+                        </span>
                     </div>
                 </div>
             </td>
@@ -313,8 +337,24 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
             <td className="px-4 py-3 text-right text-slate-400">{market.isMatchFound ? `${market.maxWillingToPay}¢` : '-'}</td>
             <td className="px-4 py-3 text-right">
                 {market.isMatchFound ? (
-                    <><div className="flex flex-col items-end"><div className={`font-bold font-mono text-base transition-colors ${isFlash ? 'text-purple-600 scale-110' : 'text-emerald-600'}`}>{market.smartBid}¢</div>{market.edge > 0 && <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1 rounded flex items-center gap-0.5"><TrendingDown size={8} className="rotate-180"/> +{market.edge}¢ Edge</span>}</div><div className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mt-0.5">{market.reason}</div></>
-                ) : <span className="text-slate-300">-</span>}
+                    <>
+                        <div className="flex flex-col items-end">
+                            <div className={`font-bold font-mono text-base transition-colors ${isFlash ? 'text-purple-600 scale-110' : 'text-emerald-600'}`}>
+                                {market.smartBid}¢
+                            </div>
+                            {market.edge > 0 && (
+                                <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1 rounded flex items-center gap-0.5">
+                                    <TrendingDown size={8} className="rotate-180"/> +{market.edge}¢ Edge
+                                </span>
+                            )}
+                        </div>
+                        <div className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mt-0.5">
+                            {market.reason}
+                        </div>
+                    </>
+                ) : (
+                    <span className="text-slate-300">-</span>
+                )}
             </td>
             <td className="px-4 py-3 text-center">
                 <button 
@@ -344,6 +384,7 @@ const KalshiDashboard = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [errorMsg, setErrorMsg] = useState(''); 
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [debugLog, setDebugLog] = useState([]); 
   
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [walletKeys, setWalletKeys] = useState(null);
@@ -353,7 +394,7 @@ const KalshiDashboard = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'smartBid', direction: 'desc' });
   const [marginPercent, setMarginPercent] = useState(15); 
   const [tradeSize, setTradeSize] = useState(10);
-  const [isAutoBid, setIsAutoBid] = useState(false); 
+  const [isAutoBid, setIsAutoBid] = useState(false); // Auto-Bid Toggle
   const [holdStrategy, setHoldStrategy] = useState('sell_limit'); 
   const [oddsApiKey, setOddsApiKey] = useState('');
   const [selectedSport, setSelectedSport] = useState('americanfootball_nfl'); 
@@ -365,15 +406,14 @@ const KalshiDashboard = () => {
   const lastFetchTimeRef = useRef(0);
   const abortControllerRef = useRef(null);
   
+  // Track active markets to prevent double bidding
   const autoBidTracker = useRef(new Set());
 
   // Derived State for Tabs
   const activePositions = useMemo(() => positions.filter(p => !p.isOrder), [positions]);
-  
   const restingOrders = useMemo(() => 
     positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'ACTIVE', 'RESTING', 'BIDDING'].includes(p.status)), 
   [positions]);
-
   const orderHistory = useMemo(() => 
     positions.filter(p => ['filled', 'executed', 'canceled', 'FILLED', 'EXECUTED', 'CANCELED'].includes(p.status.toLowerCase())), 
   [positions]);
@@ -452,7 +492,6 @@ const KalshiDashboard = () => {
           const posData = posRes.ok ? await posRes.json() : { positions: [] };
 
           const mappedOrders = (ordersData.orders || []).map(o => {
-              // Fix: Ensure quantity is never less than remaining to prevent negative fills
               const count = o.count || 0;
               const remaining = o.remaining_count || 0;
               const safeCount = count < remaining ? remaining : count;
@@ -485,8 +524,7 @@ const KalshiDashboard = () => {
               isOrder: false
           }));
 
-          const allPositions = [...mappedOrders, ...mappedPositions];
-          setPositions(allPositions);
+          setPositions([...mappedOrders, ...mappedPositions]);
 
       } catch (e) {
           console.error("Portfolio fetch failed:", e);
@@ -535,16 +573,19 @@ const KalshiDashboard = () => {
       const now = Date.now();
       const cooldown = isTurboMode ? 2000 : REFRESH_COOLDOWN;
       if (!force && (now - lastFetchTimeRef.current < cooldown)) return;
+      
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       try {
           setErrorMsg('');
           const oddsPromise = fetch(`https://api.the-odds-api.com/v4/sports/${selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }).then(res => res.json());
+
           const activeSportConfig = sportsList.find(s => s.key === selectedSport);
           const seriesTicker = activeSportConfig?.kalshiSeries || '';
           let kalshiUrl = `/api/kalshi/markets?limit=300&status=open`;
           if (seriesTicker) kalshiUrl += `&series_ticker=${seriesTicker}`;
+
           const kalshiPromise = fetch(kalshiUrl, { signal: abortControllerRef.current.signal, headers: { 'Accept': 'application/json' } }).then(async res => {
               if (!res.ok) throw new Error(`Kalshi Error: ${res.status}`);
               return res.json();
@@ -587,6 +628,7 @@ const KalshiDashboard = () => {
                       history: [...safeHistory, { time: Date.now(), price: prob * 100 }].slice(-20)
                   };
               }).filter(Boolean);
+
               return processed.sort((a, b) => {
                   if (a.isMatchFound && !b.isMatchFound) return -1;
                   if (!a.isMatchFound && b.isMatchFound) return 1;
@@ -616,6 +658,7 @@ const KalshiDashboard = () => {
   const placeLiveOrder = async (market, price) => {
     if (!market.realMarketId) return;
     if (!walletKeys) { setIsWalletOpen(true); return; }
+
     const quantity = parseInt(tradeSize);
     const cost = price * quantity;
     if (balance !== null && balance < cost) { alert("Insufficient funds"); return; }
@@ -624,25 +667,55 @@ const KalshiDashboard = () => {
         const path = '/trade-api/v2/portfolio/orders';
         const timestamp = Date.now();
         const method = "POST";
+        
         const orderData = {
             action: "buy",
             ticker: market.realMarketId.trim().toUpperCase().replace(/[^A-Z0-9-]/g, ''),
             count: Math.floor(quantity),
             yes_price: Math.floor(price),
             side: "yes",
-            type: "limit"
+            type: "limit",
+            // client_order_id removed as per stability request
         };
+
+        console.group("🚀 ATTEMPTING LIVE ORDER");
+        console.log("URL:", `/api/kalshi${path}`);
+        console.log("PAYLOAD:", JSON.stringify(orderData, null, 2));
+        console.groupEnd();
+
         const signature = signRequest(walletKeys.privateKey, method, path, timestamp);
+        
         const response = await fetch(`/api/kalshi/portfolio/orders`, {
             method: method,
-            headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': signature, 'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() },
+            headers: { 
+                'Content-Type': 'application/json', 
+                'KALSHI-ACCESS-KEY': walletKeys.keyId, 
+                'KALSHI-ACCESS-SIGNATURE': signature, 
+                'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() 
+            },
             body: JSON.stringify(orderData)
         });
+        
         const result = await response.json();
-        if (!response.ok) throw new Error(result.message || "Order failed");
+        
+        if (!response.ok) {
+            console.error("FULL API ERROR RESPONSE:", JSON.stringify(result, null, 2));
+            let msg = result.message || "Unknown Error";
+            if (result.error) {
+                 msg = `${result.error.code || 'Error'}: ${result.error.message || JSON.stringify(result.error)}`;
+            }
+            if (result.details) {
+                msg += ` | Details: ${JSON.stringify(result.details)}`;
+            }
+            throw new Error(msg);
+        }
         
         console.log(`[SUCCESS] Order Placed: ${result.order_id}`);
+        
+        // Track for auto-bid suppression
         autoBidTracker.current.add(market.realMarketId);
+
+        // Optimistic update
         setPositions(prev => [{
             id: result.order_id,
             marketId: market.realMarketId,
@@ -653,9 +726,11 @@ const KalshiDashboard = () => {
             price: price,
             status: 'BIDDING',
             created_time: new Date().toISOString(),
-            isOrder: true 
+            isOrder: true // CRITICAL FIX
         }, ...prev]);
+
         fetchPortfolio(); 
+
     } catch (err) {
         console.error("Order Exception:", err);
         alert(`Order Failed: ${err.message}`);
@@ -666,28 +741,23 @@ const KalshiDashboard = () => {
   useEffect(() => {
       if (!isRunning || !isAutoBid || !walletKeys) return;
 
-      // 1. Identify Candidate Markets
-      // Must be matched, must have edge, must NOT have active position/order
       const candidates = markets.filter(m => {
           if (!m.isMatchFound) return false;
           
-          // Don't bid if we already have action on this ticker
+          // Safety 1: Don't bid if we have a position/order
           const hasActivity = positions.some(p => p.marketId === m.realMarketId);
           if (hasActivity) return false;
           
-          // Don't bid if we just bid (in this session)
+          // Safety 2: Don't bid if we already tried
           if (autoBidTracker.current.has(m.realMarketId)) return false;
 
           return true;
       });
 
-      // 2. Evaluate & Execute
       candidates.forEach(market => {
           const { smartBid, maxWillingToPay } = calculateStrategy(market, marginPercent);
-          const currentBestBid = market.bestBid || 0;
-
-          // Logic: If Current Best Bid is strictly less than our Max Limit,
-          // we place a bid at "Best + 1" (Smart Bid) to take the lead.
+          
+          // TRIGGER: Only bid if we can get it at or below our target
           if (smartBid && smartBid <= maxWillingToPay) {
                console.log(`[AUTO-BID] Executing on ${market.event}. Bid: ${smartBid}¢`);
                placeLiveOrder(market, smartBid);
@@ -699,27 +769,43 @@ const KalshiDashboard = () => {
   // --- Close / Cancel Logic ---
   const closePosition = async (id, isOrder, quantity, marketId) => {
       if (!walletKeys) return;
+      
       if (isOrder) {
           if(!confirm(`Cancel order for ${marketId}?`)) return;
+          
           try {
               const path = `/trade-api/v2/portfolio/orders/${id}`;
               const timestamp = Date.now();
               const signature = signRequest(walletKeys.privateKey, "DELETE", path, timestamp);
-              const response = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: "DELETE", headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': signature, 'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() } });
-              if (!response.ok) throw new Error("Failed to cancel");
+
+              const response = await fetch(`/api/kalshi/portfolio/orders/${id}`, {
+                  method: "DELETE",
+                  headers: {
+                      'KALSHI-ACCESS-KEY': walletKeys.keyId,
+                      'KALSHI-ACCESS-SIGNATURE': signature,
+                      'KALSHI-ACCESS-TIMESTAMP': timestamp.toString()
+                  }
+              });
+              
+              if (!response.ok) {
+                   const err = await response.json();
+                   throw new Error(err.message || "Failed to cancel");
+              }
               console.log("Order cancelled");
+              
               setPositions(prev => prev.filter(p => p.id !== id));
               fetchPortfolio(); 
           } catch (e) {
               alert(`Cancel Failed: ${e.message}`);
           }
       } else {
-           // SELL POSITION (Market Sell to Close)
-           if(!confirm(`Close position: Sell ${quantity} contracts of ${marketId}?`)) return;
-           try {
+          if(!confirm(`Close position: Sell ${quantity} contracts of ${marketId}?`)) return;
+
+          try {
               const path = '/trade-api/v2/portfolio/orders';
               const timestamp = Date.now();
               const method = "POST";
+              
               const orderData = {
                   action: "sell",
                   ticker: marketId,
@@ -727,20 +813,30 @@ const KalshiDashboard = () => {
                   side: "yes",
                   type: "market"
               };
+
               const signature = signRequest(walletKeys.privateKey, method, path, timestamp);
+              
               const response = await fetch(`/api/kalshi/portfolio/orders`, {
                   method: method,
-                  headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': signature, 'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() },
+                  headers: { 
+                      'Content-Type': 'application/json', 
+                      'KALSHI-ACCESS-KEY': walletKeys.keyId, 
+                      'KALSHI-ACCESS-SIGNATURE': signature, 
+                      'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() 
+                  },
                   body: JSON.stringify(orderData)
               });
+              
               const result = await response.json();
               if (!response.ok) throw new Error(result.message || "Close failed");
+              
               console.log("Position closed:", result.order_id);
-              setPositions(prev => prev.filter(p => p.id !== id)); // Remove optimistic
+              setPositions(prev => prev.filter(p => p.id !== id));
               fetchPortfolio();
-           } catch (e) {
-               alert(`Close Position Failed: ${e.message}`);
-           }
+
+          } catch (e) {
+              alert(`Close Position Failed: ${e.message}`);
+          }
       }
   };
 
@@ -755,6 +851,7 @@ const KalshiDashboard = () => {
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={isTurboMode} onOpenWallet={() => setIsWalletOpen(true)} walletConnected={!!walletKeys} />
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={handleConnectWallet} />
       {errorMsg && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700"><AlertCircle size={20} /><span className="text-sm font-medium">{errorMsg}</span></div>}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
@@ -792,6 +889,7 @@ const KalshiDashboard = () => {
                 </div>
             </div>
         </div>
+
         <div className="space-y-6">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex items-center gap-2 mb-4 text-slate-800 font-bold text-sm uppercase tracking-wider border-b border-slate-100 pb-2"><Settings size={16} /> Strategy Config</div>

@@ -18,6 +18,13 @@ export default defineConfig({
           });
         },
       },
+      '/kalshi-ws': {
+        target: 'wss://api.elections.kalshi.com/trade-api/v2/ws',
+        ws: true, // Enable WebSocket proxying
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
+        secure: false,
+      }
     },
   },
 })
