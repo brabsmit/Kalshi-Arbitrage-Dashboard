@@ -11,6 +11,12 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kalshi/, ''),
         secure: false,
+        // CRITICAL FIX: Remove Origin header to bypass CSRF/WAF checks on POST
+        configure: (proxy, _options) => {
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            proxyReq.removeHeader('Origin');
+          });
+        },
       },
     },
   },
