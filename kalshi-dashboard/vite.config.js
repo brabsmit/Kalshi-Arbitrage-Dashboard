@@ -11,16 +11,16 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kalshi/, ''),
         secure: false,
-        // CRITICAL FIX: Remove Origin header to bypass CSRF/WAF checks on POST
+        // CRITICAL FIX: Set Origin to the target domain to satisfy WAF/CORS checks
         configure: (proxy, _options) => {
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            proxyReq.removeHeader('Origin');
+            proxyReq.setHeader('Origin', 'https://api.elections.kalshi.com');
           });
         },
       },
       '/kalshi-ws': {
         target: 'wss://api.elections.kalshi.com/trade-api/v2/ws',
-        ws: true, // Enable WebSocket proxying
+        ws: true,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
         secure: false,
