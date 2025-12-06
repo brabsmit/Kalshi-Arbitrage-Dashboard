@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/api/kalshi/:match*",
-      "destination": "https://api.elections.kalshi.com/trade-api/v2/:match*"
+      "source": "/api/kalshi/:path*",
+      "destination": "/api/proxy"
     },
     {
       "source": "/(.*)",
