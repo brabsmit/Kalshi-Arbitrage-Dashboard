@@ -1,7 +1,8 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
-import { Settings, Play, Pause, RefreshCw, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Bug, TrendingDown, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle } from 'lucide-react';
+// ADDED: Bot to imports
+import { Settings, Play, Pause, RefreshCw, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Bug, TrendingDown, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Ban, Bot } from 'lucide-react';
 import forge from 'node-forge'; // REQUIRED: npm install node-forge
 
 // ==========================================
@@ -45,50 +46,41 @@ const americanToProbability = (americanOdds) => {
   return Math.abs(americanOdds) / (Math.abs(americanOdds) + 100);
 };
 
+// Standard UUID v4 Generator
+const generateUUID = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+};
+
 const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, kalshiMarkets, seriesTicker) => {
     if (!kalshiMarkets || !homeTeam || !awayTeam || !targetTeam) return null;
 
-    // 1. Identify Abbreviations
-    const homeAbbr = TEAM_ABBR[homeTeam] || homeTeam.substring(0, 3).toUpperCase();
-    const awayAbbr = TEAM_ABBR[awayTeam] || awayTeam.substring(0, 3).toUpperCase();
-    const targetAbbr = TEAM_ABBR[targetTeam] || targetTeam.substring(0, 3).toUpperCase();
-
-    // 2. Construct Precise Middle Pattern (Date + Teams)
-    // Kalshi Moneyline Format: [SERIES]-[YYMMMDD][AWAY][HOME]-[WINNER]
-    // Example: KXNFLGAME-25DEC07DENLV-DEN
-    let middlePattern = "";
+    let datePart = "";
     const date = new Date(commenceTime);
     if (!isNaN(date.getTime())) {
         const yy = date.getFullYear().toString().slice(-2);
         const mmm = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
         const dd = date.getDate().toString().padStart(2, '0');
-        // Standard Kalshi Format: Date + Away + Home
-        middlePattern = `${yy}${mmm}${dd}${awayAbbr}${homeAbbr}`;
+        datePart = `${yy}${mmm}${dd}`;
     }
 
-    // 3. The Mandatory Suffix (The Winner)
-    // We MUST end with this to ensure we are betting ON the target team
-    const requiredSuffix = `-${targetAbbr}`;
+    const homeAbbr = TEAM_ABBR[homeTeam] || homeTeam.substring(0, 3).toUpperCase();
+    const awayAbbr = TEAM_ABBR[awayTeam] || awayTeam.substring(0, 3).toUpperCase();
+    const targetAbbr = TEAM_ABBR[targetTeam] || targetTeam.substring(0, 3).toUpperCase();
 
     return kalshiMarkets.find(k => {
         const ticker = k.ticker ? k.ticker.toUpperCase() : '';
-        
-        // Filter: Must end with our target team (e.g. -DEN)
-        if (!ticker.endsWith(requiredSuffix)) return false;
-
-        // Strategy A: Exact Middle Pattern (High Precision)
-        if (middlePattern && ticker.includes(middlePattern)) return true;
-
-        // Strategy B: Loose Date + Team Presence (Fallback)
-        // If exact date pattern fails (e.g. slight date mismatch or home/away swap), 
-        // check if both teams are at least present in the string.
-        if (ticker.includes(homeAbbr) && ticker.includes(awayAbbr)) {
-            // Also enforce series if known
-            if (seriesTicker && !ticker.startsWith(seriesTicker)) return false;
-            return true;
-        }
-
-        return false;
+        if (seriesTicker && !ticker.startsWith(seriesTicker)) return false;
+        if (datePart && !ticker.includes(datePart)) return false;
+        const hasTeams = (ticker.includes(homeAbbr) && ticker.includes(awayAbbr));
+        if (!hasTeams) return false;
+        const targetSuffix = `-${targetAbbr}`;
+        return ticker.endsWith(targetSuffix);
     });
 };
 
@@ -145,7 +137,6 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
 
 const formatOrderDate = (ts) => {
     if (!ts) return '-';
-    // If ts is just a string, try to parse it
     const date = new Date(ts);
     if (isNaN(date.getTime())) return ts;
     return date.toLocaleString('en-US', { 
@@ -312,50 +303,18 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
                         <span>{market.event}</span>
                     </div>
                     <div className="flex items-center gap-1 mt-1 ml-14">
-                        {market.isMatchFound ? (
-                            <span className="flex items-center gap-1 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded">
-                                <LinkIcon size={10} /> Live Match
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-1 text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded">
-                                <Unlink size={10} /> No Market
-                            </span>
-                        )}
-                        <span className="text-[10px] text-slate-400 font-mono">
-                            Odds: {market.americanOdds > 0 ? `+${market.americanOdds}` : market.americanOdds}
-                        </span>
+                        {market.isMatchFound ? <span className="flex items-center gap-1 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded"><LinkIcon size={10} /> Live Match</span> : <span className="flex items-center gap-1 text-[9px] bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded"><Unlink size={10} /> No Market</span>}
+                        <span className="text-[10px] text-slate-400 font-mono">Odds: {market.americanOdds > 0 ? `+${market.americanOdds}` : market.americanOdds}</span>
                     </div>
                 </div>
             </td>
-            <td className={`px-4 py-3 text-center font-bold transition-colors duration-300 ${isFlash ? 'text-blue-600' : 'text-slate-700'}`}>
-                {market.fairValue}¢
-            </td>
-            <td className={`px-4 py-3 text-center border-x border-slate-100 font-mono text-slate-500 bg-slate-50/50`}>
-                {market.isMatchFound ? `${market.bestBid}¢` : '-'}
-            </td>
-            <td className="px-4 py-3 text-right text-slate-400">
-                {market.isMatchFound ? `${market.maxWillingToPay}¢` : '-'}
-            </td>
+            <td className={`px-4 py-3 text-center font-bold transition-colors duration-300 ${isFlash ? 'text-blue-600' : 'text-slate-700'}`}>{market.fairValue}¢</td>
+            <td className={`px-4 py-3 text-center border-x border-slate-100 font-mono text-slate-500 bg-slate-50/50`}>{market.isMatchFound ? `${market.bestBid}¢` : '-'}</td>
+            <td className="px-4 py-3 text-right text-slate-400">{market.isMatchFound ? `${market.maxWillingToPay}¢` : '-'}</td>
             <td className="px-4 py-3 text-right">
                 {market.isMatchFound ? (
-                    <>
-                        <div className="flex flex-col items-end">
-                            <div className={`font-bold font-mono text-base transition-colors ${isFlash ? 'text-purple-600 scale-110' : 'text-emerald-600'}`}>
-                                {market.smartBid}¢
-                            </div>
-                            {market.edge > 0 && (
-                                <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1 rounded flex items-center gap-0.5">
-                                    <TrendingDown size={8} className="rotate-180"/> +{market.edge}¢ Edge
-                                </span>
-                            )}
-                        </div>
-                        <div className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mt-0.5">
-                            {market.reason}
-                        </div>
-                    </>
-                ) : (
-                    <span className="text-slate-300">-</span>
-                )}
+                    <><div className="flex flex-col items-end"><div className={`font-bold font-mono text-base transition-colors ${isFlash ? 'text-purple-600 scale-110' : 'text-emerald-600'}`}>{market.smartBid}¢</div>{market.edge > 0 && <span className="text-[9px] bg-emerald-50 text-emerald-600 px-1 rounded flex items-center gap-0.5"><TrendingDown size={8} className="rotate-180"/> +{market.edge}¢ Edge</span>}</div><div className="text-[9px] uppercase tracking-wide text-slate-400 font-bold mt-0.5">{market.reason}</div></>
+                ) : <span className="text-slate-300">-</span>}
             </td>
             <td className="px-4 py-3 text-center">
                 <button 
@@ -390,11 +349,11 @@ const KalshiDashboard = () => {
   const [walletKeys, setWalletKeys] = useState(null);
   const [activeTab, setActiveTab] = useState('resting');
 
-  // Sorting State - Default to Edge Descending
+  // Config State
   const [sortConfig, setSortConfig] = useState({ key: 'smartBid', direction: 'desc' });
-
   const [marginPercent, setMarginPercent] = useState(15); 
   const [tradeSize, setTradeSize] = useState(10);
+  const [isAutoBid, setIsAutoBid] = useState(false); 
   const [holdStrategy, setHoldStrategy] = useState('sell_limit'); 
   const [oddsApiKey, setOddsApiKey] = useState('');
   const [selectedSport, setSelectedSport] = useState('americanfootball_nfl'); 
@@ -405,22 +364,23 @@ const KalshiDashboard = () => {
 
   const lastFetchTimeRef = useRef(0);
   const abortControllerRef = useRef(null);
+  
+  const autoBidTracker = useRef(new Set());
 
-  // Derived State for Tabs (Fixed filter logic to exclude CANCELED)
+  // Derived State for Tabs
   const activePositions = useMemo(() => positions.filter(p => !p.isOrder), [positions]);
   
   const restingOrders = useMemo(() => 
-    positions.filter(p => p.isOrder && (p.status === 'active' || p.status === 'resting' || p.status === 'ACTIVE' || p.status === 'RESTING')), 
+    positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'ACTIVE', 'RESTING', 'BIDDING'].includes(p.status)), 
   [positions]);
 
   const orderHistory = useMemo(() => 
-    positions.filter(p => p.status === 'FILLED' || p.status === 'EXECUTED'), 
+    positions.filter(p => ['filled', 'executed', 'canceled', 'FILLED', 'EXECUTED', 'CANCELED'].includes(p.status.toLowerCase())), 
   [positions]);
 
   useEffect(() => {
       const storedKeys = localStorage.getItem('kalshi_keys');
       if (storedKeys) setWalletKeys(JSON.parse(storedKeys));
-      
       const storedOddsKey = localStorage.getItem('odds_api_key');
       if (storedOddsKey) setOddsApiKey(storedOddsKey);
   }, []);
@@ -472,10 +432,8 @@ const KalshiDashboard = () => {
           const timestamp = Date.now();
           const balancePath = '/trade-api/v2/portfolio/balance';
           const balanceSig = signRequest(walletKeys.privateKey, "GET", balancePath, timestamp);
-          
           const ordersPath = '/trade-api/v2/portfolio/orders';
           const ordersSig = signRequest(walletKeys.privateKey, "GET", ordersPath, timestamp);
-
           const positionsPath = '/trade-api/v2/portfolio/positions';
           const positionsSig = signRequest(walletKeys.privateKey, "GET", positionsPath, timestamp);
 
@@ -493,35 +451,42 @@ const KalshiDashboard = () => {
           const ordersData = ordersRes.ok ? await ordersRes.json() : { orders: [] };
           const posData = posRes.ok ? await posRes.json() : { positions: [] };
 
-          // Map Orders (Resting)
-          const mappedOrders = (ordersData.orders || []).map(o => ({
-              id: o.order_id,
-              marketId: o.ticker,
-              event: o.ticker, 
-              side: o.side === 'yes' ? 'Buy Yes' : 'Buy No', 
-              quantity: o.count, 
-              remaining: o.remaining_count,
-              price: o.yes_price || o.no_price, 
-              status: o.status.toUpperCase(), 
-              created_time: o.created_time,
-              expiration: o.expiration_time,
-              isOrder: true
-          }));
+          const mappedOrders = (ordersData.orders || []).map(o => {
+              // Fix: Ensure quantity is never less than remaining to prevent negative fills
+              const count = o.count || 0;
+              const remaining = o.remaining_count || 0;
+              const safeCount = count < remaining ? remaining : count;
+              
+              return {
+                  id: o.order_id,
+                  marketId: o.ticker,
+                  event: o.ticker, 
+                  side: o.side === 'yes' ? 'Buy Yes' : 'Buy No', 
+                  quantity: safeCount, 
+                  remaining: remaining,
+                  price: o.yes_price || o.no_price, 
+                  status: o.status.toUpperCase(), 
+                  created_time: o.created_time,
+                  expiration: o.expiration_time || "GTC",
+                  isOrder: true
+              };
+          });
 
-          // Map Positions (Filled)
           const mappedPositions = (posData.positions || []).map(p => ({
               id: p.ticker,
               marketId: p.ticker,
               event: p.event_ticker, 
               side: 'Yes', 
-              quantity: p.position, 
-              price: p.fees_paid, 
+              quantity: p.position || 0, 
+              avgEntryPrice: p.fees_paid / (Math.abs(p.position) || 1), 
+              currentPrice: 0, 
               status: 'HELD',
               timestamp: '-',
               isOrder: false
           }));
 
-          setPositions([...mappedOrders, ...mappedPositions]);
+          const allPositions = [...mappedOrders, ...mappedPositions];
+          setPositions(allPositions);
 
       } catch (e) {
           console.error("Portfolio fetch failed:", e);
@@ -570,19 +535,16 @@ const KalshiDashboard = () => {
       const now = Date.now();
       const cooldown = isTurboMode ? 2000 : REFRESH_COOLDOWN;
       if (!force && (now - lastFetchTimeRef.current < cooldown)) return;
-      
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       try {
           setErrorMsg('');
           const oddsPromise = fetch(`https://api.the-odds-api.com/v4/sports/${selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }).then(res => res.json());
-
           const activeSportConfig = sportsList.find(s => s.key === selectedSport);
           const seriesTicker = activeSportConfig?.kalshiSeries || '';
           let kalshiUrl = `/api/kalshi/markets?limit=300&status=open`;
           if (seriesTicker) kalshiUrl += `&series_ticker=${seriesTicker}`;
-
           const kalshiPromise = fetch(kalshiUrl, { signal: abortControllerRef.current.signal, headers: { 'Accept': 'application/json' } }).then(async res => {
               if (!res.ok) throw new Error(`Kalshi Error: ${res.status}`);
               return res.json();
@@ -625,7 +587,6 @@ const KalshiDashboard = () => {
                       history: [...safeHistory, { time: Date.now(), price: prob * 100 }].slice(-20)
                   };
               }).filter(Boolean);
-
               return processed.sort((a, b) => {
                   if (a.isMatchFound && !b.isMatchFound) return -1;
                   if (!a.isMatchFound && b.isMatchFound) return 1;
@@ -655,7 +616,6 @@ const KalshiDashboard = () => {
   const placeLiveOrder = async (market, price) => {
     if (!market.realMarketId) return;
     if (!walletKeys) { setIsWalletOpen(true); return; }
-
     const quantity = parseInt(tradeSize);
     const cost = price * quantity;
     if (balance !== null && balance < cost) { alert("Insufficient funds"); return; }
@@ -664,8 +624,6 @@ const KalshiDashboard = () => {
         const path = '/trade-api/v2/portfolio/orders';
         const timestamp = Date.now();
         const method = "POST";
-        
-        // Payload without client_order_id
         const orderData = {
             action: "buy",
             ticker: market.realMarketId.trim().toUpperCase().replace(/[^A-Z0-9-]/g, ''),
@@ -674,100 +632,94 @@ const KalshiDashboard = () => {
             side: "yes",
             type: "limit"
         };
-
         const signature = signRequest(walletKeys.privateKey, method, path, timestamp);
-        
         const response = await fetch(`/api/kalshi/portfolio/orders`, {
             method: method,
-            headers: { 
-                'Content-Type': 'application/json', 
-                'KALSHI-ACCESS-KEY': walletKeys.keyId, 
-                'KALSHI-ACCESS-SIGNATURE': signature, 
-                'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() 
-            },
+            headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': signature, 'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() },
             body: JSON.stringify(orderData)
         });
-        
         const result = await response.json();
-        
-        if (!response.ok) {
-            console.error("FULL API ERROR RESPONSE:", JSON.stringify(result, null, 2));
-            let msg = result.message || "Unknown Error";
-            if (result.error) {
-                 msg = `${result.error.code || 'Error'}: ${result.error.message || JSON.stringify(result.error)}`;
-            }
-            if (result.details) {
-                msg += ` | Details: ${JSON.stringify(result.details)}`;
-            }
-            throw new Error(msg);
-        }
+        if (!response.ok) throw new Error(result.message || "Order failed");
         
         console.log(`[SUCCESS] Order Placed: ${result.order_id}`);
-        
-        // Optimistic update with isOrder: true
+        autoBidTracker.current.add(market.realMarketId);
         setPositions(prev => [{
             id: result.order_id,
             marketId: market.realMarketId,
-            event: market.event, // Use Market Name
+            event: market.event, 
             side: 'Buy Yes',
             quantity: quantity,
-            remaining: quantity, // Full quantity remaining initially
+            remaining: quantity, 
             price: price,
-            status: 'RESTING',
+            status: 'BIDDING',
             created_time: new Date().toISOString(),
             isOrder: true 
         }, ...prev]);
-
         fetchPortfolio(); 
-
     } catch (err) {
         console.error("Order Exception:", err);
         alert(`Order Failed: ${err.message}`);
     }
   };
 
-  // --- Close / Cancel Logic ---
-  const closePosition = async (id, isOrder, quantity, marketId, force = false) => {
-      if (!walletKeys) return;
-      
-      if (isOrder) {
-          // CANCEL ORDER
-          if(!force && !confirm(`Cancel order for ${marketId}?`)) return;
+  // --- AUTO-BID ENGINE ---
+  useEffect(() => {
+      if (!isRunning || !isAutoBid || !walletKeys) return;
+
+      // 1. Identify Candidate Markets
+      // Must be matched, must have edge, must NOT have active position/order
+      const candidates = markets.filter(m => {
+          if (!m.isMatchFound) return false;
           
+          // Don't bid if we already have action on this ticker
+          const hasActivity = positions.some(p => p.marketId === m.realMarketId);
+          if (hasActivity) return false;
+          
+          // Don't bid if we just bid (in this session)
+          if (autoBidTracker.current.has(m.realMarketId)) return false;
+
+          return true;
+      });
+
+      // 2. Evaluate & Execute
+      candidates.forEach(market => {
+          const { smartBid, maxWillingToPay } = calculateStrategy(market, marginPercent);
+          const currentBestBid = market.bestBid || 0;
+
+          // Logic: If Current Best Bid is strictly less than our Max Limit,
+          // we place a bid at "Best + 1" (Smart Bid) to take the lead.
+          if (smartBid && smartBid <= maxWillingToPay) {
+               console.log(`[AUTO-BID] Executing on ${market.event}. Bid: ${smartBid}¢`);
+               placeLiveOrder(market, smartBid);
+          }
+      });
+
+  }, [isRunning, isAutoBid, markets, positions, marginPercent]);
+
+  // --- Close / Cancel Logic ---
+  const closePosition = async (id, isOrder, quantity, marketId) => {
+      if (!walletKeys) return;
+      if (isOrder) {
+          if(!confirm(`Cancel order for ${marketId}?`)) return;
           try {
               const path = `/trade-api/v2/portfolio/orders/${id}`;
               const timestamp = Date.now();
               const signature = signRequest(walletKeys.privateKey, "DELETE", path, timestamp);
-
-              const response = await fetch(`/api/kalshi/portfolio/orders/${id}`, {
-                  method: "DELETE",
-                  headers: {
-                      'KALSHI-ACCESS-KEY': walletKeys.keyId,
-                      'KALSHI-ACCESS-SIGNATURE': signature,
-                      'KALSHI-ACCESS-TIMESTAMP': timestamp.toString()
-                  }
-              });
-              
-              if (!response.ok) {
-                   const err = await response.json();
-                   throw new Error(err.message || "Failed to cancel");
-              }
+              const response = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: "DELETE", headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': signature, 'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() } });
+              if (!response.ok) throw new Error("Failed to cancel");
               console.log("Order cancelled");
-              
               setPositions(prev => prev.filter(p => p.id !== id));
               fetchPortfolio(); 
           } catch (e) {
               alert(`Cancel Failed: ${e.message}`);
           }
       } else {
-          // SELL POSITION
-          if(!force && !confirm(`Close position: Sell ${quantity} contracts of ${marketId}?`)) return;
-
-          try {
+           // SELL POSITION (Market Sell to Close)
+           if(!confirm(`Close position: Sell ${quantity} contracts of ${marketId}?`)) return;
+           try {
               const path = '/trade-api/v2/portfolio/orders';
               const timestamp = Date.now();
               const method = "POST";
-              
               const orderData = {
                   action: "sell",
                   ticker: marketId,
@@ -775,64 +727,22 @@ const KalshiDashboard = () => {
                   side: "yes",
                   type: "market"
               };
-
               const signature = signRequest(walletKeys.privateKey, method, path, timestamp);
-              
               const response = await fetch(`/api/kalshi/portfolio/orders`, {
                   method: method,
-                  headers: { 
-                      'Content-Type': 'application/json', 
-                      'KALSHI-ACCESS-KEY': walletKeys.keyId, 
-                      'KALSHI-ACCESS-SIGNATURE': signature, 
-                      'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() 
-                  },
+                  headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': signature, 'KALSHI-ACCESS-TIMESTAMP': timestamp.toString() },
                   body: JSON.stringify(orderData)
               });
-              
               const result = await response.json();
               if (!response.ok) throw new Error(result.message || "Close failed");
-              
               console.log("Position closed:", result.order_id);
-              
-              setPositions(prev => prev.filter(p => p.id !== id));
+              setPositions(prev => prev.filter(p => p.id !== id)); // Remove optimistic
               fetchPortfolio();
-
-          } catch (e) {
-              alert(`Close Position Failed: ${e.message}`);
-          }
+           } catch (e) {
+               alert(`Close Position Failed: ${e.message}`);
+           }
       }
   };
-
-  // --- AUTO-CLOSE ENGINE (NEW) ---
-  useEffect(() => {
-      // Runs every time markets or positions update
-      if (!isRunning || !markets.length || !activePositions.length) return;
-
-      activePositions.forEach(position => {
-          // Find live market data for this position
-          const market = markets.find(m => m.realMarketId === position.marketId);
-          if (!market) return; // No live data, can't decide
-
-          // Determine Strategy
-          // Since "holdStrategy" is a global setting, we apply it to all positions.
-          // A robust app would store strategy per-position.
-          if (holdStrategy === 'sell_limit') {
-              // Calculate Target
-              const entryPrice = position.price || position.avgEntryPrice || 0; // Cost Basis
-              const targetPrice = Math.floor(entryPrice * (1 + (marginPercent / 100)));
-              
-              const currentBid = market.bestBid || 0;
-
-              // TRIGGER CONDITION
-              if (currentBid >= targetPrice) {
-                  console.log(`[AUTO-CLOSE] Triggered for ${position.marketId}. Current Bid ${currentBid} >= Target ${targetPrice}`);
-                  // Auto-Close (Force = true to skip confirm)
-                  closePosition(position.id, false, position.quantity, position.marketId, true);
-              }
-          }
-      });
-  }, [markets, activePositions, holdStrategy, marginPercent, isRunning]);
-
 
   const getPortfolioContent = () => {
       if (activeTab === 'positions') return activePositions;
@@ -842,26 +752,18 @@ const KalshiDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
-      <Header 
-        balance={balance} 
-        isRunning={isRunning} 
-        setIsRunning={setIsRunning} 
-        lastUpdated={lastUpdated} 
-        isTurboMode={isTurboMode}
-        onOpenWallet={() => setIsWalletOpen(true)}
-        walletConnected={!!walletKeys}
-      />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={isTurboMode} onOpenWallet={() => setIsWalletOpen(true)} walletConnected={!!walletKeys} />
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={handleConnectWallet} />
       {errorMsg && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700"><AlertCircle size={20} /><span className="text-sm font-medium">{errorMsg}</span></div>}
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Left: Market Scanner */}
         <div className="lg:col-span-2 space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <h2 className="font-semibold text-slate-700 flex items-center gap-2"><Activity size={16} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner <span className="text-xs font-normal text-slate-400 ml-2">({sportsList.find(s => s.key === selectedSport)?.title || selectedSport})</span></h2>
-                    <button onClick={() => setIsTurboMode(!isTurboMode)} title={isTurboMode ? "Disable Turbo" : "Enable Turbo"} className={`p-1.5 rounded-md transition-all ${isTurboMode ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-500' : 'bg-slate-100 text-slate-400 hover:text-slate-600'}`}><Zap size={16} fill={isTurboMode ? "currentColor" : "none"}/></button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => setIsAutoBid(!isAutoBid)} className={`flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-2 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14} /> {isAutoBid ? 'AUTO-BID ON' : 'Auto-Bid Off'}</button>
+                        <button onClick={() => setIsTurboMode(!isTurboMode)} title={isTurboMode ? "Disable Turbo" : "Enable Turbo"} className={`p-1.5 rounded-md transition-all ${isTurboMode ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-500' : 'bg-slate-100 text-slate-400 hover:text-slate-600'}`}><Zap size={16} fill={isTurboMode ? "currentColor" : "none"}/></button>
+                    </div>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
@@ -878,22 +780,10 @@ const KalshiDashboard = () => {
                         {groupedMarkets.map(([dateKey, markets]) => (
                              <React.Fragment key={dateKey}>
                                 <tbody className="bg-slate-50 border-b border-slate-200">
-                                    <tr>
-                                        <td colSpan={6} className="px-4 py-2 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                                            <Calendar size={14} /> {dateKey}
-                                        </td>
-                                    </tr>
+                                    <tr><td colSpan={6} className="px-4 py-2 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2"><Calendar size={14} /> {dateKey}</td></tr>
                                 </tbody>
                                 <tbody className="divide-y divide-slate-50">
-                                    {markets.map(market => (
-                                        <MarketRow 
-                                            key={market.id} 
-                                            market={market} 
-                                            marginPercent={marginPercent} 
-                                            tradeSize={tradeSize} 
-                                            onExecute={placeLiveOrder} 
-                                        />
-                                    ))}
+                                    {markets.map(market => <MarketRow key={market.id} market={market} marginPercent={marginPercent} tradeSize={tradeSize} onExecute={placeLiveOrder} />)}
                                 </tbody>
                              </React.Fragment>
                         ))}
@@ -902,56 +792,16 @@ const KalshiDashboard = () => {
                 </div>
             </div>
         </div>
-
-        {/* Right: Config & Portfolio */}
         <div className="space-y-6">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex items-center gap-2 mb-4 text-slate-800 font-bold text-sm uppercase tracking-wider border-b border-slate-100 pb-2"><Settings size={16} /> Strategy Config</div>
                 <div className="space-y-5">
                     <div><div className="flex justify-between text-sm font-medium text-slate-600 mb-2"><span>Margin Target</span><span className="text-blue-600 font-bold">{marginPercent}%</span></div><input type="range" min="5" max="30" value={marginPercent} onChange={(e) => setMarginPercent(parseInt(e.target.value))} className="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600" /></div>
-                    <div>
-                         <label className="flex justify-between text-sm font-medium text-slate-600 mb-2">
-                            Trade Size (Contracts) <span className="text-blue-600 font-bold">{tradeSize}</span>
-                        </label>
-                        <div className="flex items-center gap-2">
-                            <Hash size={16} className="text-slate-400"/>
-                            <input 
-                                type="number" 
-                                min="1" 
-                                max="1000" 
-                                value={tradeSize} 
-                                onChange={(e) => setTradeSize(Math.max(1, parseInt(e.target.value) || 1))}
-                                className="w-full p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"
-                            />
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">Number of YES contracts to buy per order.</p>
-                    </div>
-                    {/* Exit Strategy Buttons */}
-                    <div>
-                         <label className="block text-sm font-medium text-slate-600 mb-2">
-                            Exit Strategy
-                        </label>
-                        <div className="flex bg-slate-100 p-1 rounded-lg">
-                            <button 
-                                onClick={() => setHoldStrategy('hold_expiry')}
-                                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${holdStrategy === 'hold_expiry' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
-                            >
-                                Hold to Expiry
-                            </button>
-                            <button 
-                                onClick={() => setHoldStrategy('sell_limit')}
-                                className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${holdStrategy === 'sell_limit' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}
-                            >
-                                Sell at Valuation
-                            </button>
-                        </div>
-                    </div>
-
+                    <div><label className="flex justify-between text-sm font-medium text-slate-600 mb-2">Trade Size (Contracts) <span className="text-blue-600 font-bold">{tradeSize}</span></label><div className="flex items-center gap-2"><Hash size={16} className="text-slate-400"/><input type="number" min="1" max="1000" value={tradeSize} onChange={(e) => setTradeSize(Math.max(1, parseInt(e.target.value) || 1))} className="w-full p-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-mono"/></div></div>
+                    <div><label className="block text-sm font-medium text-slate-600 mb-2">Exit Strategy</label><div className="flex bg-slate-100 p-1 rounded-lg"><button onClick={() => setHoldStrategy('hold_expiry')} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${holdStrategy === 'hold_expiry' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>Hold to Expiry</button><button onClick={() => setHoldStrategy('sell_limit')} className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-all ${holdStrategy === 'sell_limit' ? 'bg-white shadow text-blue-600' : 'text-gray-500'}`}>Sell at Valuation</button></div></div>
                     <div className="pt-2 border-t border-slate-100 mt-4"><label className="text-xs font-bold text-slate-400 uppercase mb-2 block flex items-center justify-between gap-1"><span className="flex items-center gap-1"><Trophy size={12}/> Select Sport</span>{isLoadingSports && <Loader2 size={12} className="animate-spin text-blue-500"/>}</label><select value={selectedSport} onChange={(e) => setSelectedSport(e.target.value)} disabled={!oddsApiKey || isLoadingSports} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 mb-4 disabled:opacity-50">{sportsList.map(sport => <option key={sport.key} value={sport.key}>{sport.title}</option>)}</select><label className="text-xs font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label><input type="password" placeholder="Paste API Key Here" value={oddsApiKey} onChange={(e) => { setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value); }} className="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all mb-4" /></div>
                 </div>
             </div>
-            
-            {/* PORTFOLIO SECTION */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col h-96">
                  <div className="border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <div className="flex">
@@ -961,69 +811,40 @@ const KalshiDashboard = () => {
                     </div>
                     <Briefcase size={16} className="mr-4 text-slate-400" />
                 </div>
-                
                 <div className="overflow-x-auto flex-1">
                     <table className="w-full text-sm text-left">
                          <thead className="bg-slate-50 text-slate-500 font-medium border-b border-slate-100">
                             <tr>
                                 <th className="px-4 py-2">Market</th>
-                                <th className="px-4 py-2 text-center">Filled</th>
+                                {activeTab === 'resting' && <th className="px-4 py-2 text-center">Filled</th>}
                                 <th className="px-4 py-2 text-center">Qty</th>
-                                <th className="px-4 py-2 text-right">Price</th>
-                                <th className="px-4 py-2 text-right">{activeTab === 'positions' ? 'Target' : 'Cost'}</th>
+                                {activeTab !== 'resting' && <th className="px-4 py-2 text-center">Avg</th>}
+                                {activeTab === 'resting' && <th className="px-4 py-2 text-right">Limit</th>}
+                                {activeTab !== 'history' && <th className="px-4 py-2 text-right">Current</th>}
+                                <th className="px-4 py-2 text-right">{activeTab === 'positions' ? 'Return' : 'Cost'}</th>
+                                <th className="px-4 py-2 text-center">Status</th>
                                 {activeTab !== 'history' && <th className="px-4 py-2 text-center">Action</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
                              {getPortfolioContent().length === 0 && (
-                                <tr>
-                                    <td colSpan={6} className="p-8 text-center text-slate-400 text-xs italic">
-                                        No {activeTab} found.
-                                    </td>
-                                </tr>
+                                <tr><td colSpan={8} className="p-8 text-center text-slate-400 text-xs italic">No {activeTab} found.</td></tr>
                             )}
                             {getPortfolioContent().map(item => {
-                                // Calculate target for display
-                                const targetPrice = item.isOrder ? 0 : Math.floor((item.price || item.avgEntryPrice) * (1 + (marginPercent/100)));
-                                
+                                const currentCost = (item.price || item.avgEntryPrice || 0) * (item.quantity || 0);
+                                const currentValue = (item.currentPrice || 0) * (item.quantity || 0);
+                                const profit = currentValue - currentCost;
                                 return (
                                 <tr key={item.id} className="hover:bg-slate-50">
-                                    <td className="px-4 py-2 font-medium text-slate-700">
-                                        <div className="flex flex-col">
-                                            <span className="truncate max-w-[140px]">{item.marketId}</span>
-                                            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
-                                                {formatOrderDate(item.created_time)} 
-                                                <span className="bg-slate-100 px-1 rounded text-slate-500">{item.status}</span>
-                                            </span>
-                                        </div>
-                                    </td>
-                                    <td className="px-4 py-2 text-center font-mono text-slate-500">
-                                        {item.quantity - (item.remaining || 0)}
-                                    </td>
-                                    <td className="px-4 py-2 text-center font-mono font-bold border-x border-slate-50">
-                                        {item.quantity || 0}
-                                    </td>
-                                    <td className="px-4 py-2 text-right font-mono text-slate-700">
-                                        {item.price || item.avgEntryPrice}¢
-                                    </td>
-                                    <td className="px-4 py-2 text-right font-mono">
-                                        {activeTab === 'positions' ? (
-                                            <span className="text-blue-600 bg-blue-50 px-1.5 rounded">{targetPrice}¢</span>
-                                        ) : (
-                                            <span className="text-emerald-600">${(item.cash || item.value || 0).toFixed(2)}</span>
-                                        )}
-                                    </td>
-                                    {activeTab !== 'history' && (
-                                        <td className="px-4 py-2 text-center">
-                                            <button 
-                                                onClick={() => closePosition(item.id, item.isOrder, item.quantity, item.marketId)}
-                                                className="text-slate-400 hover:text-rose-500 transition-colors"
-                                                title={item.isOrder ? "Cancel Order" : "Sell Position"}
-                                            >
-                                                {item.isOrder ? <XCircle size={16}/> : <Trash2 size={16}/>}
-                                            </button>
-                                        </td>
-                                    )}
+                                    <td className="px-4 py-2 font-medium text-slate-700"><div className="flex flex-col"><span className="truncate max-w-[140px]" title={item.marketId}>{item.marketId}</span><span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">{formatOrderDate(item.created_time)}</span></div></td>
+                                    {activeTab === 'resting' && <td className="px-4 py-2 text-center font-mono text-slate-500">{item.quantity - (item.remaining || 0)}</td>}
+                                    <td className="px-4 py-2 text-center font-mono font-bold">{item.quantity || 0}</td>
+                                    {activeTab !== 'resting' && <td className="px-4 py-2 text-center font-mono text-slate-500">{Math.floor(item.avgEntryPrice || item.price)}¢</td>}
+                                    {activeTab === 'resting' && <td className="px-4 py-2 text-right font-mono text-slate-700">{item.price}¢</td>}
+                                    {activeTab !== 'history' && <td className="px-4 py-2 text-right font-mono text-slate-500">{item.currentPrice || '-'}¢</td>}
+                                    <td className="px-4 py-2 text-right font-mono">{activeTab === 'positions' ? <span className={profit >= 0 ? "text-emerald-600" : "text-rose-600"}>{profit >= 0 ? '+' : ''}${(profit/100).toFixed(2)}</span> : <span className="text-slate-600">${(currentCost/100).toFixed(2)}</span>}</td>
+                                    <td className="px-4 py-2 text-center"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.status === 'FILLED' || item.status === 'HELD' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{item.status}</span></td>
+                                    {activeTab !== 'history' && <td className="px-4 py-2 text-center"><button onClick={() => closePosition(item.id, item.isOrder, item.quantity, item.marketId)} className="text-slate-400 hover:text-rose-500 transition-colors" title={item.isOrder ? "Cancel Order" : "Sell Position"}>{item.isOrder ? <XCircle size={16}/> : <Trash2 size={16}/>}</button></td>}
                                 </tr>
                             )})}
                         </tbody>
