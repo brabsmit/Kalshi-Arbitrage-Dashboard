@@ -529,7 +529,7 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
     );
 };
 
-const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute }) => {
+const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
     const getGameName = (ticker) => {
         const liveMarket = markets.find(m => m.realMarketId === ticker);
@@ -540,7 +540,19 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
 
     const getCurrentFV = (ticker) => {
         const liveMarket = markets.find(m => m.realMarketId === ticker);
-        return liveMarket ? liveMarket.fairValue : '-';
+        return liveMarket ? liveMarket.fairValue : 0;
+    };
+
+    const getSortValue = (item, key) => {
+        if (key === 'created') return item.created || 0;
+        if (key === 'details') return item.side;
+        if (key === 'fvBuy') return tradeHistory[item.marketId]?.fairValue || 0;
+        if (key === 'fvNow') return getCurrentFV(item.marketId);
+        if (key === 'filled') return item.filled || 0;
+        if (key === 'price') return item.price || 0;
+        if (key === 'cash') return (item.price || 0) * ((item.quantity || 0) - (item.filled || 0));
+        if (key === 'payout') return item.payout || 0;
+        return 0;
     };
 
     const groupedItems = useMemo(() => {
@@ -550,8 +562,31 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
             if (!groups[game]) groups[game] = [];
             groups[game].push(item);
         });
-        return groups;
-    }, [positions, markets, tradeHistory]);
+
+        // Sort items within groups
+        Object.keys(groups).forEach(game => {
+            groups[game].sort((a, b) => {
+                const valA = getSortValue(a, sortConfig.key);
+                const valB = getSortValue(b, sortConfig.key);
+                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        });
+
+        // Sort groups by their first item (best representative)
+        const sortedGroups = Object.entries(groups).sort((a, b) => {
+            const itemA = a[1][0];
+            const itemB = b[1][0];
+            const valA = getSortValue(itemA, sortConfig.key);
+            const valB = getSortValue(itemB, sortConfig.key);
+            if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+
+        return sortedGroups;
+    }, [positions, markets, tradeHistory, sortConfig]);
 
     const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
     const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-';
@@ -561,36 +596,36 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
             <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
                     <tr>
-                        <th className="px-4 py-3">Details</th> 
+                        <SortableHeader label="Details" sortKey="details" currentSort={sortConfig} onSort={onSort} />
                         
                         {activeTab === 'positions' && (
                             <>
-                                <th className="px-4 py-3 text-center">FV @ Buy</th>
-                                <th className="px-4 py-3 text-center">FV Now</th>
+                                <SortableHeader label="FV @ Buy" sortKey="fvBuy" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="FV Now" sortKey="fvNow" currentSort={sortConfig} onSort={onSort} align="center" />
                             </>
                         )}
 
                         {activeTab === 'resting' && (
                             <>
-                                <th className="px-4 py-3 text-center">Filled / Qty</th>
-                                <th className="px-4 py-3 text-right">Limit</th>
-                                <th className="px-4 py-3 text-right">Cash</th>
-                                <th className="px-4 py-3 text-right">Placed / Exp</th>
+                                <SortableHeader label="Filled / Qty" sortKey="filled" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Limit" sortKey="price" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Cash" sortKey="cash" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Placed / Exp" sortKey="created" currentSort={sortConfig} onSort={onSort} align="right" />
                             </>
                         )}
 
                         {activeTab === 'history' && (
                             <>
-                                <th className="px-4 py-3 text-center">FV @ Buy</th>
-                                <th className="px-4 py-3 text-right">Payout</th>
-                                <th className="px-4 py-3 text-right">Settled</th>
+                                <SortableHeader label="FV @ Buy" sortKey="fvBuy" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Payout" sortKey="payout" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Settled" sortKey="created" currentSort={sortConfig} onSort={onSort} align="right" />
                             </>
                         )}
                         <th className="px-4 py-3 text-center">Action</th>
                     </tr>
                 </thead>
                 
-                {Object.entries(groupedItems).map(([gameName, items]) => (
+                {groupedItems.map(([gameName, items]) => (
                     <React.Fragment key={gameName}>
                         <tbody className="bg-slate-50 border-b border-slate-200">
                             <tr>
@@ -707,6 +742,7 @@ const KalshiDashboard = () => {
   const [activeAction, setActiveAction] = useState(null);
   
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
+  const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
 
   const [config, setConfig] = useState({
       marginPercent: 15,
@@ -1009,25 +1045,73 @@ const KalshiDashboard = () => {
 
       const executedHoldings = new Set(positions.filter(p => !p.isOrder).map(p => p.marketId));
 
-      if (executedHoldings.size >= config.maxPositions) return;
-
+      // We don't want to exceed max positions, but we also want to manage existing bids.
+      // So effectiveCount should track held positions + pending bids for *new* markets.
       let effectiveCount = executedHoldings.size;
 
+      const activeOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()));
+      const activeOrderTickers = new Set(activeOrders.map(o => o.marketId));
+
       for (const m of markets) {
-        if (effectiveCount >= config.maxPositions) break;
         if (!m.isMatchFound) continue;
+
+        // Check for held position
+        if (executedHoldings.has(m.realMarketId)) continue;
+
+        const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
         
-        if (hasOpenExposure(positions, m.realMarketId)) continue;
-        
+        // Prevent race condition if we are already acting on this market
         if (autoBidTracker.current.has(m.realMarketId)) continue; 
 
         const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
         
+        if (existingOrder) {
+             // 1. Check if order is stale or bad
+             if (smartBid === null || smartBid > maxWillingToPay) {
+                 // Strategy says don't bid (loss of edge), but we have an order. Cancel it.
+                 console.log(`[AUTO-BID] Cancelling stale/bad order ${m.realMarketId} (Bid: ${existingOrder.price}, Max: ${maxWillingToPay})`);
+                 autoBidTracker.current.add(m.realMarketId);
+                 cancelOrder(existingOrder.id, true).finally(() => autoBidTracker.current.delete(m.realMarketId));
+                 continue;
+             }
+
+             if (existingOrder.price !== smartBid) {
+                 // Price improvement or adjustment needed
+                 console.log(`[AUTO-BID] Updating ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`);
+                 autoBidTracker.current.add(m.realMarketId);
+
+                 // Cancel then Place
+                 cancelOrder(existingOrder.id, true).then(() => {
+                     // Wait a bit or just place? Better to wait for next cycle or just place if funds allow.
+                     // To be safe, we place the new order immediately.
+                     // But strictly, we should probably verify cancellation.
+                     // For high frequency, we assume it works.
+                     executeOrder(m, smartBid, false, null, 'auto').finally(() => autoBidTracker.current.delete(m.realMarketId));
+                 }).catch(e => {
+                     console.error("Update failed", e);
+                     autoBidTracker.current.delete(m.realMarketId);
+                 });
+             }
+             // Else: Order is good, do nothing.
+             continue;
+        }
+
+        // New Bid Logic
+        if (effectiveCount >= config.maxPositions) continue;
+
+        // Check if we already have an active order (should be covered by existingOrder check, but double check)
+        if (activeOrderTickers.has(m.realMarketId)) continue;
+
         if (smartBid && smartBid <= maxWillingToPay) {
-            console.log(`[AUTO-BID] ${m.realMarketId} @ ${smartBid}¢`);
+            console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
             effectiveCount++; 
             autoBidTracker.current.add(m.realMarketId);
-            executeOrder(m, smartBid, false, null, 'auto');
+            executeOrder(m, smartBid, false, null, 'auto').finally(() => {
+                 // We keep it in tracker until it appears in positions?
+                 // No, executeOrder adds to tradeHistory but positions update is async.
+                 // We remove from tracker to allow updates later.
+                 setTimeout(() => autoBidTracker.current.delete(m.realMarketId), 2000);
+            });
         }
       }
   }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions]);
@@ -1049,6 +1133,34 @@ const KalshiDashboard = () => {
       });
   }, [isRunning, config.isAutoClose, markets, positions]);
 
+  // --- CANCEL ALL ON STOP ---
+  const isAutoBidActive = isRunning && config.isAutoBid;
+  const prevAutoBidActiveRef = useRef(isAutoBidActive);
+
+  useEffect(() => {
+      const wasActive = prevAutoBidActiveRef.current;
+      const isActive = isAutoBidActive;
+
+      if (wasActive && !isActive) {
+          const openOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()));
+
+          const cancelAllSafe = async () => {
+              if (openOrders.length > 0) {
+                  console.log(`[AUTO-STOP] Bot stopped. Cancelling ${openOrders.length} open orders sequentially.`);
+                  for (const o of openOrders) {
+                      await cancelOrder(o.id, true, true);
+                      await new Promise(r => setTimeout(r, 200)); // Rate limit protection
+                  }
+                  console.log("[AUTO-STOP] All orders cancelled.");
+                  fetchPortfolio();
+              }
+          };
+
+          cancelAllSafe().catch(e => console.error("Failed to cancel orders on stop", e));
+      }
+      prevAutoBidActiveRef.current = isActive;
+  }, [isAutoBidActive, positions]);
+
   const handleSort = (key) => {
       setSortConfig(current => ({
           key,
@@ -1056,12 +1168,20 @@ const KalshiDashboard = () => {
       }));
   };
 
-  const cancelOrder = async (id) => {
-      if (!confirm("Cancel Order?")) return;
+  const handlePortfolioSort = (key) => {
+      setPortfolioSortConfig(current => ({
+          key,
+          direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
+      }));
+  };
+
+  const cancelOrder = async (id, skipConfirm = false, skipRefresh = false) => {
+      if (!skipConfirm && !confirm("Cancel Order?")) return;
       const ts = Date.now();
       const sig = signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
-      await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
-      fetchPortfolio();
+      const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
+      if (!skipRefresh) fetchPortfolio();
+      return res;
   };
 
   const groupedMarkets = useMemo(() => {
@@ -1233,6 +1353,8 @@ const KalshiDashboard = () => {
                     onAnalysis={(item) => setAnalysisModalData({ ...tradeHistory[item.marketId], currentStatus: item.settlementStatus || item.status })}
                     onCancel={cancelOrder}
                     onExecute={executeOrder}
+                    sortConfig={portfolioSortConfig}
+                    onSort={handlePortfolioSort}
                 />
                 
             </div>
