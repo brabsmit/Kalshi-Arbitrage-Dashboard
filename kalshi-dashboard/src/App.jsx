@@ -351,9 +351,15 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     </div>
 
                     <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Target Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
+                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Bid Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
                         <input type="range" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
                         <p className="text-[10px] text-slate-400 mt-1">Bot will bid <code>FairValue * (1 - Margin)</code></p>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
+                        <input type="range" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>AvgPrice * (1 + Margin)</code></p>
                     </div>
 
                     <div>
@@ -1113,6 +1119,7 @@ const KalshiDashboard = () => {
 
   const [config, setConfig] = useState({
       marginPercent: 15,
+      autoCloseMarginPercent: 15,
       tradeSize: 10,
       maxPositions: 5,
       isAutoBid: false,
@@ -1586,7 +1593,7 @@ const KalshiDashboard = () => {
               
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
-              const target = pos.avgPrice * (1 + config.marginPercent/100);
+              const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
 
               if (currentBid >= target) {
                   console.log(`[AUTO-CLOSE] ${pos.marketId}: ${currentBid} >= ${target}`);
