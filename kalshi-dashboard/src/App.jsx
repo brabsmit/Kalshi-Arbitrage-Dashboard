@@ -939,6 +939,7 @@ const KalshiDashboard = () => {
   const lastFetchTimeRef = useRef(0);
   const abortControllerRef = useRef(null);
   const autoBidTracker = useRef(new Set()); 
+  const isAutoBidProcessing = useRef(false);
   const closingTracker = useRef(new Set()); 
   const wsRef = useRef(null);
   
@@ -1232,80 +1233,111 @@ const KalshiDashboard = () => {
       if (!isRunning || !config.isAutoBid || !walletKeys) return;
 
       const runAutoBid = async () => {
-          // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
-          const executedHoldings = new Set(positions.filter(p => !p.isOrder && p.quantity > 0 && p.settlementStatus !== 'settled').map(p => p.marketId));
+          if (isAutoBidProcessing.current) return;
+          isAutoBidProcessing.current = true;
 
-          // We don't want to exceed max positions, but we also want to manage existing bids.
-          // So effectiveCount should track held positions + pending bids for *new* markets.
-          let effectiveCount = executedHoldings.size;
+          try {
+            // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
+            const executedHoldings = new Set(positions.filter(p => !p.isOrder && p.quantity > 0 && p.settlementStatus !== 'settled').map(p => p.marketId));
 
-          const activeOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()));
-          const activeOrderTickers = new Set(activeOrders.map(o => o.marketId));
+            // We don't want to exceed max positions, but we also want to manage existing bids.
+            // So effectiveCount should track held positions + pending bids for *new* markets.
+            let effectiveCount = executedHoldings.size;
 
-          for (const m of markets) {
-            if (!m.isMatchFound) continue;
+            const activeOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()));
 
-            // Check for held position
-            if (executedHoldings.has(m.realMarketId)) {
-                if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
-                continue;
+            // --- DUPLICATE PROTECTION ---
+            const orderMap = new Map();
+            const duplicates = [];
+
+            for (const o of activeOrders) {
+                if (orderMap.has(o.marketId)) {
+                    duplicates.push(o);
+                } else {
+                    orderMap.set(o.marketId, o);
+                }
             }
-
-            const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
             
-            if (existingOrder && autoBidTracker.current.has(m.realMarketId)) {
-                autoBidTracker.current.delete(m.realMarketId);
+            if (duplicates.length > 0) {
+                console.log("[AUTO-BID] Cleaning up duplicates...", duplicates);
+                for (const d of duplicates) {
+                    await cancelOrder(d.id, true, true);
+                    await new Promise(r => setTimeout(r, 100));
+                }
+                fetchPortfolio();
+                return; // Exit to let state settle
             }
+            // ---------------------------
 
-            // Prevent race condition if we are already acting on this market
-            if (autoBidTracker.current.has(m.realMarketId)) continue; 
+            const activeOrderTickers = new Set(activeOrders.map(o => o.marketId));
 
-            const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
-            
-            if (existingOrder) {
-                // 1. Check if order is stale or bad
-                if (smartBid === null || smartBid > maxWillingToPay) {
-                    // Strategy says don't bid (loss of edge), but we have an order. Cancel it.
-                    console.log(`[AUTO-BID] Cancelling stale/bad order ${m.realMarketId} (Bid: ${existingOrder.price}, Max: ${maxWillingToPay})`);
-                    autoBidTracker.current.add(m.realMarketId);
-                    await cancelOrder(existingOrder.id, true);
-                    await new Promise(r => setTimeout(r, 200)); // Delay
+            for (const m of markets) {
+                if (!m.isMatchFound) continue;
+
+                // Check for held position
+                if (executedHoldings.has(m.realMarketId)) {
+                    if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
                     continue;
                 }
 
-                if (existingOrder.price !== smartBid) {
-                    // Price improvement or adjustment needed
-                    console.log(`[AUTO-BID] Updating ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`);
-                    autoBidTracker.current.add(m.realMarketId);
+                const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
 
-                    // Cancel then Place
-                    try {
+                if (existingOrder && autoBidTracker.current.has(m.realMarketId)) {
+                    autoBidTracker.current.delete(m.realMarketId);
+                }
+
+                // Prevent race condition if we are already acting on this market
+                if (autoBidTracker.current.has(m.realMarketId)) continue;
+
+                const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
+
+                if (existingOrder) {
+                    // 1. Check if order is stale or bad
+                    if (smartBid === null || smartBid > maxWillingToPay) {
+                        // Strategy says don't bid (loss of edge), but we have an order. Cancel it.
+                        console.log(`[AUTO-BID] Cancelling stale/bad order ${m.realMarketId} (Bid: ${existingOrder.price}, Max: ${maxWillingToPay})`);
+                        autoBidTracker.current.add(m.realMarketId);
                         await cancelOrder(existingOrder.id, true);
                         await new Promise(r => setTimeout(r, 200)); // Delay
-                        await executeOrder(m, smartBid, false, null, 'auto');
-                        await new Promise(r => setTimeout(r, 200)); // Delay
-                    } catch (e) {
-                        console.error("Update failed", e);
-                        autoBidTracker.current.delete(m.realMarketId);
+                        continue;
                     }
+
+                    if (existingOrder.price !== smartBid) {
+                        // Price improvement or adjustment needed
+                        console.log(`[AUTO-BID] Updating ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`);
+                        autoBidTracker.current.add(m.realMarketId);
+
+                        // Cancel then Place
+                        try {
+                            await cancelOrder(existingOrder.id, true);
+                            await new Promise(r => setTimeout(r, 200)); // Delay
+                            await executeOrder(m, smartBid, false, null, 'auto');
+                            await new Promise(r => setTimeout(r, 200)); // Delay
+                        } catch (e) {
+                            console.error("Update failed", e);
+                            autoBidTracker.current.delete(m.realMarketId);
+                        }
+                    }
+                    // Else: Order is good, do nothing.
+                    continue;
                 }
-                // Else: Order is good, do nothing.
-                continue;
+
+                // New Bid Logic
+                if (effectiveCount >= config.maxPositions) continue;
+
+                // Check if we already have an active order (should be covered by existingOrder check, but double check)
+                if (activeOrderTickers.has(m.realMarketId)) continue;
+
+                if (smartBid && smartBid <= maxWillingToPay) {
+                    console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
+                    effectiveCount++;
+                    autoBidTracker.current.add(m.realMarketId);
+                    await executeOrder(m, smartBid, false, null, 'auto');
+                    await new Promise(r => setTimeout(r, 200)); // Delay
+                }
             }
-
-            // New Bid Logic
-            if (effectiveCount >= config.maxPositions) continue;
-
-            // Check if we already have an active order (should be covered by existingOrder check, but double check)
-            if (activeOrderTickers.has(m.realMarketId)) continue;
-
-            if (smartBid && smartBid <= maxWillingToPay) {
-                console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
-                effectiveCount++; 
-                autoBidTracker.current.add(m.realMarketId);
-                await executeOrder(m, smartBid, false, null, 'auto');
-                await new Promise(r => setTimeout(r, 200)); // Delay
-            }
+          } finally {
+              isAutoBidProcessing.current = false;
           }
       };
       
