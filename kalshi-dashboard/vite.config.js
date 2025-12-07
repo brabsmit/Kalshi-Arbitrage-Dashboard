@@ -15,19 +15,20 @@ export default defineConfig({
     ],
     proxy: {
       '/api/kalshi': {
-        target: 'https://api.elections.kalshi.com/trade-api/v2',
+        target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL}/trade-api/v2` : 'https://api.elections.kalshi.com/trade-api/v2',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kalshi/, ''),
         secure: false,
         // CRITICAL FIX: Set Origin to the target domain to satisfy WAF/CORS checks
         configure: (proxy, _options) => {
+          const target = process.env.KALSHI_API_URL || 'https://api.elections.kalshi.com';
           proxy.on('proxyReq', (proxyReq, req, _res) => {
-            proxyReq.setHeader('Origin', 'https://api.elections.kalshi.com');
+            proxyReq.setHeader('Origin', target);
           });
         },
       },
       '/kalshi-ws': {
-        target: 'wss://api.elections.kalshi.com/trade-api/v2/ws',
+        target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL.replace('https', 'wss')}/trade-api/v2/ws` : 'wss://api.elections.kalshi.com/trade-api/v2/ws',
         ws: true,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
