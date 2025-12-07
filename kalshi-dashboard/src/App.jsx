@@ -1535,10 +1535,17 @@ const KalshiDashboard = () => {
       if (!isRunning || !config.isAutoClose || !walletKeys) return;
       
       const runAutoClose = async () => {
-          const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
+          const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD' && p.quantity > 0 && p.settlementStatus !== 'settled');
           
           for (const pos of heldPositions) {
               if (closingTracker.current.has(pos.marketId)) continue;
+
+              // Check 1: Must be opened by bot (in tradeHistory)
+              const history = tradeHistory[pos.marketId];
+              if (!history) continue;
+
+              // Check 2: Must be opened in this session
+              if (sessionStart && history.orderPlacedAt < sessionStart) continue;
               
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
