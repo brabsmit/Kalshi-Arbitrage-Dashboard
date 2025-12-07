@@ -958,18 +958,12 @@ const KalshiDashboard = () => {
           if (!Array.isArray(oddsData)) throw new Error(oddsData.message || "API Error");
 
           setMarkets(prev => {
-              const processed = oddsData.slice(0, 20).map(game => {
+              // Now using flatMap to process BOTH outcomes (Target and Opponent) as potential markets
+              const processed = oddsData.slice(0, 20).flatMap(game => {
                   const bookmaker = game.bookmakers?.[0];
                   const outcomes = bookmaker?.markets?.[0]?.outcomes;
                   
-                  if (!outcomes || outcomes.length < 2) return null;
-
-                  const targetOutcome = outcomes.find(o => o.price < 0) || outcomes[0];
-                  
-                  const opposingOutcome = outcomes.find(o => o.name !== targetOutcome.name);
-                  const oddsDisplay = opposingOutcome 
-                    ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
-                    : `${targetOutcome.price}`;
+                  if (!outcomes || outcomes.length < 2) return [];
 
                   let totalImpliedProb = 0;
                   const outcomeProbs = outcomes.map(o => {
@@ -978,39 +972,92 @@ const KalshiDashboard = () => {
                       return { name: o.name, price: o.price, implied: p };
                   });
 
-                  const targetData = outcomeProbs.find(o => o.name === targetOutcome.name);
-                  const vigFreeProb = targetData.implied / totalImpliedProb;
+                  return outcomeProbs.map(targetOutcome => {
+                      const opposingOutcome = outcomeProbs.find(o => o.name !== targetOutcome.name);
 
-                  const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
-                  const prevMarket = prev.find(m => m.id === game.id);
-                  
-                  let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
-                  if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
-                      bestBid = prevMarket.bestBid;
-                      bestAsk = prevMarket.bestAsk;
-                  }
+                      const oddsDisplay = opposingOutcome
+                        ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
+                        : `${targetOutcome.price}`;
 
-                  return {
-                      id: game.id,
-                      event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
-                      commenceTime: game.commence_time,
-                      americanOdds: targetOutcome.price, 
-                      sportsbookOdds: targetOutcome.price, 
-                      opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
-                      oddsDisplay: oddsDisplay, 
-                      impliedProb: targetData.implied * 100,
-                      vigFreeProb: vigFreeProb * 100, 
-                      bestBid: bestBid || 0,
-                      bestAsk: bestAsk || 0,
-                      isMatchFound: !!realMatch,
-                      realMarketId: realMatch?.ticker,
-                      volume: volume || 0,
-                      openInterest: openInterest || 0,
-                      lastChange: Date.now(),
-                      fairValue: Math.floor(vigFreeProb * 100), 
-                      history: prevMarket?.history || []
-                  };
-              }).filter(Boolean);
+                      const vigFreeProb = targetOutcome.implied / totalImpliedProb;
+
+                      // Try to find a match for this specific team (Direct Match)
+                      let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                      let side = 'yes';
+
+                      // If no direct match, check if we can match the OPPONENT (Inverse Match) -> Buy 'No' on opponent's market
+                      if (!realMatch && opposingOutcome) {
+                          const inverseMatch = findKalshiMatch(opposingOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                          if (inverseMatch) {
+                              realMatch = inverseMatch;
+                              side = 'no';
+                          }
+                      }
+
+                      let bestBid = 0, bestAsk = 0;
+                      let volume = 0, openInterest = 0;
+
+                      if (realMatch) {
+                          volume = realMatch.volume || 0;
+                          openInterest = realMatch.open_interest || 0;
+
+                          if (side === 'yes') {
+                              bestBid = realMatch.yes_bid || 0;
+                              bestAsk = realMatch.yes_ask || 0;
+                          } else {
+                              // BUY NO: We pay 'No Ask' = 100 - Yes Bid.
+                              // SELL NO: We sell at 'No Bid' = 100 - Yes Ask.
+                              const yesBid = realMatch.yes_bid || 0;
+                              const yesAsk = realMatch.yes_ask || 0;
+
+                              // Market Best Bid (Price to Sell No)
+                              bestBid = yesAsk > 0 ? (100 - yesAsk) : 0;
+                              // Market Best Ask (Price to Buy No)
+                              bestAsk = yesBid > 0 ? (100 - yesBid) : 0;
+                          }
+                      }
+
+                      // Unique ID for React Key: GameID + TeamName
+                      const uniqueId = `${game.id}-${targetOutcome.name}`;
+                      const prevMarket = prev.find(m => m.id === uniqueId);
+
+                      if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
+                           // Preserve previous price state if needed (e.g. if WS is faster than API poll)
+                           // However, since we recalculate based on side, we should trust the new calculation
+                           // UNLESS we want to keep high-frequency WS updates.
+                           // The WS updater below handles side logic too, so prevMarket should be up to date.
+                          bestBid = prevMarket.bestBid;
+                          bestAsk = prevMarket.bestAsk;
+                      }
+
+                      // Filter out if no match found? Or keep to show "No Match"?
+                      // Current logic kept them.
+
+                      return {
+                          id: uniqueId,
+                          gameId: game.id,
+                          event: `${targetOutcome.name} vs ${opposingOutcome ? opposingOutcome.name : 'Field'}`,
+                          targetName: targetOutcome.name,
+                          side: side, // 'yes' or 'no'
+                          commenceTime: game.commence_time,
+                          americanOdds: targetOutcome.price,
+                          sportsbookOdds: targetOutcome.price,
+                          opposingOdds: opposingOutcome ? opposingOutcome.price : null,
+                          oddsDisplay: oddsDisplay,
+                          impliedProb: targetOutcome.implied * 100,
+                          vigFreeProb: vigFreeProb * 100,
+                          bestBid: bestBid,
+                          bestAsk: bestAsk,
+                          isMatchFound: !!realMatch,
+                          realMarketId: realMatch?.ticker,
+                          volume: volume,
+                          openInterest: openInterest,
+                          lastChange: Date.now(),
+                          fairValue: Math.floor(vigFreeProb * 100),
+                          history: prevMarket?.history || []
+                      };
+                  });
+              });
               
               return processed;
           });
@@ -1040,7 +1087,20 @@ const KalshiDashboard = () => {
           const d = JSON.parse(e.data);
           if (d.type === 'ticker' && d.msg) {
               setMarkets(curr => curr.map(m => {
-                  if (m.realMarketId === d.msg.ticker) return { ...m, bestBid: d.msg.yes_bid, bestAsk: d.msg.yes_ask, lastChange: Date.now() };
+                  if (m.realMarketId === d.msg.ticker) {
+                      let newBid, newAsk;
+                      if (m.side === 'yes') {
+                           newBid = d.msg.yes_bid;
+                           newAsk = d.msg.yes_ask;
+                      } else {
+                           // Inverse Logic for 'no' side
+                           const yBid = d.msg.yes_bid || 0;
+                           const yAsk = d.msg.yes_ask || 0;
+                           newBid = yAsk > 0 ? (100 - yAsk) : 0;
+                           newAsk = yBid > 0 ? (100 - yBid) : 0;
+                      }
+                      return { ...m, bestBid: newBid, bestAsk: newAsk, lastChange: Date.now() };
+                  }
                   return m;
               }));
           }
@@ -1142,7 +1202,7 @@ const KalshiDashboard = () => {
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
   }, [walletKeys, fetchPortfolio]);
 
-  const executeOrder = async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
+  const executeOrder = async (marketOrTicker, price, isSell, qtyOverride, source = 'manual', side = 'yes') => {
       if (!walletKeys) return setIsWalletOpen(true);
       if (!isForgeReady) return alert("Security library loading...");
       
@@ -1156,9 +1216,21 @@ const KalshiDashboard = () => {
 
       try {
           const ts = Date.now();
-          const body = JSON.stringify({
-              action: isSell ? 'sell' : 'buy', ticker, count: qty, type: isSell ? 'market' : 'limit', side: 'yes', yes_price: isSell ? undefined : price
-          });
+          const orderSide = side || 'yes';
+          const payload = {
+              action: isSell ? 'sell' : 'buy',
+              ticker,
+              count: qty,
+              type: isSell ? 'market' : 'limit',
+              side: orderSide
+          };
+
+          if (!isSell) {
+             if (orderSide === 'yes') payload.yes_price = price;
+             else payload.no_price = price;
+          }
+
+          const body = JSON.stringify(payload);
           const sig = signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
           
           const res = await fetch('/api/kalshi/portfolio/orders', {
@@ -1236,7 +1308,7 @@ const KalshiDashboard = () => {
                      // To be safe, we place the new order immediately.
                      // But strictly, we should probably verify cancellation.
                      // For high frequency, we assume it works.
-                     executeOrder(m, smartBid, false, null, 'auto').finally(() => autoBidTracker.current.delete(m.realMarketId));
+                     executeOrder(m, smartBid, false, null, 'auto', m.side).finally(() => autoBidTracker.current.delete(m.realMarketId));
                  }).catch(e => {
                      console.error("Update failed", e);
                      autoBidTracker.current.delete(m.realMarketId);
@@ -1256,7 +1328,7 @@ const KalshiDashboard = () => {
             console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
             effectiveCount++; 
             autoBidTracker.current.add(m.realMarketId);
-            executeOrder(m, smartBid, false, null, 'auto').finally(() => {
+            executeOrder(m, smartBid, false, null, 'auto', m.side).finally(() => {
                  // We keep it in tracker until it appears in positions?
                  // No, executeOrder adds to tradeHistory but positions update is async.
                  // We remove from tracker to allow updates later.
@@ -1278,7 +1350,7 @@ const KalshiDashboard = () => {
           if (currentBid >= target) {
               console.log(`[AUTO-CLOSE] ${pos.marketId}: ${currentBid} >= ${target}`);
               closingTracker.current.add(pos.marketId);
-              executeOrder(pos.marketId, 0, true, pos.quantity, 'auto');
+              executeOrder(pos.marketId, 0, true, pos.quantity, 'auto', pos.side.toLowerCase());
           }
       });
   }, [isRunning, config.isAutoClose, markets, positions]);
@@ -1444,7 +1516,7 @@ const KalshiDashboard = () => {
                             </tbody>
                             <tbody className="divide-y divide-slate-50">
                                 {groupMarkets.map(m => (
-                                    <MarketRow key={m.id} market={m} onExecute={(mkt, price, isSell, qty) => executeOrder(mkt, price, isSell, qty, 'manual')} marginPercent={config.marginPercent} tradeSize={config.tradeSize} />
+                                    <MarketRow key={m.id} market={m} onExecute={(mkt, price, isSell, qty) => executeOrder(mkt, price, isSell, qty, 'manual', mkt.side)} marginPercent={config.marginPercent} tradeSize={config.tradeSize} />
                                 ))}
                             </tbody>
                         </React.Fragment>
