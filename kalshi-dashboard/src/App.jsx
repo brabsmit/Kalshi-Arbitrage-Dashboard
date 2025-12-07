@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown } from 'lucide-react';
 
 // ==========================================
-// 0. LIBRARY LOADER (Fix for import error)
+// 0. LIBRARY LOADER
 // ==========================================
 const useForge = () => {
   const [isReady, setIsReady] = useState(false);
@@ -93,7 +93,6 @@ const isTickerExpired = (ticker) => {
     }
 };
 
-// Convert Probability back to American Odds for display
 const probabilityToAmericanOdds = (prob) => {
     if (prob <= 0 || prob >= 1) return 0;
     if (prob >= 0.5) {
@@ -107,9 +106,11 @@ const probabilityToAmericanOdds = (prob) => {
 
 const formatDuration = (ms) => {
     if (!ms) return '-';
-    const s = (ms / 1000).toFixed(1);
+    const s = Math.abs(ms / 1000).toFixed(1);
     return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${Math.floor(s % 60)}s`;
 };
+
+const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
 const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', { 
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
@@ -202,6 +203,141 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
 // 3. SUB-COMPONENTS
 // ==========================================
 
+const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
+    const exposure = positions.reduce((acc, p) => {
+        if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
+            return acc + (p.price * (p.quantity - p.filled));
+        }
+        if (!p.isOrder && p.status === 'HELD') {
+            return acc + p.cost;
+        }
+        return acc;
+    }, 0);
+
+    const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
+    const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
+
+    const winCount = historyItems.filter(p => (p.realizedPnl || 0) > 0).length;
+    const totalSettled = historyItems.length;
+    const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
+
+    const [elapsed, setElapsed] = useState(0);
+    useEffect(() => {
+        if (!sessionStart || !isRunning) return;
+        const i = setInterval(() => setElapsed(Date.now() - sessionStart), 1000);
+        return () => clearInterval(i);
+    }, [sessionStart, isRunning]);
+
+    return (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Wallet size={12} /> Total Exposure
+                </div>
+                <div className="text-2xl font-bold text-slate-800 mt-1">
+                    {formatMoney(exposure)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    Locked in trades & orders
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Trophy size={12} /> Realized PnL
+                </div>
+                <div className={`text-2xl font-bold mt-1 ${totalRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {totalRealizedPnl > 0 ? '+' : ''}{formatMoney(totalRealizedPnl)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    {historyItems.length} settled events
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Activity size={12} /> Win Rate
+                </div>
+                <div className="text-2xl font-bold text-slate-800 mt-1">
+                    {winRate}%
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="bg-emerald-500 h-full" style={{width: `${winRate}%`}}></div>
+                </div>
+            </div>
+
+             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Clock size={12} /> Session Time
+                </div>
+                <div className="text-2xl font-bold text-slate-800 mt-1 font-mono">
+                    {sessionStart ? formatDuration(elapsed || (Date.now() - sessionStart)) : '0s'}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    {isRunning ? 'Bot is running' : 'Bot is paused'}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
+                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                </div>
+                <div className="p-6 space-y-6">
+                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
+                        <span className="text-sm font-bold text-slate-700">Auto-Close Positions</span>
+                        <button
+                            onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.isAutoClose ? 'bg-blue-600' : 'bg-slate-300'}`}
+                        >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.isAutoClose ? 'translate-x-6' : 'translate-x-1'}`}/>
+                        </button>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Target Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
+                        <input type="range" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <p className="text-[10px] text-slate-400 mt-1">Bot will bid <code>FairValue * (1 - Margin)</code></p>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Max Positions</span><span className="text-rose-600">{config.maxPositions}</span></div>
+                        <input type="range" min="1" max="20" value={config.maxPositions} onChange={e => setConfig({...config, maxPositions: parseInt(e.target.value)})} className="w-full accent-rose-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
+                            <input type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Sport</label>
+                            <select value={config.selectedSport} onChange={e => setConfig({...config, selectedSport: e.target.value})} className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                {sportsList.map(s => <option key={s.key} value={s.key}>{s.title}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label>
+                        <input type="password" value={oddsApiKey} onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                    </div>
+                </div>
+                <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
+                    <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800">Done</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const ActionToast = ({ action }) => {
     if (!action) return null;
     const isBid = action.type === 'BID';
@@ -240,7 +376,7 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus }) => (
+const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings }) => (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot</h1>
@@ -253,6 +389,9 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </div>
         </div>
         <div className="flex items-center gap-3">
+             <button onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Settings">
+                <Settings size={20} />
+            </button>
             <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
                 {connected ? <Check size={16} /> : <Wallet size={16} />} <span className="font-medium text-sm">{connected ? "Wallet Active" : "Connect Wallet"}</span>
             </button>
@@ -740,6 +879,8 @@ const KalshiDashboard = () => {
   
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [activeAction, setActiveAction] = useState(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [sessionStart, setSessionStart] = useState(null);
   
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
@@ -773,6 +914,10 @@ const KalshiDashboard = () => {
       const o = localStorage.getItem('odds_api_key');
       if (o) setOddsApiKey(o);
   }, []);
+
+  useEffect(() => {
+      if (isRunning && !sessionStart) setSessionStart(Date.now());
+  }, [isRunning, sessionStart]);
 
   useEffect(() => {
     if (!oddsApiKey) return;
@@ -1248,8 +1393,13 @@ const KalshiDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
-      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} />
+
+      <StatsBanner positions={positions} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
+
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
+
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} />
       
       <PositionDetailsModal 
@@ -1304,40 +1454,7 @@ const KalshiDashboard = () => {
             </div>
         </div>
 
-        <div className="space-y-6 flex flex-col h-full">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
-                    <h3 className="font-bold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-2"><Settings size={14}/> Strategy</h3>
-                    <button onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`text-[10px] font-bold px-2 py-1 rounded ${config.isAutoClose ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
-                </div>
-                <div className="space-y-4">
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-1"><span>Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
-                        <input type="range" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg"/>
-                    </div>
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-1"><span>Max Positions</span><span className="text-rose-600">{config.maxPositions}</span></div>
-                        <input type="range" min="1" max="20" value={config.maxPositions} onChange={e => setConfig({...config, maxPositions: parseInt(e.target.value)})} className="w-full accent-rose-600 h-1.5 bg-slate-200 rounded-lg"/>
-                    </div>
-                    <div className="flex gap-2">
-                        <div className="flex-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase">Trade Size</label>
-                            <input type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono"/>
-                        </div>
-                        <div className="flex-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase">Sport</label>
-                            <select value={config.selectedSport} onChange={e => setConfig({...config, selectedSport: e.target.value})} className="w-full p-2 border rounded text-xs">
-                                {sportsList.map(s => <option key={s.key} value={s.key}>{s.title}</option>)}
-                            </select>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Odds API Key</label>
-                        <input type="password" value={oddsApiKey} onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}} className="w-full p-2 border rounded text-xs"/>
-                    </div>
-                </div>
-            </div>
-
+        <div className="space-y-6 flex flex-col h-full lg:col-span-1">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-[300px]">
                 <div className="flex border-b border-slate-100 bg-slate-50/50">
                     {['positions', 'resting', 'history'].map(tab => (
@@ -1356,7 +1473,6 @@ const KalshiDashboard = () => {
                     sortConfig={portfolioSortConfig}
                     onSort={handlePortfolioSort}
                 />
-                
             </div>
         </div>
       </div>
