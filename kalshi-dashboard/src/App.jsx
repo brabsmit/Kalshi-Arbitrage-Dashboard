@@ -922,10 +922,11 @@ const KalshiDashboard = () => {
               'KALSHI-ACCESS-TIMESTAMP': ts.toString() 
           });
 
-          const [balRes, ordersRes, posRes] = await Promise.all([
+          const [balRes, ordersRes, posRes, settledPosRes] = await Promise.all([
               fetch('/api/kalshi/portfolio/balance', { headers: headers('/trade-api/v2/portfolio/balance') }),
               fetch('/api/kalshi/portfolio/orders', { headers: headers('/trade-api/v2/portfolio/orders') }),
-              fetch('/api/kalshi/portfolio/positions', { headers: headers('/trade-api/v2/portfolio/positions') })
+              fetch('/api/kalshi/portfolio/positions', { headers: headers('/trade-api/v2/portfolio/positions') }),
+              fetch('/api/kalshi/portfolio/positions?settlement_status=settled', { headers: headers('/trade-api/v2/portfolio/positions') })
           ]);
 
           if (!balRes.ok || !ordersRes.ok || !posRes.ok) {
@@ -937,9 +938,8 @@ const KalshiDashboard = () => {
           const bal = await balRes.json();
           const orders = await ordersRes.json();
           const pos = await posRes.json();
+          const settledPos = settledPosRes.ok ? await settledPosRes.json() : { positions: [] };
 
-          console.log(pos)
-          
           if (bal?.balance) setBalance(bal.balance);
           
           const mappedItems = [
@@ -957,7 +957,7 @@ const KalshiDashboard = () => {
                   expiration: o.expiration_time 
               })),
               // POSITIONS
-              ...(pos.positions || []).map(p => {
+              ...([...(pos.positions || []), ...(settledPos.positions || [])]).map(p => {
                   const ticker = p.ticker || p.market_ticker || p.event_ticker;
                   const qty = p.position || p.total_cost_shares || 0;
                   let avg = 0;
@@ -1230,18 +1230,13 @@ const KalshiDashboard = () => {
 
   const activeContent = positions.filter(p => {
       if (activeTab === 'positions') {
-          return !p.isOrder && 
-                 (!p.settlementStatus || p.settlementStatus === 'unsettled') && 
-                 !isTickerExpired(p.marketId);
+          return !p.isOrder && (!p.settlementStatus || p.settlementStatus === 'unsettled');
       }
       if (activeTab === 'resting') {
           return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
       }
       if (activeTab === 'history') {
-          return !p.isOrder && (
-              (p.settlementStatus && p.settlementStatus !== 'unsettled') || 
-              isTickerExpired(p.marketId)
-          );
+          return !p.isOrder && (p.settlementStatus && p.settlementStatus !== 'unsettled');
       }
       return false;
   });
