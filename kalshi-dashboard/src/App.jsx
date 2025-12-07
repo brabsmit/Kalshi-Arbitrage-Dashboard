@@ -203,6 +203,40 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
 // 3. SUB-COMPONENTS
 // ==========================================
 
+const CancellationModal = ({ isOpen, progress }) => {
+    if (!isOpen) return null;
+    const percentage = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
+    
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 m-4 animate-in fade-in zoom-in duration-200">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="p-3 bg-slate-100 rounded-full">
+                        <Loader2 className="animate-spin text-slate-600" size={32} />
+                    </div>
+                    <div className="text-center">
+                        <h3 className="font-bold text-lg text-slate-800">Stopping Auto-Bid</h3>
+                        <p className="text-slate-500 text-sm mt-1">Cancelling open orders to prevent rate limits...</p>
+                    </div>
+                    
+                    <div className="w-full mt-2">
+                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                            <span>Progress</span>
+                            <span>{progress.current} / {progress.total}</span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                            <div 
+                                className="bg-blue-600 h-full transition-all duration-300 ease-out" 
+                                style={{width: `${percentage}%`}}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
     const exposure = positions.reduce((acc, p) => {
         if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
@@ -882,6 +916,9 @@ const KalshiDashboard = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [sessionStart, setSessionStart] = useState(null);
   
+  const [isCancelling, setIsCancelling] = useState(false);
+  const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
+
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
 
@@ -1314,16 +1351,26 @@ const KalshiDashboard = () => {
           const cancelAllSafe = async () => {
               if (openOrders.length > 0) {
                   console.log(`[AUTO-STOP] Bot stopped. Cancelling ${openOrders.length} open orders sequentially.`);
+                  setIsCancelling(true);
+                  setCancellationProgress({ current: 0, total: openOrders.length });
+
+                  let processed = 0;
                   for (const o of openOrders) {
                       await cancelOrder(o.id, true, true);
+                      processed++;
+                      setCancellationProgress(prev => ({ ...prev, current: processed }));
                       await new Promise(r => setTimeout(r, 200)); // Rate limit protection
                   }
                   console.log("[AUTO-STOP] All orders cancelled.");
                   fetchPortfolio();
               }
+              setIsCancelling(false);
           };
 
-          cancelAllSafe().catch(e => console.error("Failed to cancel orders on stop", e));
+          cancelAllSafe().catch(e => {
+              console.error("Failed to cancel orders on stop", e);
+              setIsCancelling(false);
+          });
       }
       prevAutoBidActiveRef.current = isActive;
   }, [isAutoBidActive, positions]);
@@ -1410,6 +1457,7 @@ const KalshiDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+      <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} />
 
       <StatsBanner positions={positions} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
