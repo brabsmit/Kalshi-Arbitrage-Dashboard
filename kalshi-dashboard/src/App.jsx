@@ -1214,16 +1214,16 @@ const KalshiDashboard = () => {
             }
 
             const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
-
+            
             if (existingOrder && autoBidTracker.current.has(m.realMarketId)) {
                 autoBidTracker.current.delete(m.realMarketId);
             }
 
             // Prevent race condition if we are already acting on this market
-            if (autoBidTracker.current.has(m.realMarketId)) continue;
+            if (autoBidTracker.current.has(m.realMarketId)) continue; 
 
             const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
-
+            
             if (existingOrder) {
                 // 1. Check if order is stale or bad
                 if (smartBid === null || smartBid > maxWillingToPay) {
@@ -1263,29 +1263,29 @@ const KalshiDashboard = () => {
 
             if (smartBid && smartBid <= maxWillingToPay) {
                 console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
-                effectiveCount++;
+                effectiveCount++; 
                 autoBidTracker.current.add(m.realMarketId);
                 await executeOrder(m, smartBid, false, null, 'auto');
                 await new Promise(r => setTimeout(r, 200)); // Delay
             }
           }
       };
-
+      
       runAutoBid();
 
   }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions]);
 
   useEffect(() => {
       if (!isRunning || !config.isAutoClose || !walletKeys) return;
-
+      
       const runAutoClose = async () => {
-          const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD' && p.quantity > 0 && p.settlementStatus !== 'settled');
+          const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
           
           for (const pos of heldPositions) {
               if (closingTracker.current.has(pos.marketId)) continue;
-
+              
               const m = markets.find(x => x.realMarketId === pos.marketId);
-              const currentBid = m ? m.bestBid : 0;
+              const currentBid = m ? m.bestBid : 0; 
               const target = pos.avgPrice * (1 + config.marginPercent/100);
 
               if (currentBid >= target) {
