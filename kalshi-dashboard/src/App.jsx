@@ -251,6 +251,9 @@ const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
     const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
     const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
 
+    const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
+    const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
+
     const winCount = historyItems.filter(p => (p.realizedPnl || 0) > 0).length;
     const totalSettled = historyItems.length;
     const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
@@ -263,7 +266,7 @@ const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
     }, [sessionStart, isRunning]);
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Wallet size={12} /> Total Exposure
@@ -273,6 +276,18 @@ const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                     Locked in trades & orders
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp size={12} /> Potential Profit
+                </div>
+                <div className="text-2xl font-bold text-emerald-600 mt-1">
+                    +{formatMoney(totalPotentialReturn)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    If all positions win
                 </div>
             </div>
 
@@ -716,6 +731,11 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
         return liveMarket ? liveMarket.fairValue : 0;
     };
 
+    const getCurrentPrice = (ticker) => {
+        const liveMarket = markets.find(m => m.realMarketId === ticker);
+        return liveMarket ? liveMarket.bestBid : 0;
+    };
+
     const getSortValue = (item, key) => {
         if (key === 'created') return item.created || 0;
         if (key === 'details') return item.side;
@@ -725,6 +745,8 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
         if (key === 'price') return item.price || 0;
         if (key === 'cash') return (item.price || 0) * ((item.quantity || 0) - (item.filled || 0));
         if (key === 'payout') return item.payout || 0;
+        if (key === 'quantity') return item.quantity || 0;
+        if (key === 'mktValue') return (item.quantity || 0) * getCurrentPrice(item.marketId);
         return 0;
     };
 
@@ -773,6 +795,8 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                         
                         {activeTab === 'positions' && (
                             <>
+                                <SortableHeader label="Qty" sortKey="quantity" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Mkt Value" sortKey="mktValue" currentSort={sortConfig} onSort={onSort} align="right" />
                                 <SortableHeader label="FV @ Buy" sortKey="fvBuy" currentSort={sortConfig} onSort={onSort} align="center" />
                                 <SortableHeader label="FV Now" sortKey="fvNow" currentSort={sortConfig} onSort={onSort} align="center" />
                             </>
@@ -802,7 +826,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                     <React.Fragment key={gameName}>
                         <tbody className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <td colSpan={activeTab === 'resting' ? 6 : 5} className="px-4 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
+                                <td colSpan={activeTab === 'history' ? 5 : 6} className="px-4 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
                                     {gameName}
                                 </td>
                             </tr>
@@ -822,6 +846,12 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
 
                                         {activeTab === 'positions' && (
                                             <>
+                                                <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
+                                                    {item.quantity}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
+                                                    {formatMoney(item.quantity * getCurrentPrice(item.marketId))}
+                                                </td>
                                                 <td className="px-4 py-3 text-center font-mono text-slate-500">
                                                     {history ? `${history.fairValue}¢` : '-'}
                                                 </td>
