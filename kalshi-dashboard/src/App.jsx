@@ -1380,8 +1380,17 @@ const KalshiDashboard = () => {
 
       try {
           const ts = Date.now();
+          // For sell orders (auto-close), we use limit order at 1 cent to ensure execution at best bid
+          // This avoids the "missing price" error and guarantees a fill if any bid exists >= 1 cent.
+          const effectivePrice = isSell ? (price || 1) : price;
+
           const body = JSON.stringify({
-              action: isSell ? 'sell' : 'buy', ticker, count: qty, type: isSell ? 'market' : 'limit', side: 'yes', yes_price: isSell ? undefined : price
+              action: isSell ? 'sell' : 'buy',
+              ticker,
+              count: qty,
+              type: 'limit',
+              side: 'yes',
+              yes_price: effectivePrice
           });
           const sig = signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
           
