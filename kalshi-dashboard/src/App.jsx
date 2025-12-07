@@ -1,7 +1,28 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets } from 'lucide-react';
-import forge from 'node-forge'; // REQUIRED: npm install node-forge
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown } from 'lucide-react';
+
+// ==========================================
+// 0. LIBRARY LOADER (Fix for import error)
+// ==========================================
+const useForge = () => {
+  const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    if (window.forge) {
+      setIsReady(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js";
+    script.async = true;
+    script.onload = () => setIsReady(true);
+    document.body.appendChild(script);
+  }, []);
+
+  return isReady;
+};
 
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
@@ -36,6 +57,54 @@ const americanToProbability = (odds) => {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 };
 
+// Helper to check if a ticker is from a past date
+const isTickerExpired = (ticker) => {
+    try {
+        if (!ticker) return false;
+        // Format is usually SERIES-YYMMMDD-
+        const parts = ticker.split('-');
+        if (parts.length < 2) return false;
+        
+        const dateStr = parts[1]; // "23OCT26"
+        if (dateStr.length !== 7) return false;
+
+        const yy = parseInt(dateStr.substring(0, 2), 10);
+        const mmm = dateStr.substring(2, 5);
+        const dd = parseInt(dateStr.substring(5, 7), 10);
+
+        const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
+        const monthIndex = months[mmm];
+        
+        if (isNaN(yy) || monthIndex === undefined || isNaN(dd)) return false;
+
+        // Construct Expiry Date (Assume 2000s)
+        const expiry = new Date(2000 + yy, monthIndex, dd);
+        // Set expiry to end of that day
+        expiry.setHours(23, 59, 59, 999);
+        
+        // Check if expiry was before "yesterday"
+        const yesterday = new Date();
+        yesterday.setHours(0, 0, 0, 0);
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        return expiry < yesterday;
+    } catch (e) {
+        return false;
+    }
+};
+
+// Convert Probability back to American Odds for display
+const probabilityToAmericanOdds = (prob) => {
+    if (prob <= 0 || prob >= 1) return 0;
+    if (prob >= 0.5) {
+        const odds = - (prob / (1 - prob)) * 100;
+        return Math.round(odds);
+    } else {
+        const odds = ((1 - prob) / prob) * 100;
+        return Math.round(odds);
+    }
+};
+
 const formatDuration = (ms) => {
     if (!ms) return '-';
     const s = (ms / 1000).toFixed(1);
@@ -65,15 +134,9 @@ const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, kalshiMar
     return kalshiMarkets.find(k => {
         const ticker = k.ticker ? k.ticker.toUpperCase() : '';
         if (seriesTicker && !ticker.startsWith(seriesTicker)) return false;
-        
-        // Strict date check
         if (datePart && !ticker.includes(datePart)) return false;
-        
-        // Ensure both teams are in the ticker
         const hasTeams = (ticker.includes(homeAbbr) && ticker.includes(awayAbbr));
         if (!hasTeams) return false;
-        
-        // Ensure target outcome
         const targetSuffix = `-${targetAbbr}`;
         return ticker.endsWith(targetSuffix);
     });
@@ -91,7 +154,9 @@ const hasOpenExposure = (positions, marketTicker) => {
 const calculateStrategy = (market, marginPercent) => {
     if (!market.isMatchFound) return { smartBid: null, reason: "No Market", edge: -100, maxWillingToPay: 0 };
 
-    const fairValue = Math.floor(market.impliedProb * 100);
+    const probToUse = market.vigFreeProb || market.impliedProb;
+    const fairValue = Math.floor(probToUse); 
+    
     const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
     const currentBestBid = market.bestBid || 0;
     const edge = fairValue - currentBestBid;
@@ -104,15 +169,17 @@ const calculateStrategy = (market, marginPercent) => {
         reason = "Max Limit";
     }
     
-    // Safety cap for Kalshi (1-99)
     if (smartBid > 99) smartBid = 99;
 
     return { smartBid, maxWillingToPay, edge, reason };
 };
 
-// --- CRYPTOGRAPHIC SIGNING ENGINE (Node Forge) ---
+// --- CRYPTOGRAPHIC SIGNING ENGINE ---
 const signRequest = (privateKeyPem, method, path, timestamp) => {
     try {
+        const forge = window.forge;
+        if (!forge) throw new Error("Forge library not loaded");
+
         const privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
         const md = forge.md.sha256.create();
         const cleanPath = path.split('?')[0];
@@ -132,7 +199,7 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
 };
 
 // ==========================================
-// 2. SUB-COMPONENTS
+// 3. SUB-COMPONENTS
 // ==========================================
 
 const ActionToast = ({ action }) => {
@@ -225,7 +292,6 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
         }
         setIsValidating(true);
         try {
-            // Test signature immediately to catch key format errors early
             signRequest(privateKey, "GET", "/test", Date.now());
             onConnect({keyId, privateKey});
             onClose();
@@ -250,7 +316,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                         </div>
                     )}
                     <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded">
-                        Keys stored locally.
+                        Keys stored locally. Supports standard PKCS#1 keys.
                     </div>
                     <input type="text" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded" />
                     <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative">
@@ -269,31 +335,156 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
 const AnalysisModal = ({ data, onClose }) => {
     if (!data) return null;
     const latency = data.orderPlacedAt - data.oddsTime;
+
+    const targetVigFreeProb = (data.vigFreeProb || 0) / 100;
+    const opposingVigFreeProb = 1 - targetVigFreeProb;
+
+    const targetFairOdds = probabilityToAmericanOdds(targetVigFreeProb);
+    const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
+
+    let displayOpposingOdds = '-';
+    if (data.opposingOdds !== undefined && data.opposingOdds !== null) {
+        displayOpposingOdds = (data.opposingOdds > 0 ? '+' : '') + data.opposingOdds;
+    } else if (data.sportsbookOdds && data.vigFreeProb) {
+        const targetRaw = americanToProbability(data.sportsbookOdds);
+        const vigFreeDecimal = data.vigFreeProb / 100;
+        
+        if (vigFreeDecimal > 0.001) {
+            const totalImplied = targetRaw / vigFreeDecimal;
+            const opponentRaw = totalImplied - targetRaw;
+            
+            if (opponentRaw > 0 && opponentRaw < 1) {
+                const calcOdds = probabilityToAmericanOdds(opponentRaw);
+                displayOpposingOdds = (calcOdds > 0 ? '+' : '') + calcOdds + ' (Est)';
+            }
+        }
+    }
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="bg-slate-900 p-4 flex justify-between items-center">
-                    <div className="text-white font-bold flex items-center gap-2"><FileText size={18} className="text-blue-400"/> Trade Analysis</div>
+                    <div className="text-white font-bold flex items-center gap-2"><Calculator size={18} className="text-blue-400"/> Trade Analysis</div>
                     <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
                 </div>
                 <div className="p-6">
                     <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 font-mono">{data.ticker}</p></div>
+                    
+                    <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
+                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                            <span>Vig-Free Fair Value Calculator</span>
+                        </div>
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-white text-slate-500 text-xs">
+                                <tr>
+                                    <th className="px-4 py-2 font-medium">Outcome</th>
+                                    <th className="px-4 py-2 font-medium">Odds</th>
+                                    <th className="px-4 py-2 font-medium">No-Vig %</th>
+                                    <th className="px-4 py-2 font-medium text-right">Fair Odds</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                <tr className="bg-blue-50/50">
+                                    <td className="px-4 py-2 font-bold text-blue-800">Target</td>
+                                    <td className="px-4 py-2 font-mono">{data.sportsbookOdds > 0 ? '+' : ''}{data.sportsbookOdds}</td>
+                                    <td className="px-4 py-2 font-mono font-bold text-emerald-600">{(data.vigFreeProb || 0).toFixed(2)}%</td>
+                                    <td className="px-4 py-2 font-mono text-right">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</td>
+                                </tr>
+                                <tr>
+                                    <td className="px-4 py-2 text-slate-500">Opponent</td>
+                                    <td className="px-4 py-2 font-mono">{displayOpposingOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-slate-600">{(opposingVigFreeProb * 100).toFixed(2)}%</td>
+                                    <td className="px-4 py-2 font-mono text-right">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <div className="text-xs text-blue-600 font-bold uppercase mb-1">Sportsbook Odds</div>
-                            <div className="text-2xl font-bold text-slate-800">{data.sportsbookOdds > 0 ? `+${data.sportsbookOdds}` : data.sportsbookOdds}</div>
-                            <div className="text-xs text-slate-500 mt-1">Implied: {data.impliedProb.toFixed(1)}%</div>
+                            <div className="text-xs text-blue-600 font-bold uppercase mb-1">Execution</div>
+                            <div className="text-2xl font-bold text-slate-800">{data.bidPrice}¢</div>
+                            <div className="text-xs text-slate-500 mt-1">Paid Price</div>
                         </div>
                         <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
-                            <div className="text-xs text-emerald-600 font-bold uppercase mb-1">Execution</div>
-                            <div className="text-2xl font-bold text-slate-800">{data.bidPrice}¢</div>
-                            <div className="text-xs text-slate-500 mt-1">Fair Value: {data.fairValue}¢</div>
+                            <div className="text-xs text-emerald-600 font-bold uppercase mb-1">True Value</div>
+                            <div className="text-2xl font-bold text-slate-800">{data.fairValue}¢</div>
+                            <div className="text-xs text-slate-500 mt-1">Fair Value (Cents)</div>
                         </div>
                     </div>
+
                     <div className="space-y-3 border-t border-slate-100 pt-4">
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
                          <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
+                         
+                         <div className="flex justify-between items-center text-sm">
+                            <span className="text-slate-500">Status</span>
+                            <span className="font-mono font-bold text-slate-700 uppercase">{data.currentStatus || '-'}</span>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const PositionDetailsModal = ({ position, market, onClose }) => {
+    if (!position) return null;
+
+    const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
+    const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST' : '-';
+
+    const safeAvgPrice = typeof position.avgPrice === 'number' ? position.avgPrice : 0;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                    <h3 className="font-bold text-lg text-slate-800">Position Details</h3>
+                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                </div>
+                
+                <div className="p-6">
+                    <div className="flex items-start gap-4 mb-8">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+                            <Briefcase className="text-emerald-600" size={20} />
+                        </div>
+                        <div>
+                            <div className="text-sm text-slate-500 font-medium mb-1">
+                                {market ? market.event : position.marketId}
+                            </div>
+                            <div className="text-2xl font-bold text-slate-900">
+                                {position.side}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead>
+                                <tr className="text-slate-400 border-b border-slate-100">
+                                    <th className="pb-3 font-normal">Market</th>
+                                    <th className="pb-3 font-normal text-right">Avg price</th>
+                                    <th className="pb-3 font-normal text-right">Contracts filled</th>
+                                    <th className="pb-3 font-normal text-right">Cost</th>
+                                    <th className="pb-3 font-normal text-right">Fees</th>
+                                    <th className="pb-3 font-normal text-right">Last updated</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-slate-700">
+                                <tr>
+                                    <td className="py-4 font-medium text-blue-600">Bought {position.side}</td>
+                                    <td className="py-4 text-right font-mono">{safeAvgPrice.toFixed(2)}¢</td>
+                                    <td className="py-4 text-right font-mono">{position.quantity}</td>
+                                    <td className="py-4 text-right font-mono">{formatMoney(position.cost)}</td>
+                                    <td className="py-4 text-right font-mono">{formatMoney(position.fees)}</td>
+                                    <td className="py-4 text-right font-mono text-slate-500 text-xs">
+                                        {formatDate(position.created || Date.now())}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </div>
@@ -322,7 +513,7 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
                 <div className="font-medium text-slate-700">{market.event}</div>
                 <div className="flex items-center gap-2 mt-1">
                     {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
-                    <span className="text-[10px] text-slate-400 font-mono">Odds: {market.americanOdds}</span>
+                    <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
                 </div>
             </td>
             <td className="px-4 py-3 text-center font-bold text-slate-700">{market.fairValue}¢</td>
@@ -338,12 +529,167 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
     );
 };
 
+const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute }) => {
+    
+    const getGameName = (ticker) => {
+        const liveMarket = markets.find(m => m.realMarketId === ticker);
+        if (liveMarket) return liveMarket.event;
+        if (tradeHistory[ticker]) return tradeHistory[ticker].event;
+        return ticker; 
+    };
+
+    const getCurrentFV = (ticker) => {
+        const liveMarket = markets.find(m => m.realMarketId === ticker);
+        return liveMarket ? liveMarket.fairValue : '-';
+    };
+
+    const groupedItems = useMemo(() => {
+        const groups = {};
+        positions.forEach(item => {
+            const game = getGameName(item.marketId);
+            if (!groups[game]) groups[game] = [];
+            groups[game].push(item);
+        });
+        return groups;
+    }, [positions, markets, tradeHistory]);
+
+    const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
+    const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-';
+
+    return (
+        <div className="overflow-auto flex-1">
+            <table className="w-full text-sm text-left">
+                <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                    <tr>
+                        <th className="px-4 py-3">Details</th> 
+                        
+                        {activeTab === 'positions' && (
+                            <>
+                                <th className="px-4 py-3 text-center">FV @ Buy</th>
+                                <th className="px-4 py-3 text-center">FV Now</th>
+                            </>
+                        )}
+
+                        {activeTab === 'resting' && (
+                            <>
+                                <th className="px-4 py-3 text-center">Filled / Qty</th>
+                                <th className="px-4 py-3 text-right">Limit</th>
+                                <th className="px-4 py-3 text-right">Cash</th>
+                                <th className="px-4 py-3 text-right">Placed / Exp</th>
+                            </>
+                        )}
+
+                        {activeTab === 'history' && (
+                            <>
+                                <th className="px-4 py-3 text-center">FV @ Buy</th>
+                                <th className="px-4 py-3 text-right">Payout</th>
+                                <th className="px-4 py-3 text-right">Settled</th>
+                            </>
+                        )}
+                        <th className="px-4 py-3 text-center">Action</th>
+                    </tr>
+                </thead>
+                
+                {Object.entries(groupedItems).map(([gameName, items]) => (
+                    <React.Fragment key={gameName}>
+                        <tbody className="bg-slate-50 border-b border-slate-200">
+                            <tr>
+                                <td colSpan={activeTab === 'resting' ? 6 : 5} className="px-4 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
+                                    {gameName}
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tbody className="divide-y divide-slate-50">
+                            {items.map(item => {
+                                const history = tradeHistory[item.marketId];
+                                return (
+                                    <tr key={item.id} className="hover:bg-slate-50 group">
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
+                                                <span className="text-slate-400">for</span>
+                                                <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
+                                            </div>
+                                        </td>
+
+                                        {activeTab === 'positions' && (
+                                            <>
+                                                <td className="px-4 py-3 text-center font-mono text-slate-500">
+                                                    {history ? `${history.fairValue}¢` : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
+                                                    {getCurrentFV(item.marketId)}¢
+                                                </td>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'resting' && (
+                                            <>
+                                                <td className="px-4 py-3 text-center font-mono">
+                                                    <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono">{item.price}¢</td>
+                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
+                                                    {formatMoney(item.price * (item.quantity - item.filled))}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-xs text-slate-500">
+                                                    <div>{formatDate(item.created)}</div>
+                                                    <div className="text-[10px] text-slate-400">{item.expiration ? formatDate(item.expiration) : 'GTC'}</div>
+                                                </td>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'history' && (
+                                            <>
+                                                <td className="px-4 py-3 text-center font-mono text-slate-500">
+                                                    {history ? `${history.fairValue}¢` : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
+                                                    {item.payout ? formatMoney(item.payout) : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-xs text-slate-500">
+                                                    {formatDate(item.created)} 
+                                                </td>
+                                            </>
+                                        )}
+
+                                        <td className="px-4 py-3 text-center flex justify-center gap-2">
+                                            {item.isOrder && (
+                                                <button onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                                                    <XCircle size={16}/>
+                                                </button>
+                                            )}
+                                            <button 
+                                                onClick={() => onAnalysis(item)}
+                                                disabled={!history} 
+                                                className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
+                                            >
+                                                <Info size={16}/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </React.Fragment>
+                ))}
+                {positions.length === 0 && (
+                    <tbody>
+                        <tr><td colSpan={6} className="p-8 text-center text-slate-400 italic">No items found</td></tr>
+                    </tbody>
+                )}
+            </table>
+        </div>
+    );
+};
+
 // ==========================================
-// 3. MAIN DASHBOARD
+// 4. MAIN DASHBOARD
 // ==========================================
 
 const KalshiDashboard = () => {
-  // --- STATE ---
+  const isForgeReady = useForge(); 
+  
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
   const [balance, setBalance] = useState(null); 
@@ -357,13 +703,11 @@ const KalshiDashboard = () => {
   const [analysisModalData, setAnalysisModalData] = useState(null);
   const [oddsApiKey, setOddsApiKey] = useState('');
   
-  // NEW: State for Action Notification
+  const [selectedPosition, setSelectedPosition] = useState(null);
   const [activeAction, setActiveAction] = useState(null);
   
-  // Sorting State
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
 
-  // Strategy Config (Consolidated)
   const [config, setConfig] = useState({
       marginPercent: 15,
       tradeSize: 10,
@@ -378,18 +722,15 @@ const KalshiDashboard = () => {
   const [sportsList, setSportsList] = useState(SPORT_MAPPING);
   const [isLoadingSports, setIsLoadingSports] = useState(false);
   
-  // Refs
   const lastFetchTimeRef = useRef(0);
   const abortControllerRef = useRef(null);
   const autoBidTracker = useRef(new Set()); 
   const closingTracker = useRef(new Set()); 
   const wsRef = useRef(null);
   
-  // History Persistence
   const [tradeHistory, setTradeHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_trade_history') || '{}'));
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
 
-  // Load Keys
   useEffect(() => {
       const k = localStorage.getItem('kalshi_keys');
       if (k) setWalletKeys(JSON.parse(k));
@@ -397,7 +738,6 @@ const KalshiDashboard = () => {
       if (o) setOddsApiKey(o);
   }, []);
 
-  // --- API: FETCH SPORTS ---
   useEffect(() => {
     if (!oddsApiKey) return;
     setIsLoadingSports(true);
@@ -412,7 +752,6 @@ const KalshiDashboard = () => {
         .finally(() => setIsLoadingSports(false));
   }, [oddsApiKey]);
 
-  // --- API: FETCH MARKETS & ODDS ---
   const fetchLiveOdds = useCallback(async (force = false) => {
       if (!oddsApiKey) return;
       const now = Date.now();
@@ -438,16 +777,32 @@ const KalshiDashboard = () => {
           if (!Array.isArray(oddsData)) throw new Error(oddsData.message || "API Error");
 
           setMarkets(prev => {
-              // Merge Logic
               const processed = oddsData.slice(0, 20).map(game => {
-                  const outcome = game.bookmakers?.[0]?.markets?.[0]?.outcomes?.find(o => o.price < 0) || game.bookmakers?.[0]?.markets?.[0]?.outcomes?.[0];
-                  if (!outcome) return null;
+                  const bookmaker = game.bookmakers?.[0];
+                  const outcomes = bookmaker?.markets?.[0]?.outcomes;
                   
-                  const prob = americanToProbability(outcome.price);
-                  const realMatch = findKalshiMatch(outcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                  if (!outcomes || outcomes.length < 2) return null;
+
+                  const targetOutcome = outcomes.find(o => o.price < 0) || outcomes[0];
+                  
+                  const opposingOutcome = outcomes.find(o => o.name !== targetOutcome.name);
+                  const oddsDisplay = opposingOutcome 
+                    ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
+                    : `${targetOutcome.price}`;
+
+                  let totalImpliedProb = 0;
+                  const outcomeProbs = outcomes.map(o => {
+                      const p = americanToProbability(o.price);
+                      totalImpliedProb += p;
+                      return { name: o.name, price: o.price, implied: p };
+                  });
+
+                  const targetData = outcomeProbs.find(o => o.name === targetOutcome.name);
+                  const vigFreeProb = targetData.implied / totalImpliedProb;
+
+                  const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
                   
-                  // Preserve WS data if fresher
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
                   if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
                       bestBid = prevMarket.bestBid;
@@ -456,10 +811,14 @@ const KalshiDashboard = () => {
 
                   return {
                       id: game.id,
-                      event: `${outcome.name} vs ${outcome.name === game.home_team ? game.away_team : game.home_team}`,
+                      event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
                       commenceTime: game.commence_time,
-                      americanOdds: outcome.price,
-                      impliedProb: prob,
+                      americanOdds: targetOutcome.price, 
+                      sportsbookOdds: targetOutcome.price, 
+                      opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
+                      oddsDisplay: oddsDisplay, 
+                      impliedProb: targetData.implied * 100,
+                      vigFreeProb: vigFreeProb * 100, 
                       bestBid: bestBid || 0,
                       bestAsk: bestAsk || 0,
                       isMatchFound: !!realMatch,
@@ -467,7 +826,7 @@ const KalshiDashboard = () => {
                       volume: volume || 0,
                       openInterest: openInterest || 0,
                       lastChange: Date.now(),
-                      fairValue: Math.floor(prob * 100),
+                      fairValue: Math.floor(vigFreeProb * 100), 
                       history: prevMarket?.history || []
                   };
               }).filter(Boolean);
@@ -477,10 +836,8 @@ const KalshiDashboard = () => {
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
   }, [oddsApiKey, config.selectedSport, config.isTurboMode, sportsList]);
 
-  // Force refresh when sport changes
   useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport]);
 
-  // Main Loop
   useEffect(() => {
       if (!isRunning) return;
       fetchLiveOdds(true);
@@ -488,21 +845,16 @@ const KalshiDashboard = () => {
       return () => clearInterval(interval);
   }, [isRunning, fetchLiveOdds, config.isTurboMode]);
 
-  // --- WEBSOCKETS ---
   useEffect(() => {
-      if (!isRunning || !walletKeys) return;
+      if (!isRunning || !walletKeys || !isForgeReady) return;
       const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/kalshi-ws';
       const ws = new WebSocket(wsUrl);
-      
-      ws.onopen = async () => {
+      ws.onopen = () => {
           setWsStatus('OPEN');
-          try {
-              const ts = Date.now();
-              const sig = await signRequest(walletKeys.privateKey, "GET", "/users/current/user", ts);
-              ws.send(JSON.stringify({ id: 1, cmd: "connect", params: { key: walletKeys.keyId, signature: sig, timestamp: ts } }));
-          } catch(e) { console.error("WS Auth Failed", e); }
+          const ts = Date.now();
+          const sig = signRequest(walletKeys.privateKey, "GET", "/users/current/user", ts);
+          ws.send(JSON.stringify({ id: 1, cmd: "connect", params: { key: walletKeys.keyId, signature: sig, timestamp: ts } }));
       };
-      
       ws.onmessage = (e) => {
           const d = JSON.parse(e.data);
           if (d.type === 'ticker' && d.msg) {
@@ -512,13 +864,11 @@ const KalshiDashboard = () => {
               }));
           }
       };
-      
       ws.onclose = () => setWsStatus('CLOSED');
       wsRef.current = ws;
       return () => ws.close();
-  }, [isRunning, walletKeys]);
+  }, [isRunning, walletKeys, isForgeReady]);
 
-  // Subscriptions
   useEffect(() => {
       if (wsRef.current?.readyState === WebSocket.OPEN && markets.length) {
           const tickers = markets.filter(m => m.realMarketId).map(m => m.realMarketId);
@@ -526,36 +876,81 @@ const KalshiDashboard = () => {
       }
   }, [markets.length, wsStatus]);
 
-  // --- TRADING LOGIC ---
   const fetchPortfolio = useCallback(async () => {
-      if (!walletKeys) return;
+      if (!walletKeys || !isForgeReady) return;
       try {
           const ts = Date.now();
-          const sign = async (path) => ({
-              'KALSHI-ACCESS-KEY': walletKeys.keyId,
-              'KALSHI-ACCESS-SIGNATURE': await signRequest(walletKeys.privateKey, "GET", path, ts),
-              'KALSHI-ACCESS-TIMESTAMP': ts.toString()
+          const headers = (path) => ({ 
+              'KALSHI-ACCESS-KEY': walletKeys.keyId, 
+              'KALSHI-ACCESS-SIGNATURE': signRequest(walletKeys.privateKey, "GET", path, ts), 
+              'KALSHI-ACCESS-TIMESTAMP': ts.toString() 
           });
 
-          const [bal, orders, pos] = await Promise.all([
-              fetch('/api/kalshi/portfolio/balance', { headers: await sign('/trade-api/v2/portfolio/balance') }).then(r => r.json()),
-              fetch('/api/kalshi/portfolio/orders', { headers: await sign('/trade-api/v2/portfolio/orders') }).then(r => r.json()),
-              fetch('/api/kalshi/portfolio/positions', { headers: await sign('/trade-api/v2/portfolio/positions') }).then(r => r.json())
+          const [balRes, ordersRes, posRes] = await Promise.all([
+              fetch('/api/kalshi/portfolio/balance', { headers: headers('/trade-api/v2/portfolio/balance') }),
+              fetch('/api/kalshi/portfolio/orders', { headers: headers('/trade-api/v2/portfolio/orders') }),
+              fetch('/api/kalshi/portfolio/positions', { headers: headers('/trade-api/v2/portfolio/positions') })
           ]);
 
+          if (!balRes.ok || !ordersRes.ok || !posRes.ok) {
+              console.error("Portfolio Fetch Failed");
+              if (!posRes.ok) console.error("Positions Error:", await posRes.text());
+              return;
+          }
+
+          const bal = await balRes.json();
+          const orders = await ordersRes.json();
+          const pos = await posRes.json();
+
+          console.log(pos)
+          
           if (bal?.balance) setBalance(bal.balance);
           
           const mappedItems = [
+              // ORDERS
               ...(orders.orders || []).map(o => ({
-                  id: o.order_id, marketId: o.ticker, side: 'Yes', quantity: o.remaining_count, price: o.yes_price, status: o.status, isOrder: true, created: o.created_time
+                  id: o.order_id, 
+                  marketId: o.ticker, 
+                  side: o.side === 'yes' ? 'Yes' : 'No', 
+                  quantity: o.count || (o.fill_count + o.remaining_count),
+                  filled: o.fill_count, 
+                  price: o.yes_price || o.no_price, 
+                  status: o.status, 
+                  isOrder: true, 
+                  created: o.created_time,
+                  expiration: o.expiration_time 
               })),
-              ...(pos.positions || []).map(p => ({
-                  id: p.ticker, marketId: p.ticker, side: 'Yes', quantity: p.position, avgPrice: p.fees_paid/Math.abs(p.position), status: 'HELD', isOrder: false
-              }))
-          ];
+              // POSITIONS
+              ...(pos.positions || []).map(p => {
+                  const ticker = p.ticker || p.market_ticker || p.event_ticker;
+                  const qty = p.position || p.total_cost_shares || 0;
+                  let avg = 0;
+                  if (p.avg_price) avg = p.avg_price;
+                  else if (p.total_cost && qty) avg = p.total_cost / qty;
+                  else if (p.fees_paid && qty) avg = p.fees_paid / Math.abs(qty);
+
+                  return {
+                      id: ticker, 
+                      marketId: ticker, 
+                      side: 'Yes', 
+                      quantity: Math.abs(qty), 
+                      avgPrice: avg, 
+                      cost: Math.abs(p.total_cost || 0), 
+                      fees: Math.abs(p.fees_paid || 0),   
+                      status: 'HELD', 
+                      isOrder: false,
+                      settlementStatus: p.settlement_status 
+                  };
+              })
+          ].filter(p => {
+             if (p.isOrder) return true;
+             if (p.quantity <= 0) return false;
+             return true;
+          });
+          
           setPositions(mappedItems);
       } catch (e) { console.error("Portfolio Error", e); }
-  }, [walletKeys]);
+  }, [walletKeys, isForgeReady]);
 
   useEffect(() => { 
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
@@ -563,13 +958,13 @@ const KalshiDashboard = () => {
 
   const executeOrder = async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
       if (!walletKeys) return setIsWalletOpen(true);
+      if (!isForgeReady) return alert("Security library loading...");
+      
       const ticker = isSell ? marketOrTicker : marketOrTicker.realMarketId;
       const qty = qtyOverride || config.tradeSize;
       
-      // AUTO-ACTION NOTIFICATION
       if (source !== 'manual') {
           setActiveAction({ type: isSell ? 'CLOSE' : 'BID', ticker, price });
-          // Auto-clear notification after 3 seconds
           setTimeout(() => setActiveAction(null), 3000);
       }
 
@@ -578,26 +973,26 @@ const KalshiDashboard = () => {
           const body = JSON.stringify({
               action: isSell ? 'sell' : 'buy', ticker, count: qty, type: isSell ? 'market' : 'limit', side: 'yes', yes_price: isSell ? undefined : price
           });
-          const sig = await signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
+          const sig = signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
           
           const res = await fetch('/api/kalshi/portfolio/orders', {
               method: 'POST', headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() },
               body
           });
-          
-          if (!res.ok) {
-              const errorData = await res.json();
-              throw new Error(errorData.message || JSON.stringify(errorData) || "Order Failed");
-          }
           const data = await res.json();
+          if (!res.ok) throw new Error(data.message || "Order Failed");
 
           console.log(`Order Placed: ${data.order_id}`);
           if (!isSell) {
               autoBidTracker.current.add(ticker);
-              // Save Trade Data
               setTradeHistory(prev => ({ ...prev, [ticker]: { 
                   ticker, orderId: data.order_id, event: marketOrTicker.event, oddsTime: marketOrTicker.lastChange, 
-                  orderPlacedAt: Date.now(), sportsbookOdds: marketOrTicker.americanOdds, impliedProb: marketOrTicker.impliedProb*100, 
+                  orderPlacedAt: Date.now(), 
+                  sportsbookOdds: marketOrTicker.sportsbookOdds,
+                  opposingOdds: marketOrTicker.opposingOdds, 
+                  oddsDisplay: marketOrTicker.oddsDisplay, 
+                  impliedProb: marketOrTicker.impliedProb, 
+                  vigFreeProb: marketOrTicker.vigFreeProb,
                   fairValue: marketOrTicker.fairValue, bidPrice: price 
               }}));
           }
@@ -605,55 +1000,38 @@ const KalshiDashboard = () => {
       } catch (e) { 
           console.error(e); 
           if (!config.isAutoBid && !config.isAutoClose) alert(e.message);
-          // Allow retry on next loop if it was an auto-action error
           if (isSell) closingTracker.current.delete(ticker);
       }
   };
 
-  // --- AUTO-BID ENGINE ---
   useEffect(() => {
       if (!isRunning || !config.isAutoBid || !walletKeys) return;
 
-      // CRITICAL FIX: Loop-based calculation to avoid stale closure
-      let currentExposureCount = 0;
-      // Get base count from state
-      const baseExposures = new Set(positions.filter(p => {
-          if (!p.isOrder) return p.quantity > 0; 
-          return ['active', 'resting', 'bidding'].includes(p.status.toLowerCase()); 
-      }).map(p => p.marketId));
-      
-      currentExposureCount = baseExposures.size;
+      const executedHoldings = new Set(positions.filter(p => !p.isOrder).map(p => p.marketId));
 
-      // Check current session bids to add to count
-      autoBidTracker.current.forEach(ticker => {
-          if (!baseExposures.has(ticker)) currentExposureCount++;
-      });
+      if (executedHoldings.size >= config.maxPositions) return;
 
-      if (currentExposureCount >= config.maxPositions) return;
+      let effectiveCount = executedHoldings.size;
 
-      // Loop through markets and bid
       for (const m of markets) {
-          if (currentExposureCount >= config.maxPositions) break; // STOP if limit hit in loop
-          
-          if (!m.isMatchFound) continue;
-          if (hasOpenExposure(positions, m.realMarketId)) continue;
-          if (autoBidTracker.current.has(m.realMarketId)) continue; 
+        if (effectiveCount >= config.maxPositions) break;
+        if (!m.isMatchFound) continue;
+        
+        if (hasOpenExposure(positions, m.realMarketId)) continue;
+        
+        if (autoBidTracker.current.has(m.realMarketId)) continue; 
 
-          const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
-          
-          if (smartBid && smartBid <= maxWillingToPay) {
-              console.log(`[AUTO-BID] ${m.realMarketId} @ ${smartBid}¢`);
-              
-              // Increment counters immediately to block next iteration
-              currentExposureCount++;
-              autoBidTracker.current.add(m.realMarketId);
-              
-              executeOrder(m, smartBid, false, null, 'auto');
-          }
+        const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
+        
+        if (smartBid && smartBid <= maxWillingToPay) {
+            console.log(`[AUTO-BID] ${m.realMarketId} @ ${smartBid}¢`);
+            effectiveCount++; 
+            autoBidTracker.current.add(m.realMarketId);
+            executeOrder(m, smartBid, false, null, 'auto');
+        }
       }
   }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions]);
 
-  // --- AUTO-CLOSE ENGINE ---
   useEffect(() => {
       if (!isRunning || !config.isAutoClose || !walletKeys) return;
       positions.filter(p => !p.isOrder && p.status === 'HELD').forEach(pos => {
@@ -666,13 +1044,11 @@ const KalshiDashboard = () => {
           if (currentBid >= target) {
               console.log(`[AUTO-CLOSE] ${pos.marketId}: ${currentBid} >= ${target}`);
               closingTracker.current.add(pos.marketId);
-              // Pass 'auto' to trigger notification
               executeOrder(pos.marketId, 0, true, pos.quantity, 'auto');
           }
       });
   }, [isRunning, config.isAutoClose, markets, positions]);
 
-  // --- UI HELPERS ---
   const handleSort = (key) => {
       setSortConfig(current => ({
           key,
@@ -683,19 +1059,17 @@ const KalshiDashboard = () => {
   const cancelOrder = async (id) => {
       if (!confirm("Cancel Order?")) return;
       const ts = Date.now();
-      const sig = await signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
+      const sig = signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
       await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
       fetchPortfolio();
   };
 
   const groupedMarkets = useMemo(() => {
-      // 1. Calculate Strategy Data for all markets
       const enriched = markets.map(m => {
           const { smartBid, edge, reason, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
           return { ...m, smartBid, edge, reason, maxWillingToPay };
       });
 
-      // 2. Group by Date
       const groups = {};
       enriched.forEach(market => {
           const dateObj = new Date(market.commenceTime);
@@ -704,22 +1078,18 @@ const KalshiDashboard = () => {
           groups[dateKey].push(market);
       });
 
-      // 3. Sort WITHIN each group based on user SortConfig
       Object.keys(groups).forEach(key => {
           groups[key].sort((a, b) => {
               if (!a.isMatchFound && b.isMatchFound) return 1;
               if (a.isMatchFound && !b.isMatchFound) return -1;
-              
               const aVal = a[sortConfig.key];
               const bVal = b[sortConfig.key];
-              
               if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
               if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
               return 0;
           });
       });
 
-      // 4. Sort THE GROUPS by Date
       return Object.entries(groups).sort((a, b) => {
            const dateA = new Date(a[1][0].commenceTime);
            const dateB = new Date(b[1][0].commenceTime);
@@ -727,22 +1097,52 @@ const KalshiDashboard = () => {
       });
   }, [markets, config.marginPercent, sortConfig]);
 
-  const activeContent = activeTab === 'positions' ? positions.filter(p => !p.isOrder) 
-                      : activeTab === 'resting' ? positions.filter(p => p.isOrder && ['active','resting'].includes(p.status.toLowerCase()))
-                      : positions.filter(p => p.isOrder && !['active','resting'].includes(p.status.toLowerCase()));
+  if (!isForgeReady) {
+      return (
+          <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500">
+              <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="animate-spin text-blue-600" size={32} />
+                  <p>Initializing Security Libraries...</p>
+              </div>
+          </div>
+      );
+  }
+
+  const activeContent = positions.filter(p => {
+      if (activeTab === 'positions') {
+          return !p.isOrder && 
+                 (!p.settlementStatus || p.settlementStatus === 'unsettled') && 
+                 !isTickerExpired(p.marketId);
+      }
+      if (activeTab === 'resting') {
+          return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
+      }
+      if (activeTab === 'history') {
+          return !p.isOrder && (
+              (p.settlementStatus && p.settlementStatus !== 'unsettled') || 
+              isTickerExpired(p.marketId)
+          );
+      }
+      return false;
+  });
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} />
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} />
-      {/* ACTION TOAST */}
+      
+      <PositionDetailsModal 
+          position={selectedPosition} 
+          market={selectedPosition ? markets.find(m => m.realMarketId === selectedPosition.marketId) : null}
+          onClose={() => setSelectedPosition(null)} 
+      />
+
       <ActionToast action={activeAction} />
       
       {errorMsg && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center gap-2"><AlertCircle size={16}/>{errorMsg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* MARKET SCANNER */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[800px]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
@@ -784,7 +1184,6 @@ const KalshiDashboard = () => {
             </div>
         </div>
 
-        {/* CONTROLS & PORTFOLIO */}
         <div className="space-y-6 flex flex-col h-full">
             <div className="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex justify-between items-center mb-4 border-b border-slate-100 pb-2">
@@ -825,39 +1224,17 @@ const KalshiDashboard = () => {
                         <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${activeTab === tab ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-slate-400'}`}>{tab}</button>
                     ))}
                 </div>
-                <div className="overflow-auto flex-1">
-                    <table className="w-full text-sm text-left">
-                        <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0">
-                            <tr>
-                                <th className="px-3 py-2">Market</th>
-                                <th className="px-3 py-2 text-center">Qty</th>
-                                <th className="px-3 py-2 text-right">Price</th>
-                                <th className="px-3 py-2 text-center">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50">
-                            {activeContent.map(item => (
-                                <tr key={item.id} className="hover:bg-slate-50">
-                                    <td className="px-3 py-2">
-                                        <div className="truncate max-w-[120px] font-medium text-slate-700" title={item.marketId}>{item.marketId}</div>
-                                        <div className="text-[10px] text-slate-400 font-mono">{formatOrderDate(item.created)}</div>
-                                    </td>
-                                    <td className="px-3 py-2 text-center font-mono font-bold">{item.quantity}</td>
-                                    <td className="px-3 py-2 text-right font-mono">{item.price || Math.floor(item.avgPrice)}¢</td>
-                                    <td className="px-3 py-2 text-center flex justify-center gap-2">
-                                        {activeTab !== 'history' && (
-                                            <button onClick={() => item.isOrder ? cancelOrder(item.id) : executeOrder(item.marketId, 0, true, item.quantity, 'manual')} className="text-slate-400 hover:text-rose-600 transition-colors">
-                                                {item.isOrder ? <XCircle size={16}/> : <Trash2 size={16}/>}
-                                            </button>
-                                        )}
-                                        <button onClick={() => setAnalysisModalData(tradeHistory[item.marketId])} disabled={!tradeHistory[item.marketId]} className="text-slate-300 hover:text-blue-600 disabled:opacity-20"><Info size={16}/></button>
-                                    </td>
-                                </tr>
-                            ))}
-                            {activeContent.length === 0 && <tr><td colSpan={4} className="p-6 text-center text-slate-400 text-xs italic">No items found</td></tr>}
-                        </tbody>
-                    </table>
-                </div>
+                
+                <PortfolioSection 
+                    activeTab={activeTab} 
+                    positions={activeContent} 
+                    markets={markets} 
+                    tradeHistory={tradeHistory}
+                    onAnalysis={(item) => setAnalysisModalData({ ...tradeHistory[item.marketId], currentStatus: item.settlementStatus || item.status })}
+                    onCancel={cancelOrder}
+                    onExecute={executeOrder}
+                />
+                
             </div>
         </div>
       </div>
