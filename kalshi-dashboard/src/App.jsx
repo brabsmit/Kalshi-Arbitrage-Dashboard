@@ -978,12 +978,14 @@ const KalshiDashboard = () => {
                       fees: Math.abs(p.fees_paid || 0),   
                       status: 'HELD', 
                       isOrder: false,
-                      settlementStatus: p.settlement_status 
+                      settlementStatus: p.settlement_status,
+                      realizedPnl: p.realized_pnl
                   };
               })
           ].filter(p => {
              if (p.isOrder) return true;
-             if (p.quantity <= 0) return false;
+             // Allow items with 0 quantity if they have PnL (history)
+             if (p.quantity <= 0 && (!p.realizedPnl && !p.settlementStatus)) return false;
              return true;
           });
           
@@ -1233,13 +1235,13 @@ const KalshiDashboard = () => {
 
   const activeContent = positions.filter(p => {
       if (activeTab === 'positions') {
-          return !p.isOrder && (!p.settlementStatus || p.settlementStatus === 'unsettled');
+          return !p.isOrder && p.quantity > 0 && (!p.settlementStatus || p.settlementStatus === 'unsettled');
       }
       if (activeTab === 'resting') {
           return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
       }
       if (activeTab === 'history') {
-          return !p.isOrder && (p.settlementStatus && p.settlementStatus !== 'unsettled');
+          return !p.isOrder && ((p.settlementStatus && p.settlementStatus !== 'unsettled') || p.quantity === 0);
       }
       return false;
   });
