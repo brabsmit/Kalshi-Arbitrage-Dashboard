@@ -425,7 +425,7 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings }) => (
+const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings, onOpenExport }) => (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot</h1>
@@ -438,6 +438,9 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </div>
         </div>
         <div className="flex items-center gap-3">
+             <button onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Session Reports">
+                <FileText size={20} />
+            </button>
              <button onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Settings">
                 <Settings size={20} />
             </button>
@@ -611,6 +614,158 @@ const AnalysisModal = ({ data, onClose }) => {
                             <span className="font-mono font-bold text-slate-700 uppercase">{data.currentStatus || '-'}</span>
                          </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
+    if (!isOpen) return null;
+
+    const generateSessionData = () => {
+        return Object.entries(tradeHistory).map(([ticker, data]) => {
+            const position = positions.find(p => p.marketId === ticker);
+            return {
+                timestamp: data.orderPlacedAt,
+                ticker: ticker,
+                event: data.event,
+                action: 'BID',
+                odds: data.sportsbookOdds,
+                fairValue: data.fairValue,
+                bidPrice: data.bidPrice,
+                edge: data.fairValue - data.bidPrice,
+                status: position ? (position.settlementStatus || position.status) : 'Closed/Unknown',
+                pnl: position ? (position.realizedPnl || 0) : 0,
+                outcome: position ? position.side : 'Yes'
+            };
+        }).sort((a, b) => b.timestamp - a.timestamp);
+    };
+
+    const downloadCSV = () => {
+        const data = generateSessionData();
+        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome"];
+        const rows = data.map(d => [
+            new Date(d.timestamp).toISOString(),
+            d.ticker,
+            `"${d.event.replace(/"/g, '""')}"`,
+            d.action,
+            d.odds,
+            d.fairValue,
+            d.bidPrice,
+            d.edge,
+            d.status,
+            d.pnl,
+            d.outcome
+        ]);
+
+        const csvContent = [
+            headers.join(","),
+            ...rows.map(r => r.join(","))
+        ].join("\n");
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute("href", url);
+            link.setAttribute("download", `kalshi_session_${new Date().toISOString().slice(0,10)}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
+    const downloadJSON = () => {
+        const data = generateSessionData();
+        const jsonContent = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `kalshi_session_${new Date().toISOString().slice(0,10)}.json`;
+        link.click();
+    };
+
+    const printReport = () => {
+        const data = generateSessionData();
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Kalshi Session Report</title>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; padding: 20px; }
+                    h1 { margin-bottom: 20px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+                    th { background-color: #f2f2f2; }
+                    tr:nth-child(even) { background-color: #f9f9f9; }
+                    .positive { color: green; font-weight: bold; }
+                    .negative { color: red; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <h1>Kalshi Session Report - ${new Date().toLocaleString()}</h1>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Event</th>
+                            <th>Ticker</th>
+                            <th>Fair Value</th>
+                            <th>Bid</th>
+                            <th>Edge</th>
+                            <th>Status</th>
+                            <th>PnL</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.map(d => `
+                            <tr>
+                                <td>${new Date(d.timestamp).toLocaleString()}</td>
+                                <td>${d.event}</td>
+                                <td>${d.ticker}</td>
+                                <td>${d.fairValue}</td>
+                                <td>${d.bidPrice}</td>
+                                <td>${d.edge}</td>
+                                <td>${d.status}</td>
+                                <td class="${d.pnl >= 0 ? 'positive' : 'negative'}">${(d.pnl / 100).toFixed(2)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                <script>
+                    window.onload = function() { window.print(); }
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center mb-6">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                        <FileText size={20} className="text-blue-600"/> Session Reports
+                    </h3>
+                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                </div>
+                <div className="space-y-3">
+                    <button onClick={downloadCSV} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                        <span className="font-medium text-slate-700 group-hover:text-blue-700">Download CSV (Excel)</span>
+                        <ArrowDown size={18} className="text-slate-400 group-hover:text-blue-600"/>
+                    </button>
+                    <button onClick={downloadJSON} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                        <span className="font-medium text-slate-700 group-hover:text-blue-700">Download JSON</span>
+                        <Hash size={18} className="text-slate-400 group-hover:text-blue-600"/>
+                    </button>
+                     <button onClick={printReport} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                        <span className="font-medium text-slate-700 group-hover:text-blue-700">Print / Save PDF</span>
+                        <FileText size={18} className="text-slate-400 group-hover:text-blue-600"/>
+                    </button>
                 </div>
             </div>
         </div>
@@ -944,6 +1099,7 @@ const KalshiDashboard = () => {
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [activeAction, setActiveAction] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
   const [sessionStart, setSessionStart] = useState(null);
   
   const [isCancelling, setIsCancelling] = useState(false);
@@ -1521,12 +1677,13 @@ const KalshiDashboard = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} />
 
       <StatsBanner positions={positions} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
+      <DataExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} />
       
