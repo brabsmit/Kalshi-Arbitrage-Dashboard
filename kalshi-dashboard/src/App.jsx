@@ -1195,7 +1195,8 @@ const KalshiDashboard = () => {
       if (!isRunning || !config.isAutoBid || !walletKeys) return;
 
       const runAutoBid = async () => {
-          const executedHoldings = new Set(positions.filter(p => !p.isOrder).map(p => p.marketId));
+          // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
+          const executedHoldings = new Set(positions.filter(p => !p.isOrder && p.quantity > 0 && p.settlementStatus !== 'settled').map(p => p.marketId));
 
           // We don't want to exceed max positions, but we also want to manage existing bids.
           // So effectiveCount should track held positions + pending bids for *new* markets.
