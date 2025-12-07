@@ -1268,7 +1268,7 @@ const KalshiDashboard = () => {
 
   useEffect(() => {
       if (!isRunning || !config.isAutoClose || !walletKeys) return;
-      positions.filter(p => !p.isOrder && p.status === 'HELD').forEach(pos => {
+      positions.filter(p => !p.isOrder && p.status === 'HELD' && p.quantity > 0 && p.settlementStatus !== 'settled').forEach(pos => {
           if (closingTracker.current.has(pos.marketId)) return;
           
           const m = markets.find(x => x.realMarketId === pos.marketId);
