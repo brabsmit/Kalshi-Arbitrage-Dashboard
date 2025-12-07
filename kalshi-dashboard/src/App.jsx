@@ -938,7 +938,7 @@ const KalshiDashboard = () => {
           const bal = await balRes.json();
           const orders = await ordersRes.json();
           const pos = await posRes.json();
-          const settledPos = settledPosRes.ok ? await settledPosRes.json() : { market_positions: [] };
+          const settledPos = settledPosRes.ok ? await settledPosRes.json() : { positions: [] };
 
           if (bal?.balance) setBalance(bal.balance);
           
@@ -957,10 +957,7 @@ const KalshiDashboard = () => {
                   expiration: o.expiration_time 
               })),
               // POSITIONS
-              ...([
-                  ...(pos.market_positions && pos.market_positions.length > 0 ? pos.market_positions : (pos.event_positions || pos.positions || [])),
-                  ...(settledPos.market_positions && settledPos.market_positions.length > 0 ? settledPos.market_positions : (settledPos.event_positions || settledPos.positions || []))
-              ]).map(p => {
+              ...([...(pos.positions || []), ...(settledPos.positions || [])]).map(p => {
                   const ticker = p.ticker || p.market_ticker || p.event_ticker;
                   const qty = p.position || p.total_cost_shares || 0;
                   let avg = 0;
@@ -1235,13 +1232,13 @@ const KalshiDashboard = () => {
 
   const activeContent = positions.filter(p => {
       if (activeTab === 'positions') {
-          return !p.isOrder && p.quantity > 0 && (!p.settlementStatus || p.settlementStatus === 'unsettled');
+          return !p.isOrder && (!p.settlementStatus || p.settlementStatus === 'unsettled');
       }
       if (activeTab === 'resting') {
           return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
       }
       if (activeTab === 'history') {
-          return !p.isOrder && ((p.settlementStatus && p.settlementStatus !== 'unsettled') || p.quantity === 0);
+          return !p.isOrder && (p.settlementStatus && p.settlementStatus !== 'unsettled');
       }
       return false;
   });
