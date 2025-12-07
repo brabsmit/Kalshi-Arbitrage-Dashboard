@@ -578,7 +578,10 @@ const AnalysisModal = ({ data, onClose }) => {
                                 <tr className="bg-blue-50/50">
                                     <td className="px-4 py-2 font-bold text-blue-800">Target</td>
                                     <td className="px-4 py-2 font-mono">{data.sportsbookOdds > 0 ? '+' : ''}{data.sportsbookOdds}</td>
-                                    <td className="px-4 py-2 font-mono font-bold text-emerald-600">{(data.vigFreeProb || 0).toFixed(2)}%</td>
+                                    <td className="px-4 py-2 font-mono font-bold text-emerald-600">
+                                        {(data.vigFreeProb || 0).toFixed(2)}%
+                                        {data.bookmakerCount && <span className="text-[9px] text-slate-400 block font-normal">Avg of {data.bookmakerCount} bks</span>}
+                                    </td>
                                     <td className="px-4 py-2 font-mono text-right">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</td>
                                 </tr>
                                 <tr>
@@ -1183,27 +1186,57 @@ const KalshiDashboard = () => {
 
           setMarkets(prev => {
               const processed = oddsData.slice(0, 20).map(game => {
-                  const bookmaker = game.bookmakers?.[0];
-                  const outcomes = bookmaker?.markets?.[0]?.outcomes;
-                  
-                  if (!outcomes || outcomes.length < 2) return null;
+                  const bookmakers = game.bookmakers || [];
+                  if (bookmakers.length === 0) return null;
 
-                  const targetOutcome = outcomes.find(o => o.price < 0) || outcomes[0];
+                  const refBookmaker = bookmakers[0];
+                  const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
                   
-                  const opposingOutcome = outcomes.find(o => o.name !== targetOutcome.name);
+                  if (!refOutcomes || refOutcomes.length < 2) return null;
+
+                  const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
+                  const targetName = targetOutcome.name;
+                  
+                  const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
                   const oddsDisplay = opposingOutcome 
                     ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
                     : `${targetOutcome.price}`;
 
-                  let totalImpliedProb = 0;
-                  const outcomeProbs = outcomes.map(o => {
-                      const p = americanToProbability(o.price);
-                      totalImpliedProb += p;
-                      return { name: o.name, price: o.price, implied: p };
-                  });
+                  const vigFreeProbs = [];
+                  for (const bm of bookmakers) {
+                      const outcomes = bm.markets?.[0]?.outcomes;
+                      if (!outcomes || outcomes.length < 2) continue;
 
-                  const targetData = outcomeProbs.find(o => o.name === targetOutcome.name);
-                  const vigFreeProb = targetData.implied / totalImpliedProb;
+                      let totalImplied = 0;
+                      const probs = outcomes.map(o => {
+                          const p = americanToProbability(o.price);
+                          totalImplied += p;
+                          return { name: o.name, p };
+                      });
+
+                      const tProb = probs.find(o => o.name === targetName);
+                      if (tProb) {
+                          vigFreeProbs.push(tProb.p / totalImplied);
+                      }
+                  }
+
+                  if (vigFreeProbs.length === 0) return null;
+
+                  const minProb = Math.min(...vigFreeProbs);
+                  const maxProb = Math.max(...vigFreeProbs);
+                  const spread = maxProb - minProb;
+
+                  if (spread > 0.15) {
+                      console.warn(`Market rejected due to high variance: ${spread.toFixed(2)}`);
+                      return null;
+                  }
+
+                  const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b, 0) / vigFreeProbs.length;
+
+                  // Legacy support for impliedProb display (using reference bookmaker)
+                  const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
+                  const refTargetImplied = americanToProbability(targetOutcome.price);
+                  const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
 
                   const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
@@ -1222,7 +1255,7 @@ const KalshiDashboard = () => {
                       sportsbookOdds: targetOutcome.price, 
                       opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
                       oddsDisplay: oddsDisplay, 
-                      impliedProb: targetData.implied * 100,
+                      impliedProb: refImpliedProb,
                       vigFreeProb: vigFreeProb * 100, 
                       bestBid: bestBid || 0,
                       bestAsk: bestAsk || 0,
@@ -1232,7 +1265,9 @@ const KalshiDashboard = () => {
                       openInterest: openInterest || 0,
                       lastChange: Date.now(),
                       fairValue: Math.floor(vigFreeProb * 100), 
-                      history: prevMarket?.history || []
+                      history: prevMarket?.history || [],
+                      bookmakerCount: vigFreeProbs.length,
+                      oddsSpread: spread
                   };
               }).filter(Boolean);
               
@@ -1403,7 +1438,9 @@ const KalshiDashboard = () => {
                   oddsDisplay: marketOrTicker.oddsDisplay, 
                   impliedProb: marketOrTicker.impliedProb, 
                   vigFreeProb: marketOrTicker.vigFreeProb,
-                  fairValue: marketOrTicker.fairValue, bidPrice: price 
+                  fairValue: marketOrTicker.fairValue, bidPrice: price,
+                  bookmakerCount: marketOrTicker.bookmakerCount,
+                  oddsSpread: marketOrTicker.oddsSpread
               }}));
           }
           fetchPortfolio();
