@@ -1102,6 +1102,44 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
     );
 };
 
+const EventLog = ({ logs }) => {
+    const scrollRef = useRef(null);
+    useEffect(() => {
+        if (scrollRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 50;
+            if (isNearBottom || logs.length === 1) {
+                scrollRef.current.scrollTop = scrollHeight;
+            }
+        }
+    }, [logs]);
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[300px]">
+             <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText size={18} className="text-slate-400"/> Event Log</h3>
+            </div>
+            <div ref={scrollRef} className="overflow-y-auto p-4 space-y-2 flex-1 font-mono text-xs">
+                {logs.length === 0 && <div className="text-slate-400 text-center italic mt-10">No events yet</div>}
+                {logs.map(log => (
+                    <div key={log.id} className="flex gap-2 border-b border-slate-50 pb-1 last:border-0">
+                        <span className="text-slate-400 min-w-[60px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <span className={`font-bold w-[60px] ${
+                            log.type === 'BID' ? 'text-blue-600' :
+                            log.type === 'CANCEL' ? 'text-rose-400' :
+                            log.type === 'FILL' ? 'text-emerald-600' :
+                            log.type === 'CLOSE' ? 'text-amber-600' :
+                            log.type === 'UPDATE' ? 'text-purple-600' :
+                            'text-slate-700'
+                        }`}>[{log.type}]</span>
+                        <span className="text-slate-700 truncate">{log.message}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
 // ==========================================
 // 4. MAIN DASHBOARD
 // ==========================================
@@ -1128,7 +1166,8 @@ const KalshiDashboard = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [sessionStart, setSessionStart] = useState(null);
-  
+  const [eventLogs, setEventLogs] = useState([]);
+
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
 
@@ -1156,6 +1195,13 @@ const KalshiDashboard = () => {
   const isAutoBidProcessing = useRef(false);
   const closingTracker = useRef(new Set()); 
   const wsRef = useRef(null);
+  const lastOrdersRef = useRef({});
+  const isFirstFetchRef = useRef(true);
+
+  const addLog = useCallback((message, type) => {
+      const log = { id: Date.now() + Math.random(), timestamp: Date.now(), message, type };
+      setEventLogs(prev => [...prev.slice(-99), log]);
+  }, []);
   
   const [tradeHistory, setTradeHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_trade_history') || '{}'));
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
@@ -1379,6 +1425,25 @@ const KalshiDashboard = () => {
 
           if (bal?.balance) setBalance(bal.balance);
           
+          // Process fills
+          (orders.orders || []).forEach(o => {
+              const prev = lastOrdersRef.current[o.order_id];
+              if (prev && o.fill_count > prev.filled) {
+                 const filledAmount = o.fill_count - prev.filled;
+                 const price = o.yes_price || o.no_price;
+                 addLog(`Filled ${filledAmount}x ${o.ticker} @ ${price}¢`, 'FILL');
+              } else if (!prev && o.fill_count > 0) {
+                 // New order already partially filled, only log if not first fetch
+                 if (!isFirstFetchRef.current) {
+                     const price = o.yes_price || o.no_price;
+                     addLog(`Filled ${o.fill_count}x ${o.ticker} @ ${price}¢`, 'FILL');
+                 }
+              }
+              lastOrdersRef.current[o.order_id] = { filled: o.fill_count };
+          });
+
+          isFirstFetchRef.current = false;
+
           const mappedItems = [
               // ORDERS
               ...(orders.orders || []).map(o => ({
@@ -1470,6 +1535,14 @@ const KalshiDashboard = () => {
           if (!res.ok) throw new Error(data.message || "Order Failed");
 
           console.log(`Order Placed: ${data.order_id}`);
+
+          if (isSell) {
+             addLog(`Closing position on ${ticker} (Qty: ${qty})`, 'CLOSE');
+          } else {
+             const mktId = marketOrTicker.realMarketId || marketOrTicker.id;
+             addLog(`Placed bid on ${mktId} @ ${price}¢ (Qty: ${qty})`, 'BID');
+          }
+
           if (!isSell) {
               autoBidTracker.current.add(ticker);
               setTradeHistory(prev => ({ ...prev, [ticker]: { 
@@ -1570,6 +1643,7 @@ const KalshiDashboard = () => {
                     if (existingOrder.price !== smartBid) {
                         // Price improvement or adjustment needed
                         console.log(`[AUTO-BID] Updating ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`);
+                        addLog(`Updating bid ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`, 'UPDATE');
                         autoBidTracker.current.add(m.realMarketId);
 
                         // Cancel then Place
@@ -1699,6 +1773,9 @@ const KalshiDashboard = () => {
       const ts = Date.now();
       const sig = signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
       const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
+      if (res.ok) {
+          addLog(`Canceled order ${id}`, 'CANCEL');
+      }
       if (!skipRefresh) fetchPortfolio();
       return res;
   };
@@ -1845,6 +1922,7 @@ const KalshiDashboard = () => {
                     onSort={handlePortfolioSort}
                 />
             </div>
+            <EventLog logs={eventLogs} />
         </div>
       </div>
     </div>
