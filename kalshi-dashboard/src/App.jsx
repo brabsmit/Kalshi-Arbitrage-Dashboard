@@ -340,16 +340,6 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-6">
-                     <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                        <span className="text-sm font-bold text-slate-700">Auto-Close Positions</span>
-                        <button
-                            onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${config.isAutoClose ? 'bg-blue-600' : 'bg-slate-300'}`}
-                        >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${config.isAutoClose ? 'translate-x-6' : 'translate-x-1'}`}/>
-                        </button>
-                    </div>
-
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Bid Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
                         <input type="range" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
@@ -1885,6 +1875,7 @@ const KalshiDashboard = () => {
                 <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
                 <div className="flex gap-2">
                     <button onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
+                    <button onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
                     <button onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
                 </div>
             </div>
