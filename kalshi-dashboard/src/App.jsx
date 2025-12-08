@@ -865,6 +865,30 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'left' })
     );
 };
 
+const LatencyDisplay = ({ timestamp }) => {
+    const [ago, setAgo] = useState(0);
+
+    useEffect(() => {
+        if (!timestamp) return;
+        setAgo(Date.now() - timestamp);
+        const i = setInterval(() => setAgo(Date.now() - timestamp), 1000);
+        return () => clearInterval(i);
+    }, [timestamp]);
+
+    if (!timestamp) return <span className="text-[9px] text-slate-300 block mt-0.5">-</span>;
+
+    let color = 'text-slate-400';
+    if (ago < 5000) color = 'text-emerald-500 font-bold';
+    else if (ago < 30000) color = 'text-amber-500';
+    else color = 'text-rose-500';
+
+    return (
+        <div className={`text-[9px] font-mono mt-0.5 ${color}`}>
+           {formatDuration(ago)} ago
+        </div>
+    );
+};
+
 const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
     return (
         <tr key={market.id} className="hover:bg-slate-50 transition-colors">
@@ -875,8 +899,14 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
                     <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
                 </div>
             </td>
-            <td className="px-4 py-3 text-center font-bold text-slate-700">{market.fairValue}¢</td>
-            <td className="px-4 py-3 text-center font-mono text-slate-500">{market.bestBid}¢ / {market.bestAsk}¢</td>
+            <td className="px-4 py-3 text-center">
+                <div className="font-bold text-slate-700">{market.fairValue}¢</div>
+                <LatencyDisplay timestamp={market.oddsLastUpdate} />
+            </td>
+            <td className="px-4 py-3 text-center">
+                <div className="font-mono text-slate-500">{market.bestBid}¢ / {market.bestAsk}¢</div>
+                <LatencyDisplay timestamp={market.kalshiLastUpdate} />
+            </td>
             <td className="px-4 py-3 text-right text-slate-400">{market.maxWillingToPay}¢</td>
             <td className="px-4 py-3 text-right">
                 {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
@@ -1272,7 +1302,14 @@ const KalshiDashboard = () => {
                     : `${targetOutcome.price}`;
 
                   const vigFreeProbs = [];
+                  let maxLastUpdate = 0;
+
                   for (const bm of bookmakers) {
+                      if (bm.last_update) {
+                          const ts = new Date(bm.last_update).getTime();
+                          if (ts > maxLastUpdate) maxLastUpdate = ts;
+                      }
+
                       const outcomes = bm.markets?.[0]?.outcomes;
                       if (!outcomes || outcomes.length < 2) continue;
 
@@ -1333,6 +1370,8 @@ const KalshiDashboard = () => {
                       volume: volume || 0,
                       openInterest: openInterest || 0,
                       lastChange: Date.now(),
+                      kalshiLastUpdate: Date.now(),
+                      oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100), 
                       history: prevMarket?.history || [],
                       bookmakerCount: vigFreeProbs.length,
@@ -1368,7 +1407,13 @@ const KalshiDashboard = () => {
           const d = JSON.parse(e.data);
           if (d.type === 'ticker' && d.msg) {
               setMarkets(curr => curr.map(m => {
-                  if (m.realMarketId === d.msg.ticker) return { ...m, bestBid: d.msg.yes_bid, bestAsk: d.msg.yes_ask, lastChange: Date.now() };
+                  if (m.realMarketId === d.msg.ticker) return {
+                      ...m,
+                      bestBid: d.msg.yes_bid,
+                      bestAsk: d.msg.yes_ask,
+                      lastChange: Date.now(),
+                      kalshiLastUpdate: Date.now()
+                  };
                   return m;
               }));
           }
