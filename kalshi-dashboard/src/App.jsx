@@ -431,7 +431,7 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings, onOpenExport }) => (
+const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings, onOpenExport, apiUsage }) => (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot</h1>
@@ -440,6 +440,11 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                     {wsStatus === 'OPEN' ? <Wifi size={10}/> : <WifiOff size={10}/>} {wsStatus === 'OPEN' ? 'WS LIVE' : 'WS OFF'}
                 </span>
                 {lastUpdated && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500"><Clock size={10} /> {lastUpdated.toLocaleTimeString()}</span>}
+                {apiUsage && (
+                    <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-indigo-50 text-indigo-600 border-indigo-100" title={`Used: ${apiUsage.used} | Remaining: ${apiUsage.remaining}`}>
+                        <Hash size={10} /> {apiUsage.used}/{apiUsage.used + apiUsage.remaining}
+                    </span>
+                )}
                 {isTurboMode && <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-200 animate-pulse flex items-center gap-1"><Zap size={10} fill="currentColor"/> TURBO</span>}
             </div>
         </div>
@@ -1116,6 +1121,7 @@ const KalshiDashboard = () => {
   const [activeTab, setActiveTab] = useState('resting');
   const [analysisModalData, setAnalysisModalData] = useState(null);
   const [oddsApiKey, setOddsApiKey] = useState('');
+  const [apiUsage, setApiUsage] = useState(null);
   
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [activeAction, setActiveAction] = useState(null);
@@ -1193,10 +1199,18 @@ const KalshiDashboard = () => {
           const activeSportConfig = sportsList.find(s => s.key === config.selectedSport);
           const seriesTicker = activeSportConfig?.kalshiSeries || '';
           
-          const [oddsData, kalshiData] = await Promise.all([
-              fetch(`https://api.the-odds-api.com/v4/sports/${config.selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }).then(r => r.json()),
+          const [oddsRes, kalshiData] = await Promise.all([
+              fetch(`https://api.the-odds-api.com/v4/sports/${config.selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
               fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
           ]);
+
+          const used = oddsRes.headers.get('x-requests-used');
+          const remaining = oddsRes.headers.get('x-requests-remaining');
+          if (used && remaining) {
+              setApiUsage({ used: parseInt(used), remaining: parseInt(remaining) });
+          }
+
+          const oddsData = await oddsRes.json();
 
           lastFetchTimeRef.current = Date.now();
           setLastUpdated(new Date());
@@ -1749,7 +1763,7 @@ const KalshiDashboard = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} apiUsage={apiUsage} />
 
       <StatsBanner positions={positions} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
