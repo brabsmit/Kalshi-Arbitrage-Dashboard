@@ -1384,6 +1384,7 @@ const KalshiDashboard = () => {
               ...(orders.orders || []).map(o => ({
                   id: o.order_id, 
                   marketId: o.ticker, 
+                  action: o.action,
                   side: o.side === 'yes' ? 'Yes' : 'No', 
                   quantity: o.count || (o.fill_count + o.remaining_count),
                   filled: o.fill_count, 
@@ -1510,6 +1511,24 @@ const KalshiDashboard = () => {
             let effectiveCount = executedHoldings.size;
 
             const activeOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()));
+
+            // --- LIMIT ENFORCEMENT ---
+            // If we have reached the max positions, ensure no pending buy orders remain for *new* positions.
+            // Note: executedHoldings tracks markets where we have a filled position.
+            if (executedHoldings.size >= config.maxPositions) {
+                const activeBuyOrders = activeOrders.filter(o => o.action === 'buy');
+
+                if (activeBuyOrders.length > 0) {
+                     console.log(`[AUTO-BID] Max positions reached (${executedHoldings.size}/${config.maxPositions}). Cancelling ${activeBuyOrders.length} active buy orders.`);
+                     for (const o of activeBuyOrders) {
+                         await cancelOrder(o.id, true, true);
+                         await new Promise(r => setTimeout(r, 200));
+                     }
+                     fetchPortfolio();
+                }
+                isAutoBidProcessing.current = false;
+                return;
+            }
 
             // --- DUPLICATE PROTECTION ---
             const orderMap = new Map();
