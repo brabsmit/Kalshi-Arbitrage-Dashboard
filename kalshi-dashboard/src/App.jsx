@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown, Filter } from 'lucide-react';
 
 // ==========================================
 // 0. LIBRARY LOADER
@@ -197,6 +197,101 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
         console.error("Signing failed:", e);
         throw new Error("Failed to sign request. Check your private key.");
     }
+};
+
+const processGameData = (game, kalshiData, prevMarkets, seriesTicker) => {
+    const bookmakers = game.bookmakers || [];
+    if (bookmakers.length === 0) return null;
+
+    const refBookmaker = bookmakers[0];
+    const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
+
+    if (!refOutcomes || refOutcomes.length < 2) return null;
+
+    const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
+    const targetName = targetOutcome.name;
+
+    const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
+    const oddsDisplay = opposingOutcome
+      ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
+      : `${targetOutcome.price}`;
+
+    const vigFreeProbs = [];
+    let maxLastUpdate = 0;
+
+    for (const bm of bookmakers) {
+        if (bm.last_update) {
+            const ts = new Date(bm.last_update).getTime();
+            if (ts > maxLastUpdate) maxLastUpdate = ts;
+        }
+
+        const outcomes = bm.markets?.[0]?.outcomes;
+        if (!outcomes || outcomes.length < 2) continue;
+
+        let totalImplied = 0;
+        const probs = outcomes.map(o => {
+            const p = americanToProbability(o.price);
+            totalImplied += p;
+            return { name: o.name, p };
+        });
+
+        const tProb = probs.find(o => o.name === targetName);
+        if (tProb) {
+            vigFreeProbs.push(tProb.p / totalImplied);
+        }
+    }
+
+    if (vigFreeProbs.length === 0) return null;
+
+    const minProb = Math.min(...vigFreeProbs);
+    const maxProb = Math.max(...vigFreeProbs);
+    const spread = maxProb - minProb;
+
+    if (spread > 0.15) {
+        // console.warn(`Market rejected due to high variance: ${spread.toFixed(2)}`);
+        return null;
+    }
+
+    const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b, 0) / vigFreeProbs.length;
+
+    // Legacy support for impliedProb display (using reference bookmaker)
+    const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
+    const refTargetImplied = americanToProbability(targetOutcome.price);
+    const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
+
+    const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+    const prevMarket = prevMarkets.find(m => m.id === game.id);
+
+    let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
+    if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
+        bestBid = prevMarket.bestBid;
+        bestAsk = prevMarket.bestAsk;
+    }
+
+    return {
+        id: game.id,
+        event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
+        commenceTime: game.commence_time,
+        americanOdds: targetOutcome.price,
+        sportsbookOdds: targetOutcome.price,
+        opposingOdds: opposingOutcome ? opposingOutcome.price : null,
+        oddsDisplay: oddsDisplay,
+        impliedProb: refImpliedProb,
+        vigFreeProb: vigFreeProb * 100,
+        bestBid: bestBid || 0,
+        bestAsk: bestAsk || 0,
+        isMatchFound: !!realMatch,
+        realMarketId: realMatch?.ticker,
+        volume: volume || 0,
+        openInterest: openInterest || 0,
+        lastChange: Date.now(),
+        kalshiLastUpdate: Date.now(),
+        oddsLastUpdate: maxLastUpdate,
+        fairValue: Math.floor(vigFreeProb * 100),
+        history: prevMarket?.history || [],
+        bookmakerCount: vigFreeProbs.length,
+        oddsSpread: spread
+    };
 };
 
 // ==========================================
@@ -414,15 +509,9 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <div>
+                        <div className="col-span-2">
                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
                             <input type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Sport</label>
-                            <select value={config.selectedSport} onChange={e => setConfig({...config, selectedSport: e.target.value})} className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                                {sportsList.map(s => <option key={s.key} value={s.key}>{s.title}</option>)}
-                            </select>
                         </div>
                     </div>
 
@@ -1349,6 +1438,7 @@ const KalshiDashboard = () => {
 
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [config, setConfig] = useState({
       marginPercent: 15,
@@ -1358,7 +1448,7 @@ const KalshiDashboard = () => {
       isAutoBid: false,
       isAutoClose: true,
       holdStrategy: 'sell_limit',
-      selectedSport: 'americanfootball_nfl',
+      selectedSports: ['americanfootball_nfl'], // Changed to array
       isTurboMode: false
   });
 
@@ -1418,39 +1508,32 @@ const KalshiDashboard = () => {
 
       try {
           setErrorMsg('');
-          const activeSportConfig = sportsList.find(s => s.key === config.selectedSport);
-          const seriesTicker = activeSportConfig?.kalshiSeries || '';
+          const targetSports = config.selectedSports && config.selectedSports.length > 0
+                               ? config.selectedSports
+                               : [];
           
-          const [oddsRes, kalshiData] = await Promise.all([
-              fetch(`https://api.the-odds-api.com/v4/sports/${config.selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
-              fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
-          ]);
-
-          const used = oddsRes.headers.get('x-requests-used');
-          const remaining = oddsRes.headers.get('x-requests-remaining');
-          if (used && remaining) {
-              setApiUsage({ used: parseInt(used), remaining: parseInt(remaining) });
+          if (targetSports.length === 0) {
+              setMarkets([]);
+              return;
           }
 
-          const oddsData = await oddsRes.json();
+          const promises = targetSports.map(async (sportKey) => {
+              const activeSportConfig = sportsList.find(s => s.key === sportKey);
+              if (!activeSportConfig) return null;
 
-          lastFetchTimeRef.current = Date.now();
-          setLastUpdated(new Date());
+              const seriesTicker = activeSportConfig.kalshiSeries || '';
 
-          if (!Array.isArray(oddsData)) throw new Error(oddsData.message || "API Error");
+              // Fetch Odds
+              const oddsUrl = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`;
 
-          setMarkets(prev => {
-              const processed = oddsData.slice(0, 20).map(game => {
-                  const bookmakers = game.bookmakers || [];
-                  if (bookmakers.length === 0) return null;
+              // Fetch Kalshi
+              const kalshiUrl = `/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`;
 
-                  const refBookmaker = bookmakers[0];
-                  const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
-                  
-                  if (!refOutcomes || refOutcomes.length < 2) return null;
-
-                  const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
-                  const targetName = targetOutcome.name;
+              try {
+                  const [oddsRes, kalshiRes] = await Promise.all([
+                      fetch(oddsUrl, { signal: abortControllerRef.current.signal }),
+                      fetch(kalshiUrl, { signal: abortControllerRef.current.signal })
+                  ]);
                   
                   const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
                   const oddsDisplay = opposingOutcome 
@@ -1466,16 +1549,18 @@ const KalshiDashboard = () => {
                           const ts = new Date(bm.last_update).getTime();
                           if (ts > maxLastUpdate) maxLastUpdate = ts;
                       }
+                  }
 
-                      const outcomes = bm.markets?.[0]?.outcomes;
-                      if (!outcomes || outcomes.length < 2) continue;
+                  const oddsData = await oddsRes.json();
+                  const kalshiDataWrapper = kalshiRes.ok ? await kalshiRes.json() : { markets: [] };
+                  const kalshiData = kalshiDataWrapper.markets || [];
 
-                      let totalImplied = 0;
-                      const probs = outcomes.map(o => {
-                          const p = americanToProbability(o.price);
-                          totalImplied += p;
-                          return { name: o.name, p };
-                      });
+                  return { sportKey, oddsData, kalshiData, seriesTicker };
+              } catch (e) {
+                  console.error(`Error fetching ${sportKey}`, e);
+                  return null;
+              }
+          });
 
                       const tProb = probs.find(o => o.name === targetName);
                       if (tProb) {
@@ -1484,26 +1569,24 @@ const KalshiDashboard = () => {
                       }
                   }
 
-                  if (vigFreeProbs.length === 0) return null;
+          lastFetchTimeRef.current = Date.now();
+          setLastUpdated(new Date());
 
-                  const minProb = Math.min(...vigFreeProbs);
-                  const maxProb = Math.max(...vigFreeProbs);
-                  const spread = maxProb - minProb;
+          setMarkets(prev => {
+              let newMarkets = [];
+              const seenIds = new Set();
 
-                  if (spread > 0.15) {
-                      console.warn(`Market rejected due to high variance: ${spread.toFixed(2)}`);
-                      return null;
-                  }
+              for (const res of results) {
+                  if (!res || !Array.isArray(res.oddsData)) continue;
 
-                  const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b, 0) / vigFreeProbs.length;
+                  const { oddsData, kalshiData, seriesTicker } = res;
 
-                  // Legacy support for impliedProb display (using reference bookmaker)
-                  const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
-                  const refTargetImplied = americanToProbability(targetOutcome.price);
-                  const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
+                  const processed = oddsData.slice(0, 20).map(game => {
+                      if (seenIds.has(game.id)) return null;
+                      seenIds.add(game.id);
 
-                  const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
-                  const prevMarket = prev.find(m => m.id === game.id);
+                      return processGameData(game, kalshiData, prev, seriesTicker);
+                  }).filter(Boolean);
                   
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
                   if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
@@ -1540,10 +1623,11 @@ const KalshiDashboard = () => {
               
               return processed;
           });
-      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
-  }, [oddsApiKey, config.selectedSport, config.isTurboMode, sportsList]);
 
-  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport]);
+      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
+  }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
+
+  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSports]);
 
   useEffect(() => {
       if (!isRunning) return;
@@ -2083,7 +2167,36 @@ const KalshiDashboard = () => {
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[800px]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
-                <div className="flex gap-2">
+                <div className="flex gap-2 relative">
+                    <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.selectedSports.length > 0 ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'bg-slate-100 text-slate-400'}`}>
+                        <Filter size={14}/> Sports
+                    </button>
+                    {isFilterOpen && (
+                        <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-2 min-w-[200px] z-50 animate-in fade-in zoom-in duration-200">
+                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">Filter Sports</div>
+                             {sportsList.map(sport => {
+                                 const isSelected = config.selectedSports.includes(sport.key);
+                                 return (
+                                     <button
+                                        key={sport.key}
+                                        onClick={() => {
+                                            setConfig(prev => {
+                                                const newSports = isSelected
+                                                    ? prev.selectedSports.filter(k => k !== sport.key)
+                                                    : [...prev.selectedSports, sport.key];
+                                                return { ...prev, selectedSports: newSports };
+                                            });
+                                        }}
+                                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold mb-1 flex items-center justify-between transition-colors ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                     >
+                                         <span>{sport.title}</span>
+                                         {isSelected && <Check size={14}/>}
+                                     </button>
+                                 );
+                             })}
+                             {config.selectedSports.length === 0 && <div className="text-[10px] text-rose-500 px-2 italic">No sports selected</div>}
+                        </div>
+                    )}
                     <button onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
                     <button onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
                     <button onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
@@ -2118,7 +2231,9 @@ const KalshiDashboard = () => {
                         </React.Fragment>
                     ))}
                 </table>
-                {markets.length === 0 && <div className="p-10 text-center text-slate-400">Loading Markets...</div>}
+                {markets.length === 0 && <div className="p-10 text-center text-slate-400">
+                    {config.selectedSports.length === 0 ? "Select a sport to start scanning." : "Loading Markets..."}
+                </div>}
             </div>
         </div>
 
