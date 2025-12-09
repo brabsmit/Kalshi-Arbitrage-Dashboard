@@ -973,38 +973,120 @@ const LatencyDisplay = ({ timestamp }) => {
     );
 };
 
-const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
+const MarketExpandedDetails = ({ market }) => {
+    const targetFairOdds = probabilityToAmericanOdds(market.vigFreeProb / 100);
+    const opposingVigFreeProb = 1 - (market.vigFreeProb / 100);
+    const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
+
     return (
-        <tr key={market.id} className="hover:bg-slate-50 transition-colors">
-            <td className="px-4 py-3">
-                <div className="font-medium text-slate-700">{market.event}</div>
-                <div className="flex items-center gap-2 mt-1">
-                    {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
-                    <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
+        <div className="p-4 border-b border-slate-200 bg-slate-50 animate-in slide-in-from-top-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                {/* 1. Odds Sources */}
+                <div className="space-y-2">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Briefcase size={12}/> Odds Sources ({market.bookmakerCount})
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {market.oddsSources && market.oddsSources.map((source, i) => (
+                            <span key={i} className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-medium text-slate-600 shadow-sm">
+                                {source}
+                            </span>
+                        ))}
+                    </div>
+                     <div className="text-[10px] text-slate-400 mt-1">
+                        Spread: <span className="font-mono text-slate-600">{(market.oddsSpread * 100).toFixed(2)}%</span> (Max variance)
+                    </div>
                 </div>
-            </td>
-            <td className="px-4 py-3 text-center">
-                <div className="font-bold text-slate-700">{market.fairValue}¢</div>
-                <LatencyDisplay timestamp={market.oddsLastUpdate} />
-            </td>
-            <td className="px-4 py-3 text-center">
-                <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                    {market.volatility.toFixed(2)}
+
+                {/* 2. Calculator */}
+                <div className="space-y-2">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Calculator size={12}/> Vig-Free Valuation
+                    </div>
+                     <div className="bg-white border border-slate-200 rounded p-2 text-xs">
+                        <div className="flex justify-between mb-1">
+                            <span className="text-slate-500">Target No-Vig Prob:</span>
+                            <span className="font-mono font-bold text-emerald-600">{(market.vigFreeProb).toFixed(2)}%</span>
+                        </div>
+                         <div className="flex justify-between mb-1">
+                            <span className="text-slate-500">Fair Odds:</span>
+                            <span className="font-mono font-bold text-slate-700">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</span>
+                        </div>
+                        <div className="border-t border-slate-100 my-1 pt-1 flex justify-between">
+                             <span className="text-slate-500">Opponent Fair Odds:</span>
+                             <span className="font-mono text-slate-600">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</span>
+                        </div>
+                    </div>
                 </div>
-                {market.volatility > 1.0 && <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider flex justify-center items-center gap-1"><Activity size={8}/> Volatile</div>}
-            </td>
-            <td className="px-4 py-3 text-center">
-                <div className="font-mono text-slate-500">{market.bestBid}¢ / {market.bestAsk}¢</div>
-                <LatencyDisplay timestamp={market.kalshiLastUpdate} />
-            </td>
-            <td className="px-4 py-3 text-right text-slate-400">{market.maxWillingToPay}¢</td>
-            <td className="px-4 py-3 text-right">
-                {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
-            </td>
-            <td className="px-4 py-3 text-center">
-                <button onClick={() => onExecute(market, market.smartBid, false)} disabled={!market.smartBid} className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed">Bid {market.smartBid}¢</button>
-            </td>
-        </tr>
+
+                {/* 3. Latency & Timings */}
+                <div className="space-y-2">
+                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                        <Clock size={12}/> Data Freshness
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="bg-white p-2 border border-slate-200 rounded">
+                            <div className="text-slate-400 text-[10px] mb-0.5">Odds Update</div>
+                            <div className="font-mono text-slate-700">{formatDuration(Date.now() - market.oddsLastUpdate)} ago</div>
+                        </div>
+                        <div className="bg-white p-2 border border-slate-200 rounded">
+                             <div className="text-slate-400 text-[10px] mb-0.5">Kalshi Update</div>
+                            <div className="font-mono text-slate-700">{formatDuration(Date.now() - market.kalshiLastUpdate)} ago</div>
+                        </div>
+                    </div>
+                     <div className="text-[10px] text-slate-400 text-right">
+                        Refreshed: {new Date(market.lastChange).toLocaleTimeString()}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
+    const [expanded, setExpanded] = useState(false);
+
+    return (
+        <>
+            <tr key={market.id} onClick={() => setExpanded(!expanded)} className="hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100">
+                <td className="px-4 py-3">
+                    <div className="font-medium text-slate-700">{market.event}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                        {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
+                        <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
+                    </div>
+                </td>
+                <td className="px-4 py-3 text-center">
+                    <div className="font-bold text-slate-700">{market.fairValue}¢</div>
+                    <LatencyDisplay timestamp={market.oddsLastUpdate} />
+                </td>
+                <td className="px-4 py-3 text-center">
+                    <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                        {market.volatility.toFixed(2)}
+                    </div>
+                    {market.volatility > 1.0 && <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider flex justify-center items-center gap-1"><Activity size={8}/> Volatile</div>}
+                </td>
+                <td className="px-4 py-3 text-center">
+                    <div className="font-mono text-slate-500">{market.bestBid}¢ / {market.bestAsk}¢</div>
+                    <LatencyDisplay timestamp={market.kalshiLastUpdate} />
+                </td>
+                <td className="px-4 py-3 text-right text-slate-400">{market.maxWillingToPay}¢</td>
+                <td className="px-4 py-3 text-right">
+                    {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
+                </td>
+                <td className="px-4 py-3 text-center">
+                    <button onClick={(e) => { e.stopPropagation(); onExecute(market, market.smartBid, false); }} disabled={!market.smartBid} className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed">Bid {market.smartBid}¢</button>
+                </td>
+            </tr>
+            {expanded && (
+                <tr className="bg-slate-50/50">
+                    <td colSpan={7} className="p-0">
+                        <MarketExpandedDetails market={market} />
+                    </td>
+                </tr>
+            )}
+        </>
     );
 };
 
@@ -1429,14 +1511,14 @@ const KalshiDashboard = () => {
 
                       const tProb = probs.find(o => o.name === targetName);
                       if (tProb) {
-                          vigFreeProbs.push(tProb.p / totalImplied);
+                          vigFreeProbs.push({ prob: tProb.p / totalImplied, source: bm.title });
                       }
                   }
 
                   if (vigFreeProbs.length === 0) return null;
 
-                  const minProb = Math.min(...vigFreeProbs);
-                  const maxProb = Math.max(...vigFreeProbs);
+                  const minProb = Math.min(...vigFreeProbs.map(v => v.prob));
+                  const maxProb = Math.max(...vigFreeProbs.map(v => v.prob));
                   const spread = maxProb - minProb;
 
                   if (spread > 0.15) {
@@ -1444,7 +1526,7 @@ const KalshiDashboard = () => {
                       return null;
                   }
 
-                  const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b, 0) / vigFreeProbs.length;
+                  const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
 
                   // Legacy support for impliedProb display (using reference bookmaker)
                   const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
@@ -1494,7 +1576,8 @@ const KalshiDashboard = () => {
                       history: history,
                       volatility: volatility,
                       bookmakerCount: vigFreeProbs.length,
-                      oddsSpread: spread
+                      oddsSpread: spread,
+                      oddsSources: vigFreeProbs.map(v => v.source)
                   };
               }).filter(Boolean);
               
