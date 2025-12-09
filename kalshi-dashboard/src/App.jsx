@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown, Filter } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown } from 'lucide-react';
 
 // ==========================================
 // 0. LIBRARY LOADER
@@ -197,101 +197,6 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
         console.error("Signing failed:", e);
         throw new Error("Failed to sign request. Check your private key.");
     }
-};
-
-const processGameData = (game, kalshiData, prevMarkets, seriesTicker) => {
-    const bookmakers = game.bookmakers || [];
-    if (bookmakers.length === 0) return null;
-
-    const refBookmaker = bookmakers[0];
-    const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
-
-    if (!refOutcomes || refOutcomes.length < 2) return null;
-
-    const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
-    const targetName = targetOutcome.name;
-
-    const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
-    const oddsDisplay = opposingOutcome
-      ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
-      : `${targetOutcome.price}`;
-
-    const vigFreeProbs = [];
-    let maxLastUpdate = 0;
-
-    for (const bm of bookmakers) {
-        if (bm.last_update) {
-            const ts = new Date(bm.last_update).getTime();
-            if (ts > maxLastUpdate) maxLastUpdate = ts;
-        }
-
-        const outcomes = bm.markets?.[0]?.outcomes;
-        if (!outcomes || outcomes.length < 2) continue;
-
-        let totalImplied = 0;
-        const probs = outcomes.map(o => {
-            const p = americanToProbability(o.price);
-            totalImplied += p;
-            return { name: o.name, p };
-        });
-
-        const tProb = probs.find(o => o.name === targetName);
-        if (tProb) {
-            vigFreeProbs.push(tProb.p / totalImplied);
-        }
-    }
-
-    if (vigFreeProbs.length === 0) return null;
-
-    const minProb = Math.min(...vigFreeProbs);
-    const maxProb = Math.max(...vigFreeProbs);
-    const spread = maxProb - minProb;
-
-    if (spread > 0.15) {
-        // console.warn(`Market rejected due to high variance: ${spread.toFixed(2)}`);
-        return null;
-    }
-
-    const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b, 0) / vigFreeProbs.length;
-
-    // Legacy support for impliedProb display (using reference bookmaker)
-    const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
-    const refTargetImplied = americanToProbability(targetOutcome.price);
-    const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
-
-    const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
-    const prevMarket = prevMarkets.find(m => m.id === game.id);
-
-    let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
-    if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
-        bestBid = prevMarket.bestBid;
-        bestAsk = prevMarket.bestAsk;
-    }
-
-    return {
-        id: game.id,
-        event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
-        commenceTime: game.commence_time,
-        americanOdds: targetOutcome.price,
-        sportsbookOdds: targetOutcome.price,
-        opposingOdds: opposingOutcome ? opposingOutcome.price : null,
-        oddsDisplay: oddsDisplay,
-        impliedProb: refImpliedProb,
-        vigFreeProb: vigFreeProb * 100,
-        bestBid: bestBid || 0,
-        bestAsk: bestAsk || 0,
-        isMatchFound: !!realMatch,
-        realMarketId: realMatch?.ticker,
-        volume: volume || 0,
-        openInterest: openInterest || 0,
-        lastChange: Date.now(),
-        kalshiLastUpdate: Date.now(),
-        oddsLastUpdate: maxLastUpdate,
-        fairValue: Math.floor(vigFreeProb * 100),
-        history: prevMarket?.history || [],
-        bookmakerCount: vigFreeProbs.length,
-        oddsSpread: spread
-    };
 };
 
 // ==========================================
@@ -499,7 +404,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
-                        <input type="range" min="-5" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <input type="range" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
                         <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>AvgPrice * (1 + Margin)</code></p>
                     </div>
 
@@ -509,9 +414,15 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="col-span-2">
+                        <div>
                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
                             <input type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        </div>
+                        <div>
+                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Sport</label>
+                            <select value={config.selectedSport} onChange={e => setConfig({...config, selectedSport: e.target.value})} className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
+                                {sportsList.map(s => <option key={s.key} value={s.key}>{s.title}</option>)}
+                            </select>
                         </div>
                     </div>
 
@@ -790,15 +701,14 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                 latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null,
                 bookmakerCount: data.bookmakerCount || 0,
                 oddsSpread: data.oddsSpread || 0,
-                vigFreeProb: data.vigFreeProb || 0,
-                oddsSources: data.oddsSources || ''
+                vigFreeProb: data.vigFreeProb || 0
             };
         }).sort((a, b) => b.timestamp - a.timestamp);
     };
 
     const downloadCSV = () => {
         const data = generateSessionData();
-        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob", "Odds Source"];
+        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob"];
         const rows = data.map(d => [
             new Date(d.timestamp).toISOString(),
             d.ticker,
@@ -814,8 +724,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
             d.latency !== null ? d.latency : '',
             d.bookmakerCount,
             Number(d.oddsSpread).toFixed(3),
-            Number(d.vigFreeProb).toFixed(2),
-            `"${d.oddsSources.replace(/"/g, '""')}"`
+            Number(d.vigFreeProb).toFixed(2)
         ]);
 
         const csvContent = [
@@ -877,7 +786,6 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                             <th>Edge</th>
                             <th>Latency (ms)</th>
                             <th>Spread</th>
-                            <th>Sources</th>
                             <th>Status</th>
                             <th>PnL</th>
                         </tr>
@@ -893,7 +801,6 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                                 <td>${d.edge}</td>
                                 <td>${d.latency !== null ? d.latency : '-'}</td>
                                 <td>${Number(d.oddsSpread).toFixed(3)}</td>
-                                <td class="text-xs" style="max-width: 200px; word-wrap: break-word;">${d.oddsSources}</td>
                                 <td>${d.status}</td>
                                 <td class="${d.pnl >= 0 ? 'positive' : 'negative'}">${(d.pnl / 100).toFixed(2)}</td>
                             </tr>
@@ -1067,165 +974,8 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
     );
 };
 
-const Confetti = () => {
-  const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500'];
-  const pieces = useMemo(() => {
-    return Array.from({ length: 50 }).map((_, i) => ({
-      id: i,
-      left: Math.random() * 100 + 'vw',
-      delay: Math.random() * 2 + 's',
-      color: colors[Math.floor(Math.random() * colors.length)]
-    }));
-  }, []);
-
-  return (
-    <div className="fixed inset-0 pointer-events-none z-[1000] overflow-hidden">
-      {pieces.map(p => (
-        <div
-          key={p.id}
-          className={`confetti-piece ${p.color}`}
-          style={{ left: p.left, animationDelay: p.delay }}
-        />
-      ))}
-    </div>
-  );
-};
-
-const PortfolioRow = ({ item, activeTab, currentPrice, currentFV, history, onCancel, onAnalysis, formatMoney, formatDate }) => {
-    const [animClass, setAnimClass] = useState('animate-flash-green');
-    const prevItemRef = useRef(item);
-
-    useEffect(() => {
-        const t = setTimeout(() => setAnimClass(''), 1000);
-        return () => clearTimeout(t);
-    }, []);
-
-    useEffect(() => {
-        const prev = prevItemRef.current;
-        if (prev !== item && !item.isRemoving) {
-             if (prev.price !== item.price || prev.quantity !== item.quantity || prev.filled !== item.filled || prev.avgPrice !== item.avgPrice) {
-                 setAnimClass('animate-flash-purple');
-                 const t = setTimeout(() => setAnimClass(''), 1000);
-                 return () => clearTimeout(t);
-             }
-             prevItemRef.current = item;
-        }
-    }, [item]);
-
-    const rowClass = `${item.isRemoving ? 'animate-flash-red' : animClass} hover:bg-slate-50 group`;
-
-    return (
-        <tr className={rowClass}>
-            <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                    <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
-                    <span className="text-slate-400">for</span>
-                    <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
-                </div>
-            </td>
-
-            {activeTab === 'positions' && (
-                <>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
-                        {item.quantity}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-600">
-                        {formatMoney(item.quantity * currentPrice)}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-500">
-                        {history ? `${history.fairValue}¢` : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
-                        {currentFV}¢
-                    </td>
-                </>
-            )}
-
-            {activeTab === 'resting' && (
-                <>
-                    <td className="px-4 py-3 text-center font-mono">
-                        <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono">{item.price}¢</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-600">
-                        {formatMoney(item.price * (item.quantity - item.filled))}
-                    </td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        <div>{formatDate(item.created)}</div>
-                        <div className="text-[10px] text-slate-400">{item.expiration ? formatDate(item.expiration) : 'GTC'}</div>
-                    </td>
-                </>
-            )}
-
-            {activeTab === 'history' && (
-                <>
-                    <td className="px-4 py-3 text-center font-mono text-slate-500">
-                        {history ? `${history.fairValue}¢` : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                        {item.payout ? formatMoney(item.payout) : '-'}
-                    </td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        {formatDate(item.created)}
-                    </td>
-                </>
-            )}
-
-            <td className="px-4 py-3 text-center flex justify-center gap-2">
-                {item.isOrder && (
-                    <button onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
-                        <XCircle size={16}/>
-                    </button>
-                )}
-                <button
-                    onClick={() => onAnalysis(item)}
-                    disabled={!history}
-                    className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
-                >
-                    <Info size={16}/>
-                </button>
-            </td>
-        </tr>
-    );
-};
-
-const PortfolioSection = ({ activeTab, positions: rawPositions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
+const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
-    // --- GHOST LOGIC ---
-    const [ghosts, setGhosts] = useState([]);
-    const prevPositionsRef = useRef([]);
-
-    useEffect(() => {
-        const currentIds = new Set(rawPositions.map(p => p.id));
-        const prevPositions = prevPositionsRef.current;
-
-        // Find removed items
-        const removed = prevPositions.filter(p => !currentIds.has(p.id));
-
-        if (removed.length > 0) {
-            const newGhosts = removed.map(p => ({ ...p, isRemoving: true, removeAt: Date.now() + 500 }));
-            setGhosts(prev => [...prev, ...newGhosts]);
-        }
-
-        prevPositionsRef.current = rawPositions;
-    }, [rawPositions]);
-
-    // Cleanup ghosts
-    useEffect(() => {
-        if (ghosts.length === 0) return;
-        const interval = setInterval(() => {
-            const now = Date.now();
-            setGhosts(prev => {
-                const remaining = prev.filter(g => g.removeAt > now);
-                if (remaining.length !== prev.length) return remaining;
-                return prev;
-            });
-        }, 100);
-        return () => clearInterval(interval);
-    }, [ghosts]);
-
-    const positions = useMemo(() => [...rawPositions, ...ghosts], [rawPositions, ghosts]);
-
     const getGameName = (ticker) => {
         const liveMarket = markets.find(m => m.realMarketId === ticker);
         if (liveMarket) return liveMarket.event;
@@ -1339,20 +1089,82 @@ const PortfolioSection = ({ activeTab, positions: rawPositions, markets, tradeHi
                             </tr>
                         </tbody>
                         <tbody className="divide-y divide-slate-50">
-                            {items.map(item => (
-                                <PortfolioRow
-                                    key={item.id}
-                                    item={item}
-                                    activeTab={activeTab}
-                                    currentPrice={getCurrentPrice(item.marketId)}
-                                    currentFV={getCurrentFV(item.marketId)}
-                                    history={tradeHistory[item.marketId]}
-                                    onCancel={onCancel}
-                                    onAnalysis={onAnalysis}
-                                    formatMoney={formatMoney}
-                                    formatDate={formatDate}
-                                />
-                            ))}
+                            {items.map(item => {
+                                const history = tradeHistory[item.marketId];
+                                return (
+                                    <tr key={item.id} className="hover:bg-slate-50 group">
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-2">
+                                                <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
+                                                <span className="text-slate-400">for</span>
+                                                <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
+                                            </div>
+                                        </td>
+
+                                        {activeTab === 'positions' && (
+                                            <>
+                                                <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
+                                                    {item.quantity}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
+                                                    {formatMoney(item.quantity * getCurrentPrice(item.marketId))}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-mono text-slate-500">
+                                                    {history ? `${history.fairValue}¢` : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
+                                                    {getCurrentFV(item.marketId)}¢
+                                                </td>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'resting' && (
+                                            <>
+                                                <td className="px-4 py-3 text-center font-mono">
+                                                    <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono">{item.price}¢</td>
+                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
+                                                    {formatMoney(item.price * (item.quantity - item.filled))}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-xs text-slate-500">
+                                                    <div>{formatDate(item.created)}</div>
+                                                    <div className="text-[10px] text-slate-400">{item.expiration ? formatDate(item.expiration) : 'GTC'}</div>
+                                                </td>
+                                            </>
+                                        )}
+
+                                        {activeTab === 'history' && (
+                                            <>
+                                                <td className="px-4 py-3 text-center font-mono text-slate-500">
+                                                    {history ? `${history.fairValue}¢` : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
+                                                    {item.payout ? formatMoney(item.payout) : '-'}
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-xs text-slate-500">
+                                                    {formatDate(item.created)} 
+                                                </td>
+                                            </>
+                                        )}
+
+                                        <td className="px-4 py-3 text-center flex justify-center gap-2">
+                                            {item.isOrder && (
+                                                <button onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                                                    <XCircle size={16}/>
+                                                </button>
+                                            )}
+                                            <button 
+                                                onClick={() => onAnalysis(item)}
+                                                disabled={!history} 
+                                                className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
+                                            >
+                                                <Info size={16}/>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </React.Fragment>
                 ))}
@@ -1431,14 +1243,12 @@ const KalshiDashboard = () => {
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [sessionStart, setSessionStart] = useState(null);
   const [eventLogs, setEventLogs] = useState([]);
-  const [showConfetti, setShowConfetti] = useState(false);
 
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
 
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const [config, setConfig] = useState({
       marginPercent: 15,
@@ -1448,7 +1258,7 @@ const KalshiDashboard = () => {
       isAutoBid: false,
       isAutoClose: true,
       holdStrategy: 'sell_limit',
-      selectedSports: ['americanfootball_nfl'], // Changed to array
+      selectedSport: 'americanfootball_nfl',
       isTurboMode: false
   });
 
@@ -1508,74 +1318,129 @@ const KalshiDashboard = () => {
 
       try {
           setErrorMsg('');
-          const targetSports = config.selectedSports && config.selectedSports.length > 0
-                               ? config.selectedSports
-                               : [];
+          const activeSportConfig = sportsList.find(s => s.key === config.selectedSport);
+          const seriesTicker = activeSportConfig?.kalshiSeries || '';
           
-          if (targetSports.length === 0) {
-              setMarkets([]);
-              return;
+          const [oddsRes, kalshiData] = await Promise.all([
+              fetch(`https://api.the-odds-api.com/v4/sports/${config.selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
+              fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
+          ]);
+
+          const used = oddsRes.headers.get('x-requests-used');
+          const remaining = oddsRes.headers.get('x-requests-remaining');
+          if (used && remaining) {
+              setApiUsage({ used: parseInt(used), remaining: parseInt(remaining) });
           }
 
-          const promises = targetSports.map(async (sportKey) => {
-              const activeSportConfig = sportsList.find(s => s.key === sportKey);
-              if (!activeSportConfig) return null;
-
-              const seriesTicker = activeSportConfig.kalshiSeries || '';
-
-              // Fetch Odds
-              const oddsUrl = `https://api.the-odds-api.com/v4/sports/${sportKey}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`;
-
-              // Fetch Kalshi
-              const kalshiUrl = `/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`;
-
-              try {
-                  const [oddsRes, kalshiRes] = await Promise.all([
-                      fetch(oddsUrl, { signal: abortControllerRef.current.signal }),
-                      fetch(kalshiUrl, { signal: abortControllerRef.current.signal })
-                  ]);
-                  
-                  const oddsData = await oddsRes.json();
-                  const kalshiDataWrapper = kalshiRes.ok ? await kalshiRes.json() : { markets: [] };
-                  const kalshiData = kalshiDataWrapper.markets || [];
-
-                  return { sportKey, oddsData, kalshiData, seriesTicker };
-              } catch (e) {
-                  console.error(`Error fetching ${sportKey}`, e);
-                  return null;
-              }
-          });
-
-          const results = await Promise.all(promises);
+          const oddsData = await oddsRes.json();
 
           lastFetchTimeRef.current = Date.now();
           setLastUpdated(new Date());
 
+          if (!Array.isArray(oddsData)) throw new Error(oddsData.message || "API Error");
+
           setMarkets(prev => {
-              const newMarkets = [];
-              const seenIds = new Set();
+              const processed = oddsData.slice(0, 20).map(game => {
+                  const bookmakers = game.bookmakers || [];
+                  if (bookmakers.length === 0) return null;
 
-              for (const res of results) {
-                  if (!res || !Array.isArray(res.oddsData)) continue;
-
-                  const { oddsData, kalshiData, seriesTicker } = res;
-
-                  const processed = oddsData.slice(0, 20).map(game => {
-                      if (seenIds.has(game.id)) return null;
-                      seenIds.add(game.id);
-
-                      return processGameData(game, kalshiData, prev, seriesTicker);
-                  }).filter(Boolean);
+                  const refBookmaker = bookmakers[0];
+                  const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
                   
-                  newMarkets.push(...processed);
-              }
-              return newMarkets;
+                  if (!refOutcomes || refOutcomes.length < 2) return null;
+
+                  const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
+                  const targetName = targetOutcome.name;
+                  
+                  const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
+                  const oddsDisplay = opposingOutcome 
+                    ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
+                    : `${targetOutcome.price}`;
+
+                  const vigFreeProbs = [];
+                  let maxLastUpdate = 0;
+
+                  for (const bm of bookmakers) {
+                      if (bm.last_update) {
+                          const ts = new Date(bm.last_update).getTime();
+                          if (ts > maxLastUpdate) maxLastUpdate = ts;
+                      }
+
+                      const outcomes = bm.markets?.[0]?.outcomes;
+                      if (!outcomes || outcomes.length < 2) continue;
+
+                      let totalImplied = 0;
+                      const probs = outcomes.map(o => {
+                          const p = americanToProbability(o.price);
+                          totalImplied += p;
+                          return { name: o.name, p };
+                      });
+
+                      const tProb = probs.find(o => o.name === targetName);
+                      if (tProb) {
+                          vigFreeProbs.push(tProb.p / totalImplied);
+                      }
+                  }
+
+                  if (vigFreeProbs.length === 0) return null;
+
+                  const minProb = Math.min(...vigFreeProbs);
+                  const maxProb = Math.max(...vigFreeProbs);
+                  const spread = maxProb - minProb;
+
+                  if (spread > 0.15) {
+                      console.warn(`Market rejected due to high variance: ${spread.toFixed(2)}`);
+                      return null;
+                  }
+
+                  const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b, 0) / vigFreeProbs.length;
+
+                  // Legacy support for impliedProb display (using reference bookmaker)
+                  const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
+                  const refTargetImplied = americanToProbability(targetOutcome.price);
+                  const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
+
+                  const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                  const prevMarket = prev.find(m => m.id === game.id);
+                  
+                  let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
+                  if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
+                      bestBid = prevMarket.bestBid;
+                      bestAsk = prevMarket.bestAsk;
+                  }
+
+                  return {
+                      id: game.id,
+                      event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
+                      commenceTime: game.commence_time,
+                      americanOdds: targetOutcome.price, 
+                      sportsbookOdds: targetOutcome.price, 
+                      opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
+                      oddsDisplay: oddsDisplay, 
+                      impliedProb: refImpliedProb,
+                      vigFreeProb: vigFreeProb * 100, 
+                      bestBid: bestBid || 0,
+                      bestAsk: bestAsk || 0,
+                      isMatchFound: !!realMatch,
+                      realMarketId: realMatch?.ticker,
+                      volume: volume || 0,
+                      openInterest: openInterest || 0,
+                      lastChange: Date.now(),
+                      kalshiLastUpdate: Date.now(),
+                      oddsLastUpdate: maxLastUpdate,
+                      fairValue: Math.floor(vigFreeProb * 100), 
+                      history: prevMarket?.history || [],
+                      bookmakerCount: vigFreeProbs.length,
+                      oddsSpread: spread
+                  };
+              }).filter(Boolean);
+              
+              return processed;
           });
-
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
-  }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
+  }, [oddsApiKey, config.selectedSport, config.isTurboMode, sportsList]);
 
-  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSports]);
+  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport]);
 
   useEffect(() => {
       if (!isRunning) return;
@@ -1782,8 +1647,7 @@ const KalshiDashboard = () => {
                   vigFreeProb: marketOrTicker.vigFreeProb,
                   fairValue: marketOrTicker.fairValue, bidPrice: price,
                   bookmakerCount: marketOrTicker.bookmakerCount,
-                  oddsSpread: marketOrTicker.oddsSpread,
-                  oddsSources: marketOrTicker.oddsSources
+                  oddsSpread: marketOrTicker.oddsSpread
               }}));
           }
           fetchPortfolio();
@@ -1804,13 +1668,29 @@ const KalshiDashboard = () => {
 
           try {
             // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
-            const executedHoldings = new Set(positions.filter(p => !p.isOrder && p.quantity > 0 && p.settlementStatus !== 'settled').map(p => p.marketId));
+            // SCOPE: Only consider markets currently displayed in the scanner to support sport switching without interference.
+            const currentMarketIds = new Set(markets.map(m => m.realMarketId));
+
+            const executedHoldings = new Set(positions.filter(p => 
+                !p.isOrder && 
+                p.quantity > 0 && 
+                p.settlementStatus !== 'settled' &&
+                currentMarketIds.has(p.marketId)
+            ).map(p => p.marketId));
+
+            // Filter activeOrders to only those in the current market list
+            const activeOrders = positions.filter(p => 
+                p.isOrder && 
+                ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()) &&
+                currentMarketIds.has(p.marketId)
+            );
 
             // We don't want to exceed max positions, but we also want to manage existing bids.
             // So effectiveCount should track held positions + pending bids for *new* markets.
-            let effectiveCount = executedHoldings.size;
-
-            const activeOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()));
+            // We calculate effective count based on held positions AND active orders for current markets.
+            const marketsWithOrders = new Set(activeOrders.map(o => o.marketId));
+            const occupiedMarkets = new Set([...executedHoldings, ...marketsWithOrders]);
+            let effectiveCount = occupiedMarkets.size;
 
             // --- LIMIT ENFORCEMENT ---
             // If we have reached the max positions, ensure no pending buy orders remain for *new* positions.
@@ -1948,16 +1828,12 @@ const KalshiDashboard = () => {
               
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
+              const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
 
-              const currentMarketValue = pos.quantity * currentBid;
-              const targetValue = pos.cost * (1 + config.autoCloseMarginPercent/100);
-
-              if (currentMarketValue >= targetValue) {
-                  console.log(`[AUTO-CLOSE] ${pos.marketId}: MV ${currentMarketValue} >= Target ${targetValue} (Bid: ${currentBid})`);
+              if (currentBid >= target) {
+                  console.log(`[AUTO-CLOSE] ${pos.marketId}: ${currentBid} >= ${target}`);
                   closingTracker.current.add(pos.marketId);
                   await executeOrder(pos.marketId, 0, true, pos.quantity, 'auto');
-                  setShowConfetti(true);
-                  setTimeout(() => setShowConfetti(false), 3000);
                   await new Promise(r => setTimeout(r, 200)); // Delay
               }
           }
@@ -2089,7 +1965,6 @@ const KalshiDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
-      {showConfetti && <Confetti />}
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} apiUsage={apiUsage} />
 
@@ -2115,36 +1990,7 @@ const KalshiDashboard = () => {
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[800px]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                 <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
-                <div className="flex gap-2 relative">
-                    <button onClick={() => setIsFilterOpen(!isFilterOpen)} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.selectedSports.length > 0 ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-500' : 'bg-slate-100 text-slate-400'}`}>
-                        <Filter size={14}/> Sports
-                    </button>
-                    {isFilterOpen && (
-                        <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-slate-200 p-2 min-w-[200px] z-50 animate-in fade-in zoom-in duration-200">
-                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2 px-2">Filter Sports</div>
-                             {sportsList.map(sport => {
-                                 const isSelected = config.selectedSports.includes(sport.key);
-                                 return (
-                                     <button
-                                        key={sport.key}
-                                        onClick={() => {
-                                            setConfig(prev => {
-                                                const newSports = isSelected
-                                                    ? prev.selectedSports.filter(k => k !== sport.key)
-                                                    : [...prev.selectedSports, sport.key];
-                                                return { ...prev, selectedSports: newSports };
-                                            });
-                                        }}
-                                        className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold mb-1 flex items-center justify-between transition-colors ${isSelected ? 'bg-indigo-50 text-indigo-700' : 'text-slate-600 hover:bg-slate-50'}`}
-                                     >
-                                         <span>{sport.title}</span>
-                                         {isSelected && <Check size={14}/>}
-                                     </button>
-                                 );
-                             })}
-                             {config.selectedSports.length === 0 && <div className="text-[10px] text-rose-500 px-2 italic">No sports selected</div>}
-                        </div>
-                    )}
+                <div className="flex gap-2">
                     <button onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
                     <button onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
                     <button onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
@@ -2179,9 +2025,7 @@ const KalshiDashboard = () => {
                         </React.Fragment>
                     ))}
                 </table>
-                {markets.length === 0 && <div className="p-10 text-center text-slate-400">
-                    {config.selectedSports.length === 0 ? "Select a sport to start scanning." : "Loading Markets..."}
-                </div>}
+                {markets.length === 0 && <div className="p-10 text-center text-slate-400">Loading Markets...</div>}
             </div>
         </div>
 
