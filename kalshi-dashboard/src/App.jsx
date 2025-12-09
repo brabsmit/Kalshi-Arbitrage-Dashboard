@@ -60,6 +60,14 @@ const americanToProbability = (odds) => {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 };
 
+const calculateVolatility = (history) => {
+    if (!history || history.length < 2) return 0;
+    const values = history.map(h => h.v);
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1);
+    return Math.sqrt(variance);
+};
+
 // Helper to check if a ticker is from a past date
 const isTickerExpired = (ticker) => {
     try {
@@ -1026,6 +1034,12 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
                 <LatencyDisplay timestamp={market.oddsLastUpdate} />
             </td>
             <td className="px-4 py-3 text-center">
+                <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                    {market.volatility.toFixed(2)}
+                </div>
+                {market.volatility > 1.0 && <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider flex justify-center items-center gap-1"><Activity size={8}/> Volatile</div>}
+            </td>
+            <td className="px-4 py-3 text-center">
                 <div className="font-mono text-slate-500">{market.bestBid}¢ / {market.bestAsk}¢</div>
                 <LatencyDisplay timestamp={market.kalshiLastUpdate} />
             </td>
@@ -1485,6 +1499,17 @@ const KalshiDashboard = () => {
 
                   const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
+
+                  // --- VOLATILITY TRACKING ---
+                  const now = Date.now();
+                  const currentVal = vigFreeProb * 100;
+                  let history = prevMarket?.history ? [...prevMarket.history] : [];
+                  history.push({ t: now, v: currentVal });
+                  // Keep last 60 mins of history for volatility calculation
+                  const cutoff = now - 60 * 60 * 1000;
+                  history = history.filter(h => h.t > cutoff);
+                  const volatility = calculateVolatility(history);
+                  // ---------------------------
                   
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
                   if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
@@ -1512,7 +1537,8 @@ const KalshiDashboard = () => {
                       kalshiLastUpdate: Date.now(),
                       oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100), 
-                      history: prevMarket?.history || [],
+                      history: history,
+                      volatility: volatility,
                       bookmakerCount: vigFreeProbs.length,
                       oddsSpread: spread
                   };
@@ -2085,6 +2111,7 @@ const KalshiDashboard = () => {
                         <tr>
                             <SortableHeader label="Event" sortKey="event" currentSort={sortConfig} onSort={handleSort} />
                             <SortableHeader label="Implied Fair Value" sortKey="fairValue" currentSort={sortConfig} onSort={handleSort} align="center" />
+                            <SortableHeader label="Vol" sortKey="volatility" currentSort={sortConfig} onSort={handleSort} align="center" />
                             <SortableHeader label="Bid / Ask" sortKey="bestBid" currentSort={sortConfig} onSort={handleSort} align="center" />
                             <SortableHeader label="Max Limit" sortKey="maxWillingToPay" currentSort={sortConfig} onSort={handleSort} align="right" />
                             <SortableHeader label="Smart Bid" sortKey="smartBid" currentSort={sortConfig} onSort={handleSort} align="right" />
