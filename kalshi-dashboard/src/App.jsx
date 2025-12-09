@@ -228,33 +228,43 @@ const SportFilter = ({ selected, options, onChange }) => {
                 <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
             </button>
             {isOpen && (
-                <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                    <div className="p-2 space-y-1">
-                        <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
-                        {options.map(opt => {
-                            const isSelected = selected.includes(opt.key);
-                            return (
+                <div className="absolute top-full left-0 mt-2 w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-3">
+                        <div className="flex justify-between items-center mb-2 px-1">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
+                            {selected.length > 0 && (
                                 <button 
-                                    key={opt.key}
-                                    onClick={() => {
-                                        if (isSelected) onChange(selected.filter(s => s !== opt.key));
-                                        else onChange([...selected, opt.key]);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                    onClick={() => onChange([])}
+                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1"
                                 >
-                                    {opt.title}
-                                    {isSelected && <Check size={14} className="text-blue-600"/>}
+                                    <XCircle size={12}/> Clear
                                 </button>
-                            );
-                        })}
-                        {selected.length > 0 && (
-                             <button 
-                                onClick={() => onChange([])}
-                                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-rose-500 hover:bg-rose-50 flex items-center gap-2 mt-1 border-t border-slate-50"
-                            >
-                                <XCircle size={14}/> Clear Selection
-                            </button>
-                        )}
+                            )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 max-h-[60vh] overflow-y-auto p-1 custom-scrollbar">
+                            {options.map(opt => {
+                                const isSelected = selected.includes(opt.key);
+                                const isIntegrated = !!opt.kalshiSeries;
+                                return (
+                                    <button
+                                        key={opt.key}
+                                        onClick={() => {
+                                            if (isSelected) onChange(selected.filter(s => s !== opt.key));
+                                            else onChange([...selected, opt.key]);
+                                        }}
+                                        className={`text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all border ${
+                                            isSelected
+                                                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                                : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+                                        } ${isIntegrated ? 'font-bold' : 'font-normal'}`}
+                                        title={isIntegrated ? "Integrated with Kalshi" : "Odds Only"}
+                                    >
+                                        <span className="truncate mr-2">{opt.title}</span>
+                                        {isSelected && <Check size={14} className="text-blue-600 flex-shrink-0"/>}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             )}
