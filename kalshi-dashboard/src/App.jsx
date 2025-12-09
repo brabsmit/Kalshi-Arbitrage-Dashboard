@@ -701,14 +701,15 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                 latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null,
                 bookmakerCount: data.bookmakerCount || 0,
                 oddsSpread: data.oddsSpread || 0,
-                vigFreeProb: data.vigFreeProb || 0
+                vigFreeProb: data.vigFreeProb || 0,
+                oddsSources: data.oddsSources || ''
             };
         }).sort((a, b) => b.timestamp - a.timestamp);
     };
 
     const downloadCSV = () => {
         const data = generateSessionData();
-        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob"];
+        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob", "Odds Source"];
         const rows = data.map(d => [
             new Date(d.timestamp).toISOString(),
             d.ticker,
@@ -724,7 +725,8 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
             d.latency !== null ? d.latency : '',
             d.bookmakerCount,
             Number(d.oddsSpread).toFixed(3),
-            Number(d.vigFreeProb).toFixed(2)
+            Number(d.vigFreeProb).toFixed(2),
+            `"${d.oddsSources.replace(/"/g, '""')}"`
         ]);
 
         const csvContent = [
@@ -786,6 +788,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                             <th>Edge</th>
                             <th>Latency (ms)</th>
                             <th>Spread</th>
+                            <th>Sources</th>
                             <th>Status</th>
                             <th>PnL</th>
                         </tr>
@@ -801,6 +804,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                                 <td>${d.edge}</td>
                                 <td>${d.latency !== null ? d.latency : '-'}</td>
                                 <td>${Number(d.oddsSpread).toFixed(3)}</td>
+                                <td class="text-xs" style="max-width: 200px; word-wrap: break-word;">${d.oddsSources}</td>
                                 <td>${d.status}</td>
                                 <td class="${d.pnl >= 0 ? 'positive' : 'negative'}">${(d.pnl / 100).toFixed(2)}</td>
                             </tr>
@@ -1454,6 +1458,7 @@ const KalshiDashboard = () => {
                     : `${targetOutcome.price}`;
 
                   const vigFreeProbs = [];
+                  const activeSources = [];
                   let maxLastUpdate = 0;
 
                   for (const bm of bookmakers) {
@@ -1475,6 +1480,7 @@ const KalshiDashboard = () => {
                       const tProb = probs.find(o => o.name === targetName);
                       if (tProb) {
                           vigFreeProbs.push(tProb.p / totalImplied);
+                          activeSources.push(bm.title);
                       }
                   }
 
@@ -1527,7 +1533,8 @@ const KalshiDashboard = () => {
                       fairValue: Math.floor(vigFreeProb * 100), 
                       history: prevMarket?.history || [],
                       bookmakerCount: vigFreeProbs.length,
-                      oddsSpread: spread
+                      oddsSpread: spread,
+                      oddsSources: activeSources.join(', ')
                   };
               }).filter(Boolean);
               
@@ -1743,7 +1750,8 @@ const KalshiDashboard = () => {
                   vigFreeProb: marketOrTicker.vigFreeProb,
                   fairValue: marketOrTicker.fairValue, bidPrice: price,
                   bookmakerCount: marketOrTicker.bookmakerCount,
-                  oddsSpread: marketOrTicker.oddsSpread
+                  oddsSpread: marketOrTicker.oddsSpread,
+                  oddsSources: marketOrTicker.oddsSources
               }}));
           }
           fetchPortfolio();
