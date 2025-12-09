@@ -404,7 +404,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
-                        <input type="range" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <input type="range" min="-5" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
                         <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>AvgPrice * (1 + Margin)</code></p>
                     </div>
 
@@ -1812,10 +1812,12 @@ const KalshiDashboard = () => {
               
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
-              const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
 
-              if (currentBid >= target) {
-                  console.log(`[AUTO-CLOSE] ${pos.marketId}: ${currentBid} >= ${target}`);
+              const currentMarketValue = pos.quantity * currentBid;
+              const targetValue = pos.cost * (1 + config.autoCloseMarginPercent/100);
+
+              if (currentMarketValue >= targetValue) {
+                  console.log(`[AUTO-CLOSE] ${pos.marketId}: MV ${currentMarketValue} >= Target ${targetValue} (Bid: ${currentBid})`);
                   closingTracker.current.add(pos.marketId);
                   await executeOrder(pos.marketId, 0, true, pos.quantity, 'auto');
                   await new Promise(r => setTimeout(r, 200)); // Delay
