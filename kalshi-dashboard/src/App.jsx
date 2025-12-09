@@ -1510,7 +1510,7 @@ const KalshiDashboard = () => {
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
   }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
-  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSports]);
+  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport, fetchLiveOdds]);
 
   useEffect(() => {
       if (!isRunning) return;
