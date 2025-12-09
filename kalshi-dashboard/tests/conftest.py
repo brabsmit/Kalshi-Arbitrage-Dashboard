@@ -11,7 +11,9 @@ from .mock_data import MOCK_BALANCE, MOCK_MARKETS, MOCK_ORDERS, MOCK_POSITIONS, 
 logging.basicConfig(level=logging.INFO)
 
 # Determine if running in LIVE mode
-TEST_LIVE = os.environ.get("TEST_LIVE") == "1"
+# We also enable live mode if the keys are present in the environment
+HAS_KEYS = "KALSHI_DEMO_API_KEY" in os.environ and "KALSHI_DEMO_API_KEY_ID" in os.environ
+TEST_LIVE = os.environ.get("TEST_LIVE") == "1" or HAS_KEYS
 
 def generate_mock_key():
     """Generates a temporary RSA private key for testing."""
@@ -117,16 +119,25 @@ def authenticated_page(page):
 
     key_id = ""
     private_key = ""
+    odds_key = os.environ.get("THE_ODDS_API_KEY", "mock_odds_key")
+    # Clean up double pasted keys if detected (common issue)
+    if len(odds_key) == 64 and odds_key[:32] == odds_key[32:]:
+        odds_key = odds_key[:32]
 
     if TEST_LIVE:
-        try:
-            with open(".secrets/demo_key_id", "r") as f:
-                key_id = f.read().strip()
-            with open(".secrets/demo_private.key", "r") as f:
-                private_key = f.read().strip()
-            logging.info("LIVE MODE: Loaded real credentials from .secrets/")
-        except FileNotFoundError:
-            pytest.fail("TEST_LIVE=1 but .secrets/demo_key_id or .secrets/demo_private.key not found.")
+        if "KALSHI_DEMO_API_KEY" in os.environ and "KALSHI_DEMO_API_KEY_ID" in os.environ:
+             key_id = os.environ["KALSHI_DEMO_API_KEY_ID"]
+             private_key = os.environ["KALSHI_DEMO_API_KEY"]
+             logging.info("LIVE MODE: Loaded credentials from environment variables.")
+        else:
+            try:
+                with open(".secrets/demo_key_id", "r") as f:
+                    key_id = f.read().strip()
+                with open(".secrets/demo_private.key", "r") as f:
+                    private_key = f.read().strip()
+                logging.info("LIVE MODE: Loaded real credentials from .secrets/")
+            except FileNotFoundError:
+                pytest.fail("TEST_LIVE=1 but credentials not found in env or .secrets/.")
     else:
         key_id = "test_key_id"
         # Generate dynamic key
@@ -143,10 +154,7 @@ def authenticated_page(page):
             keyId: '{key_id}',
             privateKey: `{private_key_js}`
         }}));
-        localStorage.setItem('odds_api_key', 'mock_odds_key');
-        // Clear history for fresh start if needed, but App uses localStorage for persistence across reloads
-        // We'll leave it or clear it? conftest implies per-function scope for page, but local storage persists?
-        // Playwright new_context implies fresh storage usually.
+        localStorage.setItem('odds_api_key', '{odds_key}');
     }}""")
 
     page.reload()
