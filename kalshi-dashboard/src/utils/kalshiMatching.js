@@ -1,0 +1,160 @@
+// File: src/utils/kalshiMatching.js
+
+// Moved from App.jsx and expanded
+export const SPORT_MAPPING = [
+    { key: 'americanfootball_nfl', title: 'Football (NFL)', kalshiSeries: 'KXNFLGAME' },
+    { key: 'basketball_nba', title: 'Basketball (NBA)', kalshiSeries: 'KXNBAGAME' },
+    { key: 'baseball_mlb', title: 'Baseball (MLB)', kalshiSeries: 'KXMLBGAME' },
+    { key: 'icehockey_nhl', title: 'Hockey (NHL)', kalshiSeries: 'KXNHLGAME' },
+    { key: 'americanfootball_ncaaf', title: 'Football (NCAAF)', kalshiSeries: 'KXNCAAFGAME' },
+    { key: 'basketball_ncaab', title: 'Basketball (NCAAB)', kalshiSeries: 'KXNCAABGAME' },
+];
+
+export const TEAM_ABBR = {
+    // NFL
+    'Arizona Cardinals': 'ARI', 'Atlanta Falcons': 'ATL', 'Baltimore Ravens': 'BAL', 'Buffalo Bills': 'BUF', 'Carolina Panthers': 'CAR', 'Chicago Bears': 'CHI', 'Cincinnati Bengals': 'CIN', 'Cleveland Browns': 'CLE', 'Dallas Cowboys': 'DAL', 'Denver Broncos': 'DEN', 'Detroit Lions': 'DET', 'Green Bay Packers': 'GB', 'Houston Texans': 'HOU', 'Indianapolis Colts': 'IND', 'Jacksonville Jaguars': 'JAX', 'Kansas City Chiefs': 'KC', 'Las Vegas Raiders': 'LV', 'Los Angeles Chargers': 'LAC', 'Los Angeles Rams': 'LAR', 'Miami Dolphins': 'MIA', 'Minnesota Vikings': 'MIN', 'New England Patriots': 'NE', 'New Orleans Saints': 'NO', 'New York Giants': 'NYG', 'New York Jets': 'NYJ', 'Philadelphia Eagles': 'PHI', 'Pittsburgh Steelers': 'PIT', 'San Francisco 49ers': 'SF', 'Seattle Seahawks': 'SEA', 'Tampa Bay Buccaneers': 'TB', 'Tennessee Titans': 'TEN', 'Washington Commanders': 'WAS',
+    // NBA
+    'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'New York Knicks': 'NYK', 'Philadelphia 76ers': 'PHI', 'Toronto Raptors': 'TOR', 'Golden State Warriors': 'GS', 'Los Angeles Lakers': 'LAL', 'Los Angeles Clippers': 'LAC', 'Phoenix Suns': 'PHX', 'Sacramento Kings': 'SAC', 'Dallas Mavericks': 'DAL', 'Houston Rockets': 'HOU', 'Oklahoma City Thunder': 'OKC', 'Denver Nuggets': 'DEN', 'Minnesota Timberwolves': 'MIN', 'Portland Trail Blazers': 'POR', 'Utah Jazz': 'UTA', 'San Antonio Spurs': 'SAS', 'Memphis Grizzlies': 'MEM', 'New Orleans Pelicans': 'NO', 'Detroit Pistons': 'DET', 'Indiana Pacers': 'IND', 'Milwaukee Bucks': 'MIL', 'Atlanta Hawks': 'ATL', 'Charlotte Hornets': 'CHA', 'Miami Heat': 'MIA', 'Orlando Magic': 'ORL', 'Washington Wizards': 'WAS',
+    // NCAAF
+    'Texas Tech Red Raiders': 'TTU', 'Texas Tech': 'TTU', 'BYU Cougars': 'BYU', 'BYU': 'BYU', 'Western Michigan Broncos': 'WMU', 'Western Michigan': 'WMU', 'Miami (OH) RedHawks': 'MOH', 'Miami RedHawks': 'MOH', 'Miami (OH)': 'MOH', 'Villanova Wildcats': 'VIL', 'Villanova': 'VIL', 'Lehigh Mountain Hawks': 'LEH', 'Lehigh': 'LEH', 'Ohio State Buckeyes': 'OSU', 'Ohio State': 'OSU', 'Indiana Hoosiers': 'IND', 'Indiana': 'IND', 'Virginia Cavaliers': 'UVA', 'Virginia': 'UVA', 'Duke Blue Devils': 'DUK', 'Duke': 'DUK', 'Georgia Bulldogs': 'UGA', 'Georgia': 'UGA', 'Alabama Crimson Tide': 'ALA', 'Alabama': 'ALA', 'Michigan Wolverines': 'MICH', 'Michigan': 'MICH', 'Washington Huskies': 'WASH', 'Washington': 'WASH', 'Texas Longhorns': 'TEX', 'Texas': 'TEX', 'Florida State Seminoles': 'FSU', 'Florida State': 'FSU', 'Oregon Ducks': 'ORE', 'Oregon': 'ORE', 'USC Trojans': 'USC', 'USC': 'USC', 'LSU Tigers': 'LSU', 'LSU': 'LSU', 'Clemson Tigers': 'CLEM', 'Clemson': 'CLEM', 'Notre Dame Fighting Irish': 'ND', 'Notre Dame': 'ND', 'Oklahoma Sooners': 'OKL', 'Oklahoma': 'OKL', 'Penn State Nittany Lions': 'PSU', 'Penn State': 'PSU', 'Tennessee Volunteers': 'TENN', 'Tennessee': 'TENN', 'Ole Miss Rebels': 'MISS', 'Ole Miss': 'MISS', 'Missouri Tigers': 'MIZZ', 'Missouri': 'MIZZ', 'Louisville Cardinals': 'LOU', 'Louisville': 'LOU', 'Kentucky Wildcats': 'UK', 'Kentucky': 'UK', 'Florida Gators': 'FLA', 'Florida': 'FLA', 'Auburn Tigers': 'AUB', 'Auburn': 'AUB', 'Arkansas Razorbacks': 'ARK', 'Arkansas': 'ARK', 'Texas A&M Aggies': 'TAMU', 'Texas A&M': 'TAMU', 'Colorado Buffaloes': 'COLO', 'Colorado': 'COLO', 'Utah Utes': 'UTAH', 'Utah': 'UTAH', 'Arizona Wildcats': 'ARIZ', 'Arizona': 'ARIZ', 'Arizona State Sun Devils': 'ASU', 'Arizona State': 'ASU', 'North Carolina Tar Heels': 'UNC', 'North Carolina': 'UNC', 'NC State Wolfpack': 'NCST', 'NC State': 'NCST', 'Miami Hurricanes': 'MIA', 'Miami': 'MIA', 'Iowa Hawkeyes': 'IOWA', 'Iowa': 'IOWA', 'Wisconsin Badgers': 'WISC', 'Wisconsin': 'WISC', 'North Dakota State Bison': 'NDSU', 'North Dakota State': 'NDSU', 'Illinois State Redbirds': 'ILST', 'Illinois State': 'ILST',
+    // NCAAB
+    'Kansas Jayhawks': 'KU', 'Kansas': 'KU', 'UConn Huskies': 'UCONN', 'UConn': 'UCONN', 'Houston Cougars': 'HOU', 'Houston': 'HOU', 'Purdue Boilermakers': 'PUR', 'Purdue': 'PUR', 'Creighton Bluejays': 'CREI', 'Creighton': 'CREI', 'Marquette Golden Eagles': 'MARQ', 'Marquette': 'MARQ', 'Illinois Fighting Illini': 'ILL', 'Illinois': 'ILL', 'Baylor Bears': 'BAY', 'Baylor': 'BAY'
+};
+
+export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, kalshiMarkets, seriesTicker) => {
+    if (!kalshiMarkets || !homeTeam || !awayTeam || !targetTeam) return null;
+
+    let datePart = "";
+    const date = new Date(commenceTime);
+    if (!isNaN(date.getTime())) {
+        const yy = date.getFullYear().toString().slice(-2);
+        const mmm = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+        const dd = date.getDate().toString().padStart(2, '0');
+        datePart = `${yy}${mmm}${dd}`;
+    }
+
+    // Filter Candidates by Series and Date first to narrow down
+    const candidates = kalshiMarkets.filter(k => {
+        const ticker = k.ticker ? k.ticker.toUpperCase() : '';
+        if (seriesTicker && !ticker.startsWith(seriesTicker)) return false;
+        if (datePart && !ticker.includes(datePart)) return false;
+        return true;
+    });
+
+    if (candidates.length === 0) return null;
+
+    // STRATEGY 1: Exact Abbreviation Match (Legacy)
+    const homeAbbr = TEAM_ABBR[homeTeam] || homeTeam.substring(0, 3).toUpperCase();
+    const awayAbbr = TEAM_ABBR[awayTeam] || awayTeam.substring(0, 3).toUpperCase();
+    const targetAbbr = TEAM_ABBR[targetTeam] || targetTeam.substring(0, 3).toUpperCase();
+
+    const exactMatch = candidates.find(k => {
+        const ticker = k.ticker.toUpperCase();
+        // Check if ticker contains both home and away abbreviations
+        const hasTeams = (ticker.includes(homeAbbr) && ticker.includes(awayAbbr));
+
+        // Also allow if it matches target + some other abbr (incase home/away logic is flipped or one missing)
+        // But strict hasTeams is safer.
+        if (!hasTeams) return false;
+
+        const targetSuffix = `-${targetAbbr}`;
+        return ticker.endsWith(targetSuffix);
+    });
+
+    if (exactMatch) return exactMatch;
+
+    // STRATEGY 2: Fuzzy Title Matching (Scalable)
+    // If exact abbreviation failed, try to match using the full Title of the market
+    // This handles teams not in TEAM_ABBR.
+
+    // Normalize string: lowercase, remove special chars
+    const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    // Key words extraction (remove "vs", "at", etc if we were parsing title, but here we check inclusion)
+    // We split team name into words and check if significant words appear in title.
+    const getSignificantWords = (name) => {
+        return name.toLowerCase().split(' ')
+            .filter(w => w.length > 2 && !['university', 'state', 'tech', 'college'].includes(w));
+    };
+
+    const targetWords = getSignificantWords(targetTeam);
+    const homeWords = getSignificantWords(homeTeam);
+    const awayWords = getSignificantWords(awayTeam);
+
+    // If no significant words (e.g. "Iowa" filtered out? No, Iowa > 2), fallback to full name
+    const useFull = (words, name) => words.length > 0 ? words : [name.toLowerCase()];
+
+    const tWords = useFull(targetWords, targetTeam);
+    const hWords = useFull(homeWords, homeTeam);
+    const aWords = useFull(awayWords, awayTeam);
+
+    const titleMatch = candidates.find(k => {
+        if (!k.title) return false;
+        const titleLower = k.title.toLowerCase();
+
+        // 1. Check if this market represents the Game (Home vs Away)
+        // We need both teams to be present in the title
+        const hasHome = hWords.some(w => titleLower.includes(w));
+        const hasAway = aWords.some(w => titleLower.includes(w));
+
+        if (!hasHome || !hasAway) return false;
+
+        // 2. Check if this specific market contract is for the Target Team winning
+        // Kalshi tickers usually end with the Winner's Abbreviation.
+        // Ticker format: SERIES-DATE-AWAYABBR-HOMEABBR or something similar.
+        // BUT, `findKalshiMatch` is supposed to return the market where `targetTeam` is the YES side.
+
+        // If we found the game via title match, we need to know which side is which.
+        // We can look at the ticker suffix.
+        const parts = k.ticker.split('-');
+        const suffix = parts[parts.length - 1]; // This is the WINNER abbreviation for this market
+
+        // Does 'suffix' correspond to 'targetTeam'?
+        // We don't know the abbreviation for targetTeam (that's why we are here).
+        // But we can infer it.
+
+        // If the ticker is ...-A-B.
+        // And title is "Team A vs Team B".
+        // We need to map A -> Team A, B -> Team B.
+        // Heuristic: First letter match or containment.
+
+        // Let's assume the suffix MUST match the targetTeam somehow.
+        // "Gonzaga" (Target) vs "St Marys". Ticker ...-GON-SMC.
+        // Suffix is SMC.
+        // Does SMC match Gonzaga? No.
+        // So this market is for St Marys winning.
+
+        // We need the market ending in GON.
+        // So we shouldn't return `k` just because the Title matches the Game.
+        // We must ensure `k` is the market for `targetTeam`.
+
+        // Check if suffix matches Target Team better than Opposing Team?
+        // Or check first letter.
+        const targetFirst = targetTeam.charAt(0).toLowerCase();
+        const suffixFirst = suffix.charAt(0).toLowerCase();
+
+        // Simple heuristic: First letter match
+        // NOTE: This can fail for Michigan vs Michigan State (M vs M).
+        // But better than nothing.
+
+        // Ideally, we check if suffix is "closer" to targetTeam than opposingTeam.
+        if (targetFirst === suffixFirst) {
+             // Verify it doesn't also match the other team's first letter?
+             // If Home=Gonzaga (G), Away=StMarys (S). Suffix=GON (G). Match!
+             // If Home=Mich (M), Away=MichSt (M). Suffix=MSU (M). Match? Ambiguous.
+             return true;
+        }
+
+        // If first letter doesn't match, maybe subsequence?
+        // "Saint Mary's" -> SMC. S matches S.
+
+        // What if we try to construct the abbreviation from the name?
+        // First 3 chars?
+        const autoAbbr = targetTeam.substring(0, 3).toUpperCase();
+        if (suffix === autoAbbr) return true;
+
+        return false;
+    });
+
+    return titleMatch || null;
+};
