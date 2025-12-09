@@ -130,7 +130,7 @@ def test_e2e_arbitrage_cycle(authenticated_page):
 
     page.route("**/api/kalshi/portfolio/orders*", handle_orders)
 
-    # Mock Positions
+    # Mock Positions - Initial (Empty)
     def handle_positions(route):
         if "settlement_status=settled" in route.request.url:
             route.fulfill(json={"market_positions": []})
@@ -162,15 +162,6 @@ def test_e2e_arbitrage_cycle(authenticated_page):
     page.get_by_text("Start").click()
 
     # Enable Turbo Mode for faster polling
-    # The button has a Zap icon. We can find it by title or class/svg.
-    # It has onClick={() => setConfig(...isTurboMode...)}
-    # Let's assume it's the button with "TURBO" text if active, or just the icon.
-    # It's in the header.
-    # Button content: <Zap size={16} .../>
-    # Let's find it by the Zap icon class or just try to click the button near "Auto-Close".
-    # Actually, the header has a Turbo indicator, but the button is in the market scanner header?
-    # "button ... Auto-Close ... button ... Zap"
-    # Let's look for the button containing the Zap icon.
     page.locator("button:has(svg.lucide-zap)").click()
 
     # Enable Auto-Bid if needed
@@ -204,14 +195,23 @@ def test_e2e_arbitrage_cycle(authenticated_page):
             }
         ]
     }
-    page.route("**/api/kalshi/portfolio/positions*", lambda route: route.fulfill(json=mock_positions))
+
+    # Mock Positions - Filled State
+    # Crucial: Filter out settled requests to avoid duplicates
+    def handle_positions_filled(route):
+        if "settlement_status=settled" in route.request.url:
+            route.fulfill(json={"market_positions": []})
+        else:
+            route.fulfill(json=mock_positions)
+
+    page.unroute("**/api/kalshi/portfolio/positions*") # Remove old handler
+    page.route("**/api/kalshi/portfolio/positions*", handle_positions_filled)
 
     # Trigger a portfolio refresh
     time.sleep(6)
 
     # Verify Position Tab
     page.get_by_role("button", name="positions").click()
-    # Use .first to handle potential duplicates during fast polling/mock updates
     expect(page.locator("tr").filter(has_text="BUF").filter(has_text="10").first).to_be_visible()
 
     print("Position Verified!")
@@ -229,7 +229,15 @@ def test_e2e_arbitrage_cycle(authenticated_page):
     page.unroute("**/api/kalshi/markets*")
     page.route("**/api/kalshi/markets*", handle_high_markets)
 
-    # Wait for next cycle (market refresh + auto-close)
+    # Wait for market update to reflect high price
+    # We expect "50¢" (Bid) to appear in the table
+    try:
+        expect(page.locator("tr").filter(has_text="BUF").filter(has_text="50¢").first).to_be_visible(timeout=15000)
+    except AssertionError:
+        print("High price 50¢ did not appear in time.")
+        raise
+
+    # Wait for auto-close logic to trigger (it runs on effect after market update)
     time.sleep(5)
 
     # Verify Sell Order

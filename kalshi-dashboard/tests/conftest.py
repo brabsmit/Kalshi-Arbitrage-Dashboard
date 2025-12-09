@@ -4,12 +4,27 @@ import subprocess
 import time
 from playwright.sync_api import sync_playwright
 import logging
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 from .mock_data import MOCK_BALANCE, MOCK_MARKETS, MOCK_ORDERS, MOCK_POSITIONS, MOCK_HISTORY, MOCK_ORDER_RESPONSE
 
 logging.basicConfig(level=logging.INFO)
 
 # Determine if running in LIVE mode
 TEST_LIVE = os.environ.get("TEST_LIVE") == "1"
+
+def generate_mock_key():
+    """Generates a temporary RSA private key for testing."""
+    key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+    )
+    pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+    return pem.decode('utf-8')
 
 # Fixture to start Vite server
 @pytest.fixture(scope="session", autouse=True)
@@ -114,52 +129,8 @@ def authenticated_page(page):
             pytest.fail("TEST_LIVE=1 but .secrets/demo_key_id or .secrets/demo_private.key not found.")
     else:
         key_id = "test_key_id"
-        # Valid PEM key for node-forge
-        private_key = """-----BEGIN PRIVATE KEY-----
-MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCyBLCB9F+FDbPl
-gjpgeqQ7JRR4W3avzPuKALBasY1RTVLK4V05f1a/3FnUZ7EJoXe5G+yMftWrhHJM
-sfroejiNnW7/SH95XjxvQZr98LlYuFg1cfOYPtI4g2W9u2e8dh9D1jtg7WMahAPA
-e3OwQy7LMp2WuGOZJHislYfh5pE9VhQpSGCKZK88TXC+M1QTXBnAXtItcJrgr0IC
-z42sZ1T0FPF1W89MioVoPHw9quYJdGqoPqzQZMun3lNcHPREJvg1kBSFtEquqs1u
-wEwfh+BUqaDESpan6299SuA9VYiirHEkinlvpR3ZTQ74I/SDAEmyJuxHRcgnoEpV
-L/qAKEWHAgMBAAECggEAFX0ZbWZ5TU9dItw4fcLwJi+QrAKmbgw5ZOw2XYxHOcQy
-tUjE/xbO+vP3Z/toVHhIQnELed4pnr2rKnTli8CNKRMS/f/bW2QzuV5a/kJbrUj7
-ZOAvfnY+3BGIa4G+wPIlTgQDQO0G5IGBDnAYg/NoJ6EhgrsZUrgjVPnr4Cn76EJT
-LDDe0xOv3DwK6h1aleDUSr5Yj8eaqgEIGI/k4vd3c/4EWrZJXebEBgervp/nviXC
-mF13/Wy0vDhNVHaucAV2OtnfjlSkbKJvW/J9y41t/AuXiAZ6ipqTBorVTxk3X6FE
-8USfs4IO7grVR8o4mWX7STNfjhxC2Ulx2KAgm14mEQKBgQDgdRXdGdS+D80lUamO
-OwYp55fI7daaGKR1ursKr7EyPuYBK53aKIpy1+dxDULcJ5WM+2tgzoZdWgtUY1/f
-3aXyUHtihRnNT8H0yvHL8gfnaypGif0ghtNYIK3cVxwUj7q/02pBlK7AhRaW699s
-Q6u4X058rOIIwM/DB5nM7ps3jwKBgQDLCPJgGrHTNgSkaK28CE/plTBsO89h+J/Y
-TN6mbQWIj+v5fLAzuAK6fImrGkiSokybZdNRWaOYX9j2/H3y0gHXD06r2Ox3Lld8
-PVwVhIqBGZkf7Wo2DcV89+ngA6ewTQq4hArL/sKjnJPRLfh5PqHJ8p4p2gPuVpe7
-f1tv4/rWiQKBgBmoyOsRvORNYiJWB5Ae50F7HDr4FYRgNMzQn/lExHj9/8U6ez0p
-TUp7rBWccnxAejQ3ubrDYVDirlDjW154NDRTRweoN57k80NMv/+Ul5q5AYg21h0V
-zKtScQ2zV55yH+M2A/ujR6byj/aI2G3D/qmBG7Pc/6oIgLfG8qoezNe5AoGAcvun
-IAweJwpRiLaLpZBjiVpnKPSaVtaR19J4yXG2j4dKUWlu9GtCiFBdOtxQu1JU5jC9
-gzWrs3CclAucXHbYee3+VM4t5LUG8KJjUwBT3BceI/m1i9Uywbo45hfL0Mlgx+xn
-nO2zVysmf3F0ZV22DINtVTBVx5Wcqp/OrchD11kCgYB6bF+LtvY5Kixf+KX8Rxoc
-lnAfoaF47SQCVbdooOO2YyFig4cVKP43BRrOsTfdhzNi3OGkTMSxm8AZWOkSYBUw
-sdE/KuZECWlhu20rrU8JBHy9ofbaJnaAgaVj9f5V2FY5RKlU8CpOnpRRtuCd8YGq
-CtHoEs5ra5IaGxxb413soA==
------END PRIVATE KEY-----"""
-
-    # In Mock mode, we inject mock trade history.
-    # In Live mode, we depend on actual history (which might be empty).
-    history_script = ""
-    if not TEST_LIVE:
-        mock_trade_history = {
-            "KXNBAGAME-23OCT20-LAL-DEN": {
-                "ticker": "KXNBAGAME-23OCT20-LAL-DEN",
-                "event": "Lakers vs Nuggets",
-                "fairValue": 30,
-                "orderPlacedAt": 1697800000000,
-                "oddsTime": 1697799900000
-            }
-        }
-        import json
-        history_json = json.dumps(mock_trade_history).replace('"', '\\"')
-        history_script = f"localStorage.setItem('kalshi_trade_history', '{history_json}');"
+        # Generate dynamic key
+        private_key = generate_mock_key()
 
     # Navigate first to set local storage
     page.goto("http://localhost:3000")
@@ -173,7 +144,9 @@ CtHoEs5ra5IaGxxb413soA==
             privateKey: `{private_key_js}`
         }}));
         localStorage.setItem('odds_api_key', 'mock_odds_key');
-        {history_script}
+        // Clear history for fresh start if needed, but App uses localStorage for persistence across reloads
+        // We'll leave it or clear it? conftest implies per-function scope for page, but local storage persists?
+        // Playwright new_context implies fresh storage usually.
     }}""")
 
     page.reload()
