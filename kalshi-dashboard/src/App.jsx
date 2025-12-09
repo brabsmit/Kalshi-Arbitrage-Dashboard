@@ -237,7 +237,7 @@ const CancellationModal = ({ isOpen, progress }) => {
     );
 };
 
-const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
+const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
     const exposure = positions.reduce((acc, p) => {
         if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
             return acc + (p.price * (p.quantity - p.filled));
@@ -258,6 +258,49 @@ const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
     const totalSettled = historyItems.length;
     const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
 
+    // --- T-STATISTIC CALCULATION ---
+    const botHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId]);
+
+    let tStat = 0;
+    let isSignificant = false;
+    let tCrit = 0;
+
+    if (botHistory.length > 1) {
+        const pnls = botHistory.map(p => p.realizedPnl || 0);
+        const mean = pnls.reduce((a, b) => a + b, 0) / pnls.length;
+        const variance = pnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (pnls.length - 1);
+        const stdDev = Math.sqrt(variance);
+
+        if (stdDev > 0) {
+            const stdError = stdDev / Math.sqrt(pnls.length);
+            tStat = mean / stdError;
+        }
+
+        // Critical Value Lookup (Two-tailed, alpha=0.05)
+        const df = pnls.length - 1;
+        const tTable = {
+            1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+            6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+            11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
+            16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+            21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
+            26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
+            40: 2.021, 50: 2.009, 60: 2.000, 80: 1.990, 100: 1.984
+        };
+
+        // Find closest lower key or default to 1.96 (Z-score approx for large N)
+        const keys = Object.keys(tTable).map(Number).sort((a, b) => a - b);
+        let closestDf = keys[0];
+        for (const k of keys) {
+            if (k <= df) closestDf = k;
+            else break;
+        }
+
+        tCrit = df > 100 ? 1.96 : tTable[closestDf];
+        isSignificant = Math.abs(tStat) > tCrit;
+    }
+    // -------------------------------
+
     const [elapsed, setElapsed] = useState(0);
     useEffect(() => {
         if (!sessionStart || !isRunning) return;
@@ -266,7 +309,7 @@ const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
     }, [sessionStart, isRunning]);
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Wallet size={12} /> Total Exposure
@@ -312,6 +355,19 @@ const StatsBanner = ({ positions, balance, sessionStart, isRunning }) => {
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
                     <div className="bg-emerald-500 h-full" style={{width: `${winRate}%`}}></div>
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Calculator size={12} /> Statistical Sig.
+                </div>
+                <div className={`text-2xl font-bold mt-1 ${isSignificant ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {tStat.toFixed(2)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                    {isSignificant ? <Check size={12} className="text-emerald-500"/> : <XCircle size={12}/>}
+                    {isSignificant ? 'Significant' : 'Not Sig'} (α=0.05)
                 </div>
             </div>
 
@@ -1896,7 +1952,7 @@ const KalshiDashboard = () => {
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} apiUsage={apiUsage} />
 
-      <StatsBanner positions={positions} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
+      <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
