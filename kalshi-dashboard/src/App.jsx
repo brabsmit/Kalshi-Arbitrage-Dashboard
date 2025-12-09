@@ -1535,22 +1535,6 @@ const KalshiDashboard = () => {
                       fetch(kalshiUrl, { signal: abortControllerRef.current.signal })
                   ]);
                   
-                  const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
-                  const oddsDisplay = opposingOutcome 
-                    ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
-                    : `${targetOutcome.price}`;
-
-                  const vigFreeProbs = [];
-                  const activeSources = [];
-                  let maxLastUpdate = 0;
-
-                  for (const bm of bookmakers) {
-                      if (bm.last_update) {
-                          const ts = new Date(bm.last_update).getTime();
-                          if (ts > maxLastUpdate) maxLastUpdate = ts;
-                      }
-                  }
-
                   const oddsData = await oddsRes.json();
                   const kalshiDataWrapper = kalshiRes.ok ? await kalshiRes.json() : { markets: [] };
                   const kalshiData = kalshiDataWrapper.markets || [];
@@ -1562,18 +1546,13 @@ const KalshiDashboard = () => {
               }
           });
 
-                      const tProb = probs.find(o => o.name === targetName);
-                      if (tProb) {
-                          vigFreeProbs.push(tProb.p / totalImplied);
-                          activeSources.push(bm.title);
-                      }
-                  }
+          const results = await Promise.all(promises);
 
           lastFetchTimeRef.current = Date.now();
           setLastUpdated(new Date());
 
           setMarkets(prev => {
-              let newMarkets = [];
+              const newMarkets = [];
               const seenIds = new Set();
 
               for (const res of results) {
@@ -1588,40 +1567,9 @@ const KalshiDashboard = () => {
                       return processGameData(game, kalshiData, prev, seriesTicker);
                   }).filter(Boolean);
                   
-                  let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
-                  if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
-                      bestBid = prevMarket.bestBid;
-                      bestAsk = prevMarket.bestAsk;
-                  }
-
-                  return {
-                      id: game.id,
-                      event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
-                      commenceTime: game.commence_time,
-                      americanOdds: targetOutcome.price, 
-                      sportsbookOdds: targetOutcome.price, 
-                      opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
-                      oddsDisplay: oddsDisplay, 
-                      impliedProb: refImpliedProb,
-                      vigFreeProb: vigFreeProb * 100, 
-                      bestBid: bestBid || 0,
-                      bestAsk: bestAsk || 0,
-                      isMatchFound: !!realMatch,
-                      realMarketId: realMatch?.ticker,
-                      volume: volume || 0,
-                      openInterest: openInterest || 0,
-                      lastChange: Date.now(),
-                      kalshiLastUpdate: Date.now(),
-                      oddsLastUpdate: maxLastUpdate,
-                      fairValue: Math.floor(vigFreeProb * 100), 
-                      history: prevMarket?.history || [],
-                      bookmakerCount: vigFreeProbs.length,
-                      oddsSpread: spread,
-                      oddsSources: activeSources.join(', ')
-                  };
-              }).filter(Boolean);
-              
-              return processed;
+                  newMarkets.push(...processed);
+              }
+              return newMarkets;
           });
 
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
