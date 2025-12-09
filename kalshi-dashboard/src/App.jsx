@@ -790,14 +790,15 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                 latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null,
                 bookmakerCount: data.bookmakerCount || 0,
                 oddsSpread: data.oddsSpread || 0,
-                vigFreeProb: data.vigFreeProb || 0
+                vigFreeProb: data.vigFreeProb || 0,
+                oddsSources: data.oddsSources || ''
             };
         }).sort((a, b) => b.timestamp - a.timestamp);
     };
 
     const downloadCSV = () => {
         const data = generateSessionData();
-        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob"];
+        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob", "Odds Source"];
         const rows = data.map(d => [
             new Date(d.timestamp).toISOString(),
             d.ticker,
@@ -813,7 +814,8 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
             d.latency !== null ? d.latency : '',
             d.bookmakerCount,
             Number(d.oddsSpread).toFixed(3),
-            Number(d.vigFreeProb).toFixed(2)
+            Number(d.vigFreeProb).toFixed(2),
+            `"${d.oddsSources.replace(/"/g, '""')}"`
         ]);
 
         const csvContent = [
@@ -875,6 +877,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                             <th>Edge</th>
                             <th>Latency (ms)</th>
                             <th>Spread</th>
+                            <th>Sources</th>
                             <th>Status</th>
                             <th>PnL</th>
                         </tr>
@@ -890,6 +893,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                                 <td>${d.edge}</td>
                                 <td>${d.latency !== null ? d.latency : '-'}</td>
                                 <td>${Number(d.oddsSpread).toFixed(3)}</td>
+                                <td class="text-xs" style="max-width: 200px; word-wrap: break-word;">${d.oddsSources}</td>
                                 <td>${d.status}</td>
                                 <td class="${d.pnl >= 0 ? 'positive' : 'negative'}">${(d.pnl / 100).toFixed(2)}</td>
                             </tr>
@@ -1531,12 +1535,19 @@ const KalshiDashboard = () => {
                       fetch(kalshiUrl, { signal: abortControllerRef.current.signal })
                   ]);
                   
-                  // Handle API usage from first successful odds response (approximate)
-                  if (oddsRes.ok) {
-                      const used = oddsRes.headers.get('x-requests-used');
-                      const remaining = oddsRes.headers.get('x-requests-remaining');
-                      if (used && remaining) {
-                          setApiUsage({ used: parseInt(used), remaining: parseInt(remaining) });
+                  const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
+                  const oddsDisplay = opposingOutcome 
+                    ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
+                    : `${targetOutcome.price}`;
+
+                  const vigFreeProbs = [];
+                  const activeSources = [];
+                  let maxLastUpdate = 0;
+
+                  for (const bm of bookmakers) {
+                      if (bm.last_update) {
+                          const ts = new Date(bm.last_update).getTime();
+                          if (ts > maxLastUpdate) maxLastUpdate = ts;
                       }
                   }
 
@@ -1551,7 +1562,12 @@ const KalshiDashboard = () => {
               }
           });
 
-          const results = await Promise.all(promises);
+                      const tProb = probs.find(o => o.name === targetName);
+                      if (tProb) {
+                          vigFreeProbs.push(tProb.p / totalImplied);
+                          activeSources.push(bm.title);
+                      }
+                  }
 
           lastFetchTimeRef.current = Date.now();
           setLastUpdated(new Date());
@@ -1572,9 +1588,40 @@ const KalshiDashboard = () => {
                       return processGameData(game, kalshiData, prev, seriesTicker);
                   }).filter(Boolean);
                   
-                  newMarkets = [...newMarkets, ...processed];
-              }
-              return newMarkets;
+                  let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
+                  if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
+                      bestBid = prevMarket.bestBid;
+                      bestAsk = prevMarket.bestAsk;
+                  }
+
+                  return {
+                      id: game.id,
+                      event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
+                      commenceTime: game.commence_time,
+                      americanOdds: targetOutcome.price, 
+                      sportsbookOdds: targetOutcome.price, 
+                      opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
+                      oddsDisplay: oddsDisplay, 
+                      impliedProb: refImpliedProb,
+                      vigFreeProb: vigFreeProb * 100, 
+                      bestBid: bestBid || 0,
+                      bestAsk: bestAsk || 0,
+                      isMatchFound: !!realMatch,
+                      realMarketId: realMatch?.ticker,
+                      volume: volume || 0,
+                      openInterest: openInterest || 0,
+                      lastChange: Date.now(),
+                      kalshiLastUpdate: Date.now(),
+                      oddsLastUpdate: maxLastUpdate,
+                      fairValue: Math.floor(vigFreeProb * 100), 
+                      history: prevMarket?.history || [],
+                      bookmakerCount: vigFreeProbs.length,
+                      oddsSpread: spread,
+                      oddsSources: activeSources.join(', ')
+                  };
+              }).filter(Boolean);
+              
+              return processed;
           });
 
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
@@ -1787,7 +1834,8 @@ const KalshiDashboard = () => {
                   vigFreeProb: marketOrTicker.vigFreeProb,
                   fairValue: marketOrTicker.fairValue, bidPrice: price,
                   bookmakerCount: marketOrTicker.bookmakerCount,
-                  oddsSpread: marketOrTicker.oddsSpread
+                  oddsSpread: marketOrTicker.oddsSpread,
+                  oddsSources: marketOrTicker.oddsSources
               }}));
           }
           fetchPortfolio();
