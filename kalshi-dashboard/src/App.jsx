@@ -37,6 +37,7 @@ const SPORT_MAPPING = [
     { key: 'baseball_mlb', title: 'Baseball (MLB)', kalshiSeries: 'KXMLBGAME' },
     { key: 'icehockey_nhl', title: 'Hockey (NHL)', kalshiSeries: 'KXNHLGAME' },
     { key: 'americanfootball_ncaaf', title: 'Football (NCAAF)', kalshiSeries: 'KXNCAAFGAME' }, 
+    { key: 'basketball_ncaab', title: 'Basketball (NCAAB)', kalshiSeries: 'KXNCAABGAME' },
 ];
 
 const TEAM_ABBR = {
@@ -45,7 +46,9 @@ const TEAM_ABBR = {
     // NBA
     'Boston Celtics': 'BOS', 'Brooklyn Nets': 'BKN', 'New York Knicks': 'NYK', 'Philadelphia 76ers': 'PHI', 'Toronto Raptors': 'TOR', 'Golden State Warriors': 'GS', 'Los Angeles Lakers': 'LAL', 'Los Angeles Clippers': 'LAC', 'Phoenix Suns': 'PHX', 'Sacramento Kings': 'SAC', 'Dallas Mavericks': 'DAL', 'Houston Rockets': 'HOU', 'Oklahoma City Thunder': 'OKC', 'Denver Nuggets': 'DEN', 'Minnesota Timberwolves': 'MIN', 'Portland Trail Blazers': 'POR', 'Utah Jazz': 'UTA', 'San Antonio Spurs': 'SAS', 'Memphis Grizzlies': 'MEM', 'New Orleans Pelicans': 'NO', 'Detroit Pistons': 'DET', 'Indiana Pacers': 'IND', 'Milwaukee Bucks': 'MIL', 'Atlanta Hawks': 'ATL', 'Charlotte Hornets': 'CHA', 'Miami Heat': 'MIA', 'Orlando Magic': 'ORL', 'Washington Wizards': 'WAS',
     // NCAAF
-    'Texas Tech Red Raiders': 'TTU', 'Texas Tech': 'TTU', 'BYU Cougars': 'BYU', 'BYU': 'BYU', 'Western Michigan Broncos': 'WMU', 'Western Michigan': 'WMU', 'Miami (OH) RedHawks': 'MOH', 'Miami RedHawks': 'MOH', 'Miami (OH)': 'MOH', 'Villanova Wildcats': 'VIL', 'Villanova': 'VIL', 'Lehigh Mountain Hawks': 'LEH', 'Lehigh': 'LEH', 'Ohio State Buckeyes': 'OSU', 'Ohio State': 'OSU', 'Indiana Hoosiers': 'IND', 'Indiana': 'IND', 'Virginia Cavaliers': 'UVA', 'Virginia': 'UVA', 'Duke Blue Devils': 'DUK', 'Duke': 'DUK', 'Georgia Bulldogs': 'UGA', 'Georgia': 'UGA', 'Alabama Crimson Tide': 'ALA', 'Alabama': 'ALA', 'Michigan Wolverines': 'MICH', 'Michigan': 'MICH', 'Washington Huskies': 'WASH', 'Washington': 'WASH', 'Texas Longhorns': 'TEX', 'Texas': 'TEX', 'Florida State Seminoles': 'FSU', 'Florida State': 'FSU', 'Oregon Ducks': 'ORE', 'Oregon': 'ORE', 'USC Trojans': 'USC', 'USC': 'USC', 'LSU Tigers': 'LSU', 'LSU': 'LSU', 'Clemson Tigers': 'CLEM', 'Clemson': 'CLEM', 'Notre Dame Fighting Irish': 'ND', 'Notre Dame': 'ND', 'Oklahoma Sooners': 'OKL', 'Oklahoma': 'OKL', 'Penn State Nittany Lions': 'PSU', 'Penn State': 'PSU', 'Tennessee Volunteers': 'TENN', 'Tennessee': 'TENN', 'Ole Miss Rebels': 'MISS', 'Ole Miss': 'MISS', 'Missouri Tigers': 'MIZZ', 'Missouri': 'MIZZ', 'Louisville Cardinals': 'LOU', 'Louisville': 'LOU', 'Kentucky Wildcats': 'UK', 'Kentucky': 'UK', 'Florida Gators': 'FLA', 'Florida': 'FLA', 'Auburn Tigers': 'AUB', 'Auburn': 'AUB', 'Arkansas Razorbacks': 'ARK', 'Arkansas': 'ARK', 'Texas A&M Aggies': 'TAMU', 'Texas A&M': 'TAMU', 'Colorado Buffaloes': 'COLO', 'Colorado': 'COLO', 'Utah Utes': 'UTAH', 'Utah': 'UTAH', 'Arizona Wildcats': 'ARIZ', 'Arizona': 'ARIZ', 'Arizona State Sun Devils': 'ASU', 'Arizona State': 'ASU', 'North Carolina Tar Heels': 'UNC', 'North Carolina': 'UNC', 'NC State Wolfpack': 'NCST', 'NC State': 'NCST', 'Miami Hurricanes': 'MIA', 'Miami': 'MIA', 'Iowa Hawkeyes': 'IOWA', 'Iowa': 'IOWA', 'Wisconsin Badgers': 'WISC', 'Wisconsin': 'WISC', 'North Dakota State Bison': 'NDSU', 'North Dakota State': 'NDSU', 'Illinois State Redbirds': 'ILST', 'Illinois State': 'ILST'
+    'Texas Tech Red Raiders': 'TTU', 'Texas Tech': 'TTU', 'BYU Cougars': 'BYU', 'BYU': 'BYU', 'Western Michigan Broncos': 'WMU', 'Western Michigan': 'WMU', 'Miami (OH) RedHawks': 'MOH', 'Miami RedHawks': 'MOH', 'Miami (OH)': 'MOH', 'Villanova Wildcats': 'VIL', 'Villanova': 'VIL', 'Lehigh Mountain Hawks': 'LEH', 'Lehigh': 'LEH', 'Ohio State Buckeyes': 'OSU', 'Ohio State': 'OSU', 'Indiana Hoosiers': 'IND', 'Indiana': 'IND', 'Virginia Cavaliers': 'UVA', 'Virginia': 'UVA', 'Duke Blue Devils': 'DUK', 'Duke': 'DUK', 'Georgia Bulldogs': 'UGA', 'Georgia': 'UGA', 'Alabama Crimson Tide': 'ALA', 'Alabama': 'ALA', 'Michigan Wolverines': 'MICH', 'Michigan': 'MICH', 'Washington Huskies': 'WASH', 'Washington': 'WASH', 'Texas Longhorns': 'TEX', 'Texas': 'TEX', 'Florida State Seminoles': 'FSU', 'Florida State': 'FSU', 'Oregon Ducks': 'ORE', 'Oregon': 'ORE', 'USC Trojans': 'USC', 'USC': 'USC', 'LSU Tigers': 'LSU', 'LSU': 'LSU', 'Clemson Tigers': 'CLEM', 'Clemson': 'CLEM', 'Notre Dame Fighting Irish': 'ND', 'Notre Dame': 'ND', 'Oklahoma Sooners': 'OKL', 'Oklahoma': 'OKL', 'Penn State Nittany Lions': 'PSU', 'Penn State': 'PSU', 'Tennessee Volunteers': 'TENN', 'Tennessee': 'TENN', 'Ole Miss Rebels': 'MISS', 'Ole Miss': 'MISS', 'Missouri Tigers': 'MIZZ', 'Missouri': 'MIZZ', 'Louisville Cardinals': 'LOU', 'Louisville': 'LOU', 'Kentucky Wildcats': 'UK', 'Kentucky': 'UK', 'Florida Gators': 'FLA', 'Florida': 'FLA', 'Auburn Tigers': 'AUB', 'Auburn': 'AUB', 'Arkansas Razorbacks': 'ARK', 'Arkansas': 'ARK', 'Texas A&M Aggies': 'TAMU', 'Texas A&M': 'TAMU', 'Colorado Buffaloes': 'COLO', 'Colorado': 'COLO', 'Utah Utes': 'UTAH', 'Utah': 'UTAH', 'Arizona Wildcats': 'ARIZ', 'Arizona': 'ARIZ', 'Arizona State Sun Devils': 'ASU', 'Arizona State': 'ASU', 'North Carolina Tar Heels': 'UNC', 'North Carolina': 'UNC', 'NC State Wolfpack': 'NCST', 'NC State': 'NCST', 'Miami Hurricanes': 'MIA', 'Miami': 'MIA', 'Iowa Hawkeyes': 'IOWA', 'Iowa': 'IOWA', 'Wisconsin Badgers': 'WISC', 'Wisconsin': 'WISC', 'North Dakota State Bison': 'NDSU', 'North Dakota State': 'NDSU', 'Illinois State Redbirds': 'ILST', 'Illinois State': 'ILST',
+    // NCAAB
+    'Kansas Jayhawks': 'KU', 'Kansas': 'KU', 'UConn Huskies': 'UCONN', 'UConn': 'UCONN', 'Houston Cougars': 'HOU', 'Houston': 'HOU', 'Purdue Boilermakers': 'PUR', 'Purdue': 'PUR', 'Creighton Bluejays': 'CREI', 'Creighton': 'CREI', 'Marquette Golden Eagles': 'MARQ', 'Marquette': 'MARQ', 'Illinois Fighting Illini': 'ILL', 'Illinois': 'ILL', 'Baylor Bears': 'BAY', 'Baylor': 'BAY'
 };
 
 // ==========================================
@@ -236,33 +239,43 @@ const SportFilter = ({ selected, options, onChange }) => {
                 <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
             </button>
             {isOpen && (
-                <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-                    <div className="p-2 space-y-1">
-                        <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
-                        {options.map(opt => {
-                            const isSelected = selected.includes(opt.key);
-                            return (
+                <div className="absolute top-full left-0 mt-2 w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-3">
+                        <div className="flex justify-between items-center mb-2 px-1">
+                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
+                            {selected.length > 0 && (
                                 <button 
-                                    key={opt.key}
-                                    onClick={() => {
-                                        if (isSelected) onChange(selected.filter(s => s !== opt.key));
-                                        else onChange([...selected, opt.key]);
-                                    }}
-                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                    onClick={() => onChange([])}
+                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1"
                                 >
-                                    {opt.title}
-                                    {isSelected && <Check size={14} className="text-blue-600"/>}
+                                    <XCircle size={12}/> Clear
                                 </button>
-                            );
-                        })}
-                        {selected.length > 0 && (
-                             <button 
-                                onClick={() => onChange([])}
-                                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-rose-500 hover:bg-rose-50 flex items-center gap-2 mt-1 border-t border-slate-50"
-                            >
-                                <XCircle size={14}/> Clear Selection
-                            </button>
-                        )}
+                            )}
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 max-h-[60vh] overflow-y-auto p-1 custom-scrollbar">
+                            {options.map(opt => {
+                                const isSelected = selected.includes(opt.key);
+                                const isIntegrated = !!opt.kalshiSeries;
+                                return (
+                                    <button
+                                        key={opt.key}
+                                        onClick={() => {
+                                            if (isSelected) onChange(selected.filter(s => s !== opt.key));
+                                            else onChange([...selected, opt.key]);
+                                        }}
+                                        className={`text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all border ${
+                                            isSelected
+                                                ? 'bg-blue-50 border-blue-200 text-blue-700'
+                                                : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+                                        } ${isIntegrated ? 'font-bold' : 'font-normal'}`}
+                                        title={isIntegrated ? "Integrated with Kalshi" : "Odds Only"}
+                                    >
+                                        <span className="truncate mr-2">{opt.title}</span>
+                                        {isSelected && <Check size={14} className="text-blue-600 flex-shrink-0"/>}
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
             )}
@@ -1536,7 +1549,7 @@ const KalshiDashboard = () => {
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
   }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
-  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSports]);
+  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport, fetchLiveOdds]);
 
   useEffect(() => {
       if (!isRunning) return;
