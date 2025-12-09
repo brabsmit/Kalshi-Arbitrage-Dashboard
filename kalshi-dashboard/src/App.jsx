@@ -203,6 +203,65 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
 // 3. SUB-COMPONENTS
 // ==========================================
 
+const SportFilter = ({ selected, options, onChange }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (containerRef.current && !containerRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    return (
+        <div className="relative" ref={containerRef}>
+            <button 
+                onClick={() => setIsOpen(!isOpen)} 
+                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+            >
+                <Trophy size={14} className="text-blue-500"/>
+                {selected.length === 0 ? 'Select Sports' : `${selected.length} Sport${selected.length > 1 ? 's' : ''}`}
+                <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
+            </button>
+            {isOpen && (
+                <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="p-2 space-y-1">
+                        <div className="px-3 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
+                        {options.map(opt => {
+                            const isSelected = selected.includes(opt.key);
+                            return (
+                                <button 
+                                    key={opt.key}
+                                    onClick={() => {
+                                        if (isSelected) onChange(selected.filter(s => s !== opt.key));
+                                        else onChange([...selected, opt.key]);
+                                    }}
+                                    className={`w-full text-left px-3 py-2 rounded-lg text-xs font-bold flex items-center justify-between transition-colors ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'}`}
+                                >
+                                    {opt.title}
+                                    {isSelected && <Check size={14} className="text-blue-600"/>}
+                                </button>
+                            );
+                        })}
+                        {selected.length > 0 && (
+                             <button 
+                                onClick={() => onChange([])}
+                                className="w-full text-left px-3 py-2 rounded-lg text-xs font-bold text-rose-500 hover:bg-rose-50 flex items-center gap-2 mt-1 border-t border-slate-50"
+                            >
+                                <XCircle size={14}/> Clear Selection
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const CancellationModal = ({ isOpen, progress }) => {
     if (!isOpen) return null;
     const percentage = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
@@ -417,12 +476,6 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                         <div>
                             <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
                             <input type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
-                        </div>
-                        <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Sport</label>
-                            <select value={config.selectedSport} onChange={e => setConfig({...config, selectedSport: e.target.value})} className="w-full p-2 border rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                                {sportsList.map(s => <option key={s.key} value={s.key}>{s.title}</option>)}
-                            </select>
                         </div>
                     </div>
 
@@ -1258,7 +1311,7 @@ const KalshiDashboard = () => {
       isAutoBid: false,
       isAutoClose: true,
       holdStrategy: 'sell_limit',
-      selectedSport: 'americanfootball_nfl',
+      selectedSports: ['americanfootball_nfl'],
       isTurboMode: false
   });
 
@@ -1318,29 +1371,46 @@ const KalshiDashboard = () => {
 
       try {
           setErrorMsg('');
-          const activeSportConfig = sportsList.find(s => s.key === config.selectedSport);
-          const seriesTicker = activeSportConfig?.kalshiSeries || '';
           
-          const [oddsRes, kalshiData] = await Promise.all([
-              fetch(`https://api.the-odds-api.com/v4/sports/${config.selectedSport}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
-              fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
-          ]);
-
-          const used = oddsRes.headers.get('x-requests-used');
-          const remaining = oddsRes.headers.get('x-requests-remaining');
-          if (used && remaining) {
-              setApiUsage({ used: parseInt(used), remaining: parseInt(remaining) });
+          const selectedSportsList = sportsList.filter(s => config.selectedSports.includes(s.key));
+          if (selectedSportsList.length === 0) {
+              setMarkets([]);
+              return;
           }
 
-          const oddsData = await oddsRes.json();
+          const requests = selectedSportsList.map(async (sportConfig) => {
+               const seriesTicker = sportConfig.kalshiSeries || '';
+               const [oddsRes, kalshiMarkets] = await Promise.all([
+                  fetch(`https://api.the-odds-api.com/v4/sports/${sportConfig.key}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
+                  fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
+               ]);
+               
+               const used = oddsRes.headers.get('x-requests-used');
+               const remaining = oddsRes.headers.get('x-requests-remaining');
+
+               const oddsData = await oddsRes.json();
+               if (!Array.isArray(oddsData)) throw new Error(oddsData.message || `API Error for ${sportConfig.key}`);
+               
+               return { oddsData, kalshiMarkets, seriesTicker, apiUsage: (used && remaining) ? { used: parseInt(used), remaining: parseInt(remaining) } : null };
+          });
+
+          const results = await Promise.all(requests);
+          
+          // Update API usage from the last successful request
+          const lastUsage = results.find(r => r.apiUsage)?.apiUsage;
+          if (lastUsage) setApiUsage(lastUsage);
 
           lastFetchTimeRef.current = Date.now();
           setLastUpdated(new Date());
 
-          if (!Array.isArray(oddsData)) throw new Error(oddsData.message || "API Error");
+          // Flatten results
+          const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiMarkets: r.kalshiMarkets, _seriesTicker: r.seriesTicker })));
 
           setMarkets(prev => {
-              const processed = oddsData.slice(0, 20).map(game => {
+              const processed = allOddsData.slice(0, 50).map(game => {
+                  const kalshiData = game._kalshiMarkets;
+                  const seriesTicker = game._seriesTicker;
+
                   const bookmakers = game.bookmakers || [];
                   if (bookmakers.length === 0) return null;
 
@@ -1438,7 +1508,7 @@ const KalshiDashboard = () => {
               return processed;
           });
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
-  }, [oddsApiKey, config.selectedSport, config.isTurboMode, sportsList]);
+  }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
   useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport, fetchLiveOdds]);
 
@@ -1823,9 +1893,6 @@ const KalshiDashboard = () => {
               const history = tradeHistory[pos.marketId];
               if (!history) continue;
 
-              // Check 2: Must be opened in this session
-              if (sessionStart && history.orderPlacedAt < sessionStart) continue;
-              
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
               const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
@@ -1989,7 +2056,10 @@ const KalshiDashboard = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[800px]">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
+                    <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
+                </div>
                 <div className="flex gap-2">
                     <button onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
                     <button onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
