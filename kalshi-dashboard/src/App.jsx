@@ -1823,9 +1823,6 @@ const KalshiDashboard = () => {
               const history = tradeHistory[pos.marketId];
               if (!history) continue;
 
-              // Check 2: Must be opened in this session
-              if (sessionStart && history.orderPlacedAt < sessionStart) continue;
-              
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
               const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
