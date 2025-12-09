@@ -77,10 +77,19 @@ def test_portfolio_history(authenticated_page, mock_api):
 
 def test_strategy_configuration(authenticated_page, mock_api):
     """Test that strategy settings can be updated."""
-    # Change Margin
+    # Open Settings
+    authenticated_page.get_by_role("button", name="Settings").click()
+
+    # Change Auto-Bid Margin (First Slider)
     margin_input = authenticated_page.locator("input[type='range']").first
     margin_input.fill("20")
+    # The text usually follows the slider, checking for existence of 20%
     expect(authenticated_page.get_by_text("20%")).to_be_visible()
+
+    # Change Auto-Close Margin (Second Slider) - Test Negative Value
+    auto_close_input = authenticated_page.locator("input[type='range']").nth(1)
+    auto_close_input.fill("-5")
+    expect(authenticated_page.get_by_text("-5%")).to_be_visible()
 
     # Change Trade Size
     trade_size_input = authenticated_page.locator("input[type='number']").first
