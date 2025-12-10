@@ -1609,13 +1609,14 @@ const KalshiDashboard = () => {
 
   useEffect(() => {
       if (!isRunning || !walletKeys || !isForgeReady) return;
-      const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + '/kalshi-ws';
+
+      const ts = Date.now();
+      const sig = signRequest(walletKeys.privateKey, "GET", "/trade-api/ws/v2", ts);
+      const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + `/kalshi-ws?key=${walletKeys.keyId}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
+
       const ws = new WebSocket(wsUrl);
       ws.onopen = () => {
           setWsStatus('OPEN');
-          const ts = Date.now();
-          const sig = signRequest(walletKeys.privateKey, "GET", "/users/current/user", ts);
-          ws.send(JSON.stringify({ id: 1, cmd: "connect", params: { key: walletKeys.keyId, signature: sig, timestamp: ts } }));
       };
       ws.onmessage = (e) => {
           const d = JSON.parse(e.data);
