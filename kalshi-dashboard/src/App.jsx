@@ -1366,17 +1366,32 @@ const KalshiDashboard = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
 
-  const [config, setConfig] = useState({
-      marginPercent: 15,
-      autoCloseMarginPercent: 15,
-      tradeSize: 10,
-      maxPositions: 5,
-      isAutoBid: false,
-      isAutoClose: true,
-      holdStrategy: 'sell_limit',
-      selectedSports: ['americanfootball_nfl'],
-      isTurboMode: false
+  const [config, setConfig] = useState(() => {
+      const saved = localStorage.getItem('kalshi_config');
+      const initial = {
+          marginPercent: 15,
+          autoCloseMarginPercent: 15,
+          tradeSize: 10,
+          maxPositions: 5,
+          isAutoBid: false,
+          isAutoClose: true,
+          holdStrategy: 'sell_limit',
+          selectedSports: ['americanfootball_nfl'],
+          isTurboMode: false
+      };
+      if (saved) {
+          try {
+              return { ...initial, ...JSON.parse(saved) };
+          } catch (e) {
+              console.error("Failed to load config", e);
+          }
+      }
+      return initial;
   });
+
+  useEffect(() => {
+      localStorage.setItem('kalshi_config', JSON.stringify(config));
+  }, [config]);
 
   const [sportsList, setSportsList] = useState(SPORT_MAPPING);
   const [isLoadingSports, setIsLoadingSports] = useState(false);
