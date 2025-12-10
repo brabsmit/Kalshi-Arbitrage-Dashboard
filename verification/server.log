@@ -1,0 +1,86 @@
+
+> kalshi-dashboard@1.0.0 dev
+> vite
+
+
+  VITE v4.5.14  ready in 548 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://192.168.0.2:3000/
+(node:3491) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+11:57:28 AM [vite] hmr update /src/App.jsx, /src/index.css
+11:59:56 AM [vite] hmr update /src/App.jsx, /src/index.css
+12:08:36 PM [vite] hmr update /src/App.jsx, /src/index.css
+/app/kalshi-dashboard/src/App.jsx: Unexpected token (1634:0)
+
+  1632 |       return () => ws.close();
+  1633 |   }, [isRunning, walletKeys, isForgeReady]);
+> 1634 |
+       | ^
+12:08:46 PM [vite] Internal server error: /app/kalshi-dashboard/src/App.jsx: Unexpected token (1634:0)
+
+  1632 |       return () => ws.close();
+  1633 |   }, [isRunning, walletKeys, isForgeReady]);
+> 1634 |
+       | ^
+  Plugin: vite:react-babel
+  File: /app/kalshi-dashboard/src/App.jsx:1634:0
+  1631|        wsRef.current = ws;
+  1632|        return () => ws.close();
+  1633|    }, [isRunning, walletKeys, isForgeReady]);
+     |                                               ^
+  1634|
+      at constructor (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:367:19)
+      at JSXParserMixin.raise (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:6624:19)
+      at JSXParserMixin.unexpected (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:6644:16)
+      at JSXParserMixin.parseExprAtom (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11508:22)
+      at JSXParserMixin.parseExprAtom (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:4793:20)
+      at JSXParserMixin.parseExprSubscripts (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11145:23)
+      at JSXParserMixin.parseUpdate (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11130:21)
+      at JSXParserMixin.parseMaybeUnary (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11110:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10963:61)
+      at JSXParserMixin.parseExprOps (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10968:23)
+      at JSXParserMixin.parseMaybeConditional (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10945:23)
+      at JSXParserMixin.parseMaybeAssign (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10895:21)
+      at JSXParserMixin.parseExpressionBase (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10848:23)
+      at /app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10844:39
+      at JSXParserMixin.allowInAnd (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12495:16)
+      at JSXParserMixin.parseExpression (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10844:17)
+      at JSXParserMixin.parseStatementContent (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12971:23)
+      at JSXParserMixin.parseStatementLike (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12843:17)
+      at JSXParserMixin.parseStatementListItem (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12823:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13392:61)
+      at JSXParserMixin.parseBlockBody (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13385:10)
+      at JSXParserMixin.parseBlock (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13373:10)
+      at JSXParserMixin.parseFunctionBody (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12174:24)
+      at JSXParserMixin.parseArrowExpression (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12149:10)
+      at JSXParserMixin.parseParenAndDistinguishExpression (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11759:12)
+      at JSXParserMixin.parseExprAtom (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11395:23)
+      at JSXParserMixin.parseExprAtom (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:4793:20)
+      at JSXParserMixin.parseExprSubscripts (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11145:23)
+      at JSXParserMixin.parseUpdate (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11130:21)
+      at JSXParserMixin.parseMaybeUnary (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:11110:23)
+      at JSXParserMixin.parseMaybeUnaryOrPrivate (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10963:61)
+      at JSXParserMixin.parseExprOps (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10968:23)
+      at JSXParserMixin.parseMaybeConditional (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10945:23)
+      at JSXParserMixin.parseMaybeAssign (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10895:21)
+      at /app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10864:39
+      at JSXParserMixin.allowInAnd (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12495:16)
+      at JSXParserMixin.parseMaybeAssignAllowIn (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:10864:17)
+      at JSXParserMixin.parseVar (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13460:91)
+      at JSXParserMixin.parseVarStatement (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13306:10)
+      at JSXParserMixin.parseStatementContent (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12927:23)
+      at JSXParserMixin.parseStatementLike (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12843:17)
+      at JSXParserMixin.parseModuleItem (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12820:17)
+      at JSXParserMixin.parseBlockOrModuleBlockBody (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13392:36)
+      at JSXParserMixin.parseBlockBody (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:13385:10)
+      at JSXParserMixin.parseProgram (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12698:10)
+      at JSXParserMixin.parseTopLevel (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:12688:25)
+      at JSXParserMixin.parse (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:14568:25)
+      at parse (/app/kalshi-dashboard/node_modules/@babel/parser/lib/index.js:14602:38)
+      at parser (/app/kalshi-dashboard/node_modules/@babel/core/lib/parser/index.js:41:34)
+      at parser.next (<anonymous>)
+12:10:02 PM [vite] hmr update /src/App.jsx, /src/index.css
+12:10:23 PM [vite] hmr update /src/App.jsx, /src/index.css
+12:11:36 PM [vite] hmr update /src/App.jsx, /src/index.css

@@ -1069,7 +1069,10 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
                     {market.volatility > 1.0 && <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider flex justify-center items-center gap-1"><Activity size={8}/> Volatile</div>}
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className="font-mono text-slate-500">{market.bestBid}¢ / {market.bestAsk}¢</div>
+                    <div className="font-mono text-slate-500 flex items-center justify-center gap-1">
+                        {market.usingWs && <Zap size={12} className="text-amber-500" title="Live WebSocket Data" />}
+                        {market.bestBid}¢ / {market.bestAsk}¢
+                    </div>
                     <LatencyDisplay timestamp={market.kalshiLastUpdate} />
                 </td>
                 <td className="px-4 py-3 text-right text-slate-400">{market.maxWillingToPay}¢</td>
@@ -1552,6 +1555,24 @@ const KalshiDashboard = () => {
                   const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
 
+                  // --- WEBSOCKET PRIORITY LOGIC ---
+                  let isWsActive = false;
+                  let wsBestBid = 0;
+                  let wsBestAsk = 0;
+                  let wsLastTimestamp = 0;
+
+                  if (prevMarket && prevMarket.usingWs) {
+                      const isConnected = wsStatus === 'OPEN';
+                      const isFresh = (Date.now() - (prevMarket.lastWsTimestamp || 0)) < 15000; // 15s threshold
+
+                      if (isConnected && isFresh) {
+                          isWsActive = true;
+                          wsBestBid = prevMarket.bestBid;
+                          wsBestAsk = prevMarket.bestAsk;
+                          wsLastTimestamp = prevMarket.lastWsTimestamp;
+                      }
+                  }
+
                   // --- VOLATILITY TRACKING ---
                   const now = Date.now();
                   const currentVal = vigFreeProb * 100;
@@ -1564,6 +1585,12 @@ const KalshiDashboard = () => {
                   // ---------------------------
                   
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
+
+                  // Prioritize WS data if active
+                  if (isWsActive) {
+                      bestBid = wsBestBid;
+                      bestAsk = wsBestAsk;
+                  }
 
                   return {
                       id: game.id,
@@ -1582,7 +1609,7 @@ const KalshiDashboard = () => {
                       volume: volume || 0,
                       openInterest: openInterest || 0,
                       lastChange: Date.now(),
-                      kalshiLastUpdate: Date.now(),
+                      kalshiLastUpdate: isWsActive ? wsLastTimestamp : Date.now(),
                       oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100), 
                       history: history,
@@ -1590,7 +1617,9 @@ const KalshiDashboard = () => {
                       bookmakerCount: vigFreeProbs.length,
                       oddsSpread: spread,
                       oddsSources: vigFreeProbs.map(v => v.source),
-                      isInverse: realMatch?.isInverse || false
+                      isInverse: realMatch?.isInverse || false,
+                      usingWs: isWsActive,
+                      lastWsTimestamp: wsLastTimestamp
                   };
               }).filter(Boolean);
               
@@ -1628,7 +1657,9 @@ const KalshiDashboard = () => {
                       bestBid: d.msg.yes_bid,
                       bestAsk: d.msg.yes_ask,
                       lastChange: Date.now(),
-                      kalshiLastUpdate: Date.now()
+                      kalshiLastUpdate: Date.now(),
+                      usingWs: true,
+                      lastWsTimestamp: Date.now()
                   };
                   return m;
               }));
