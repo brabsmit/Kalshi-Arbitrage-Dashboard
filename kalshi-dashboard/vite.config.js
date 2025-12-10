@@ -28,11 +28,25 @@ export default defineConfig({
         },
       },
       '/kalshi-ws': {
-        target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL.replace('https', 'wss')}/trade-api/v2/ws` : 'wss://api.elections.kalshi.com/trade-api/v2/ws',
+        target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL.replace('https', 'wss')}/trade-api/ws/v2` : 'wss://api.elections.kalshi.com/trade-api/ws/v2',
         ws: true,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
         secure: false,
+        configure: (proxy, _options) => {
+          proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+            const url = new URL(req.url, 'http://localhost');
+            const key = url.searchParams.get('key');
+            const sig = url.searchParams.get('sig');
+            const ts = url.searchParams.get('ts');
+
+            if (key && sig && ts) {
+              proxyReq.setHeader('KALSHI-ACCESS-KEY', key);
+              proxyReq.setHeader('KALSHI-ACCESS-SIGNATURE', sig);
+              proxyReq.setHeader('KALSHI-ACCESS-TIMESTAMP', ts);
+            }
+          });
+        },
       }
     },
   },
