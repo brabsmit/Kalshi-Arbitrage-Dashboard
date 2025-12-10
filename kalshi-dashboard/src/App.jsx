@@ -31,6 +31,7 @@ const useForge = () => {
 
 const REFRESH_COOLDOWN = 10000; 
 const WS_RECONNECT_INTERVAL = 3000;
+const STALE_DATA_THRESHOLD = 30000; // 30 seconds
 
 // ==========================================
 // 2. UTILITY & HELPER FUNCTIONS
@@ -1913,6 +1914,22 @@ const KalshiDashboard = () => {
                     if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
                     continue;
                 }
+
+                // --- STALE DATA PROTECTION ---
+                const isStale = (Date.now() - m.oddsLastUpdate) > STALE_DATA_THRESHOLD;
+                if (isStale) {
+                    // Check if we have an active order to cancel
+                    const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
+                    if (existingOrder) {
+                        console.log(`[AUTO-BID] Cancelling order ${m.realMarketId} due to stale data (${formatDuration(Date.now() - m.oddsLastUpdate)} old)`);
+                        addLog(`Cancelling bid ${m.realMarketId}: Data stale`, 'CANCEL');
+                        autoBidTracker.current.add(m.realMarketId);
+                        await cancelOrder(existingOrder.id, true);
+                        await new Promise(r => setTimeout(r, 200));
+                    }
+                    continue; // Skip bidding on stale data
+                }
+                // -----------------------------
 
                 const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
 
