@@ -16,7 +16,7 @@ const useForge = () => {
     }
 
     const script = document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/forge/1.3.1/forge.min.js";
+    script.src = "/libs/forge.min.js";
     script.async = true;
     script.onload = () => setIsReady(true);
     document.body.appendChild(script);
@@ -1549,13 +1549,6 @@ const KalshiDashboard = () => {
                   
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
 
-                  // Logic to preserve WS price updates if they are newer?
-                  // Currently we overwrite with REST poll data to ensure consistency if WS drops.
-                  // if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
-                  //    bestBid = prevMarket.bestBid;
-                  //    bestAsk = prevMarket.bestAsk;
-                  // }
-
                   return {
                       id: game.id,
                       event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
@@ -1580,7 +1573,8 @@ const KalshiDashboard = () => {
                       volatility: volatility,
                       bookmakerCount: vigFreeProbs.length,
                       oddsSpread: spread,
-                      oddsSources: vigFreeProbs.map(v => v.source)
+                      oddsSources: vigFreeProbs.map(v => v.source),
+                      isInverse: realMatch?.isInverse || false
                   };
               }).filter(Boolean);
               
@@ -1747,6 +1741,12 @@ const KalshiDashboard = () => {
       const ticker = isSell ? marketOrTicker : marketOrTicker.realMarketId;
       const qty = qtyOverride || config.tradeSize;
       
+      // Determine side for order
+      let side = 'yes';
+      if (!isSell && marketOrTicker.isInverse) {
+          side = 'no';
+      }
+
       if (source !== 'manual') {
           setActiveAction({ type: isSell ? 'CLOSE' : 'BID', ticker, price });
           setTimeout(() => setActiveAction(null), 3000);
@@ -1754,18 +1754,23 @@ const KalshiDashboard = () => {
 
       try {
           const ts = Date.now();
-          // For sell orders (auto-close), we use limit order at 1 cent to ensure execution at best bid
-          // This avoids the "missing price" error and guarantees a fill if any bid exists >= 1 cent.
           const effectivePrice = isSell ? (price || 1) : price;
 
-          const body = JSON.stringify({
+          const orderParams = {
               action: isSell ? 'sell' : 'buy',
               ticker,
               count: qty,
               type: 'limit',
-              side: 'yes',
-              yes_price: effectivePrice
-          });
+              side: side,
+          };
+
+          if (side === 'yes') {
+              orderParams.yes_price = effectivePrice;
+          } else {
+              orderParams.no_price = effectivePrice;
+          }
+
+          const body = JSON.stringify(orderParams);
           const sig = signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
           
           const res = await fetch('/api/kalshi/portfolio/orders', {
@@ -1781,7 +1786,7 @@ const KalshiDashboard = () => {
              addLog(`Closing position on ${ticker} (Qty: ${qty})`, 'CLOSE');
           } else {
              const mktId = marketOrTicker.realMarketId || marketOrTicker.id;
-             addLog(`Placed bid on ${mktId} @ ${price}¢ (Qty: ${qty})`, 'BID');
+             addLog(`Placed bid on ${mktId} @ ${price}¢ (Qty: ${qty}) [Side: ${side}]`, 'BID');
           }
 
           if (!isSell) {
