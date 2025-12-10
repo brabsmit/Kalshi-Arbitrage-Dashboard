@@ -1998,9 +1998,10 @@ const KalshiDashboard = () => {
               const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
 
               if (currentBid >= target) {
-                  console.log(`[AUTO-CLOSE] ${pos.marketId}: ${currentBid} >= ${target}`);
+                  const limitPrice = Math.max(1, Math.ceil(target));
+                  console.log(`[AUTO-CLOSE] ${pos.marketId}: Bid ${currentBid} >= Target ${target.toFixed(2)}. Placing limit sell @ ${limitPrice}`);
                   closingTracker.current.add(pos.marketId);
-                  await executeOrder(pos.marketId, 0, true, pos.quantity, 'auto');
+                  await executeOrder(pos.marketId, limitPrice, true, pos.quantity, 'auto');
                   await new Promise(r => setTimeout(r, 200)); // Delay
               }
           }
