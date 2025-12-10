@@ -1548,10 +1548,13 @@ const KalshiDashboard = () => {
                   // ---------------------------
                   
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
-                  if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
-                      bestBid = prevMarket.bestBid;
-                      bestAsk = prevMarket.bestAsk;
-                  }
+
+                  // Logic to preserve WS price updates if they are newer?
+                  // Currently we overwrite with REST poll data to ensure consistency if WS drops.
+                  // if (prevMarket && prevMarket.realMarketId === realMatch?.ticker) {
+                  //    bestBid = prevMarket.bestBid;
+                  //    bestAsk = prevMarket.bestAsk;
+                  // }
 
                   return {
                       id: game.id,
