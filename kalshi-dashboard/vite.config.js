@@ -35,6 +35,10 @@ export default defineConfig({
         secure: false,
         configure: (proxy, _options) => {
           proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+            // FIX: Set Origin header for WS to satisfy WAF
+            const origin = process.env.KALSHI_API_URL || 'https://api.elections.kalshi.com';
+            proxyReq.setHeader('Origin', origin);
+
             const url = new URL(req.url, 'http://localhost');
             const key = url.searchParams.get('key');
             const sig = url.searchParams.get('sig');
