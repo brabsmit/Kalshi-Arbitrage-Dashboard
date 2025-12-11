@@ -9,6 +9,7 @@ export const SPORT_MAPPING = [
     { key: 'americanfootball_ncaaf', title: 'Football (NCAAF)', kalshiSeries: 'KXNCAAFGAME' },
     { key: 'basketball_ncaab', title: 'Basketball (NCAAB)', kalshiSeries: 'KXNCAAMBGAME' },
     { key: 'cricket_test_match', title: 'Cricket (Test)', kalshiSeries: 'KXCRICKETTESTMATCH' },
+    { key: 'basketball_wncaab', title: 'Basketball (NCAAW)', kalshiSeries: 'KXNCAAWBGAME' },
 ];
 
 export const TEAM_ABBR = {
