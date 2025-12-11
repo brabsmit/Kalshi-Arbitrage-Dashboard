@@ -402,8 +402,10 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
     const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
     const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
 
-    const winCount = historyItems.filter(p => (p.realizedPnl || 0) > 0).length;
-    const totalSettled = historyItems.length;
+    // WIN RATE: Calculated only on AUTO-BID positions
+    const autoBidHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
+    const winCount = autoBidHistory.filter(p => (p.realizedPnl || 0) > 0).length;
+    const totalSettled = autoBidHistory.length;
     const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
 
     // --- T-STATISTIC CALCULATION ---
@@ -2054,7 +2056,8 @@ const KalshiDashboard = () => {
                   vigFreeProb: marketOrTicker.vigFreeProb,
                   fairValue: marketOrTicker.fairValue, bidPrice: price,
                   bookmakerCount: marketOrTicker.bookmakerCount,
-                  oddsSpread: marketOrTicker.oddsSpread
+                  oddsSpread: marketOrTicker.oddsSpread,
+                  source: source
               }}));
           }
           fetchPortfolio();
@@ -2390,7 +2393,7 @@ const KalshiDashboard = () => {
           return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
       }
       if (activeTab === 'history') {
-          return !p.isOrder && ((p.settlementStatus && p.settlementStatus !== 'unsettled') || p.quantity === 0);
+          return !p.isOrder && ((p.settlementStatus && p.settlementStatus !== 'unsettled') || p.quantity === 0) && tradeHistory[p.marketId]?.source === 'auto';
       }
       return false;
   });
