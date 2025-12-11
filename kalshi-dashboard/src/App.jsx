@@ -2246,12 +2246,23 @@ const KalshiDashboard = () => {
               const history = tradeHistory[pos.marketId];
               if (!history) continue;
 
+              // Check 2: Safety Checks
+              if (pos.avgPrice <= 0) {
+                  console.warn(`[AUTO-CLOSE] Skipping ${pos.marketId}: Invalid avgPrice ${pos.avgPrice}`);
+                  continue;
+              }
+
               const m = markets.find(x => x.realMarketId === pos.marketId);
               const currentBid = m ? m.bestBid : 0; 
               const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
+              const limitPrice = Math.max(1, Math.ceil(target));
+
+              if (limitPrice <= pos.avgPrice) {
+                  console.warn(`[AUTO-CLOSE] Skipping ${pos.marketId}: Limit ${limitPrice} <= Cost ${pos.avgPrice}`);
+                  continue;
+              }
 
               if (currentBid >= target) {
-                  const limitPrice = Math.max(1, Math.ceil(target));
                   console.log(`[AUTO-CLOSE] ${pos.marketId}: Bid ${currentBid} >= Target ${target.toFixed(2)}. Placing limit sell @ ${limitPrice}`);
                   closingTracker.current.add(pos.marketId);
                   await executeOrder(pos.marketId, limitPrice, true, pos.quantity, 'auto');
