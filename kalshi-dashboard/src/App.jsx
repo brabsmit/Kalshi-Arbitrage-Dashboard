@@ -169,6 +169,106 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
 // 3. SUB-COMPONENTS
 // ==========================================
 
+const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
+    if (!isOpen) return null;
+
+    // Helper to calculate estimate
+    const calculateEstimate = () => {
+        if (!schedule.start || !schedule.end) return 0;
+        const [startH, startM] = schedule.start.split(':').map(Number);
+        const [endH, endM] = schedule.end.split(':').map(Number);
+
+        let startMin = startH * 60 + startM;
+        let endMin = endH * 60 + endM;
+
+        if (endMin <= startMin) endMin += 24 * 60;
+
+        const durationMinutes = endMin - startMin;
+        if (durationMinutes <= 0) return 0;
+
+        const intervalSeconds = config.isTurboMode ? 3 : 15;
+        const requestsPerMinute = 60 / intervalSeconds;
+        const numSports = config.selectedSports.length;
+
+        // Total requests = duration * requests/min * numSports
+        return Math.round(durationMinutes * requestsPerMinute * numSports);
+    };
+
+    const estimate = calculateEstimate();
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100">
+                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Clock size={18}/> Schedule Run</h3>
+                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                         <span className="font-bold text-slate-700">Enable Schedule</span>
+                         <label className="relative inline-flex items-center cursor-pointer">
+                            <input type="checkbox" checked={schedule.enabled} onChange={e => setSchedule({...schedule, enabled: e.target.checked})} className="sr-only peer"/>
+                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">Start Time</label>
+                            <input type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="w-full p-2 border rounded" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-slate-500 mb-1">End Time</label>
+                            <input type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="w-full p-2 border rounded" />
+                        </div>
+                    </div>
+
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2">Active Days</label>
+                        <div className="flex justify-between gap-1">
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                                <button
+                                    key={i}
+                                    onClick={() => {
+                                        const newDays = schedule.days.includes(i) ? schedule.days.filter(d => d !== i) : [...schedule.days, i];
+                                        setSchedule({...schedule, days: newDays});
+                                    }}
+                                    className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${schedule.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                >
+                                    {d}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
+                         <div className="text-xs font-bold text-slate-500 uppercase mb-2">Resource Estimate</div>
+                         <div className="flex justify-between items-center mb-1">
+                             <span className="text-sm text-slate-600">Selected Sports</span>
+                             <span className="font-mono font-bold">{config.selectedSports.length}</span>
+                         </div>
+                         <div className="flex justify-between items-center mb-1">
+                             <span className="text-sm text-slate-600">Update Interval</span>
+                             <span className="font-mono font-bold">{config.isTurboMode ? '3s' : '15s'}</span>
+                         </div>
+                         <div className="border-t border-slate-200 my-2 pt-2 flex justify-between items-center">
+                             <span className="text-sm font-bold text-slate-700">Estimated Tokens</span>
+                             <span className="font-mono font-bold text-blue-600">{estimate.toLocaleString()}</span>
+                         </div>
+                          <p className="text-[10px] text-slate-400 mt-1">
+                            * Based on currently selected sports and update speed. Actual usage may vary.
+                        </p>
+                    </div>
+
+                </div>
+                 <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
+                    <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800">Save</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const SportFilter = ({ selected, options, onChange }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
@@ -506,7 +606,7 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings, onOpenExport, apiUsage }) => (
+const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot</h1>
@@ -524,6 +624,9 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </div>
         </div>
         <div className="flex items-center gap-3">
+             <button onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
+                <Clock size={20} className={isScheduled ? 'animate-pulse' : ''}/>
+            </button>
              <button onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Session Reports">
                 <FileText size={20} />
             </button>
@@ -536,7 +639,25 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             <div className="bg-slate-100 px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-2 min-w-[100px] justify-end">
                 <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
             </div>
-            <button onClick={() => setIsRunning(!isRunning)} className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium text-white transition-all shadow-sm active:scale-95 ${isRunning ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}>{isRunning ? <><Pause size={18}/> Pause</> : <><Play size={18}/> Start</>}</button>
+            <button
+                onClick={() => setIsRunning(!isRunning)}
+                disabled={isScheduled}
+                className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium text-white transition-all shadow-sm active:scale-95 ${
+                    isScheduled
+                        ? 'bg-slate-300 cursor-not-allowed'
+                        : isRunning
+                            ? 'bg-amber-500 hover:bg-amber-600'
+                            : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+                title={isScheduled ? "Managed by Schedule" : ""}
+            >
+                {isScheduled
+                    ? <><Clock size={18}/> {isRunning ? 'Running' : 'Waiting'}</>
+                    : isRunning
+                        ? <><Pause size={18}/> Pause</>
+                        : <><Play size={18}/> Start</>
+                }
+            </button>
         </div>
     </header>
 );
@@ -1361,6 +1482,7 @@ const KalshiDashboard = () => {
   const [activeAction, setActiveAction] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [sessionStart, setSessionStart] = useState(null);
   const [eventLogs, setEventLogs] = useState([]);
 
@@ -1393,9 +1515,63 @@ const KalshiDashboard = () => {
       return initial;
   });
 
+  const [schedule, setSchedule] = useState(() => {
+      const saved = localStorage.getItem('kalshi_schedule');
+      return saved ? JSON.parse(saved) : { enabled: false, start: "09:00", end: "17:00", days: [1, 2, 3, 4, 5] };
+  });
+
   useEffect(() => {
       localStorage.setItem('kalshi_config', JSON.stringify(config));
   }, [config]);
+
+  useEffect(() => {
+      localStorage.setItem('kalshi_schedule', JSON.stringify(schedule));
+  }, [schedule]);
+
+  // Schedule Logic
+  useEffect(() => {
+      if (!schedule.enabled) return;
+
+      const checkSchedule = () => {
+          const now = new Date();
+          const day = now.getDay();
+
+          if (!schedule.days.includes(day)) {
+               if (isRunning) {
+                   console.log("Schedule: Stopping bot (Day mismatch)");
+                   addLog("Schedule: Stopping (Day mismatch)", "UPDATE");
+                   setIsRunning(false);
+               }
+               return;
+          }
+
+          const [startH, startM] = schedule.start.split(':').map(Number);
+          const [endH, endM] = schedule.end.split(':').map(Number);
+
+          const currentMins = now.getHours() * 60 + now.getMinutes();
+          const startMins = startH * 60 + startM;
+          const endMins = endH * 60 + endM;
+
+          // Handle overnight (e.g. 22:00 to 06:00)
+          const inWindow = endMins < startMins
+                ? (currentMins >= startMins || currentMins < endMins)
+                : (currentMins >= startMins && currentMins < endMins);
+
+          if (inWindow && !isRunning) {
+              console.log("Schedule: Starting bot");
+              addLog("Schedule: Starting session", "UPDATE");
+              setIsRunning(true);
+          } else if (!inWindow && isRunning) {
+              console.log("Schedule: Stopping bot");
+              addLog("Schedule: Stopping session", "UPDATE");
+              setIsRunning(false);
+          }
+      };
+
+      checkSchedule();
+      const interval = setInterval(checkSchedule, 10000);
+      return () => clearInterval(interval);
+  }, [schedule, isRunning]); // Depend on isRunning to allow toggling
 
   const [sportsList, setSportsList] = useState(SPORT_MAPPING);
   const [isLoadingSports, setIsLoadingSports] = useState(false);
@@ -2182,11 +2358,12 @@ const KalshiDashboard = () => {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} apiUsage={apiUsage} />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
+      <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
       <DataExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} />
 
