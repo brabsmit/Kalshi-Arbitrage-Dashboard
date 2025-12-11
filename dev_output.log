@@ -1,0 +1,10 @@
+
+> kalshi-dashboard@1.0.0 dev
+> vite
+
+
+  VITE v4.5.14  ready in 321 ms
+
+  ➜  Local:   http://localhost:3000/
+  ➜  Network: http://192.168.0.2:3000/
+11:42:01 AM [vite] hmr update /src/App.jsx, /src/index.css
