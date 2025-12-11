@@ -109,6 +109,19 @@ const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US',
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
 });
 
+const formatGameTime = (isoString) => {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+};
+
 const hasOpenExposure = (positions, marketTicker) => {
     return positions.some(p => {
         if (p.marketId !== marketTicker) return false;
@@ -1174,6 +1187,9 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
             <tr key={market.id} onClick={() => setExpanded(!expanded)} className="hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100">
                 <td className="px-4 py-3">
                     <div className="font-medium text-slate-700">{market.event}</div>
+                    <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <Clock size={10} /> {formatGameTime(market.commenceTime)}
+                    </div>
                     <div className="flex items-center gap-2 mt-1">
                         {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
                         <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
