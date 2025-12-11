@@ -1670,12 +1670,25 @@ const KalshiDashboard = () => {
       return () => ws.close();
   }, [isRunning, walletKeys, isForgeReady]);
 
+  // Memoize the list of tickers to ensure we resubscribe only when the actual market set changes,
+  // not just when markets.length changes (e.g. switching sports) or on every price tick.
+  const tickerFingerprint = useMemo(() => {
+      return markets
+          .filter(m => m.realMarketId)
+          .map(m => m.realMarketId)
+          .sort()
+          .join(',');
+  }, [markets]);
+
   useEffect(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN && markets.length) {
-          const tickers = markets.filter(m => m.realMarketId).map(m => m.realMarketId);
-          if (tickers.length) wsRef.current.send(JSON.stringify({ id: 2, cmd: "subscribe", params: { channels: ["ticker"], market_tickers: tickers } }));
+      if (wsRef.current?.readyState === WebSocket.OPEN && tickerFingerprint) {
+          const tickers = tickerFingerprint.split(',');
+          if (tickers.length) {
+             // console.log(`[WS] Subscribing to ${tickers.length} markets...`);
+             wsRef.current.send(JSON.stringify({ id: 2, cmd: "subscribe", params: { channels: ["ticker"], market_tickers: tickers } }));
+          }
       }
-  }, [markets.length, wsStatus]);
+  }, [tickerFingerprint, wsStatus]);
 
   const fetchPortfolio = useCallback(async () => {
       if (!walletKeys || !isForgeReady) return;
