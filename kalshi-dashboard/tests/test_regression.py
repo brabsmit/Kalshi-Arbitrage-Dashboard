@@ -2,12 +2,14 @@ import pytest
 import json
 import time
 import re
+from datetime import datetime
 from playwright.sync_api import expect
 
 # --- MOCK DATA GENERATORS ---
 
 def generate_odds_response(commence_time_iso):
     """Generates a The-Odds-API response with an arbitrage opportunity."""
+    now_iso = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     return [
         {
             "id": "event_123",
@@ -19,7 +21,7 @@ def generate_odds_response(commence_time_iso):
                 {
                     "key": "fanduel",
                     "title": "FanDuel",
-                    "last_update": "2023-10-26T12:00:00Z",
+                    "last_update": now_iso,
                     "markets": [
                         {
                             "key": "h2h",
@@ -33,7 +35,7 @@ def generate_odds_response(commence_time_iso):
                 {
                     "key": "draftkings",
                     "title": "DraftKings",
-                    "last_update": "2023-10-26T12:00:00Z",
+                    "last_update": now_iso,
                     "markets": [
                         {
                             "key": "h2h",
