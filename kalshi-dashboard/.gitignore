@@ -116,3 +116,7 @@ dist
 .yarn/install-state.gz
 .pnp.*
 .secrets/
+
+# Python
+__pycache__/
+.pytest_cache/
