@@ -214,7 +214,7 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Clock size={18}/> Schedule Run</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-4">
                     <div className="flex items-center justify-between">
@@ -543,7 +543,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-6">
                     <div>
@@ -639,13 +639,13 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </div>
         </div>
         <div className="flex items-center gap-3">
-             <button onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
+             <button aria-label="Run Schedule" onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
                 <Clock size={20} className={isScheduled ? 'animate-pulse' : ''}/>
             </button>
-             <button onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Session Reports">
+             <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Session Reports">
                 <FileText size={20} />
             </button>
-             <button onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Settings">
+             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Settings">
                 <Settings size={20} />
             </button>
             <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
@@ -720,7 +720,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 m-4">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800">Connect Kalshi API</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400" /></button>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400" /></button>
                 </div>
                 <div className="space-y-4">
                     {validationError && (
@@ -778,7 +778,7 @@ const AnalysisModal = ({ data, onClose }) => {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="bg-slate-900 p-4 flex justify-between items-center">
                     <div className="text-white font-bold flex items-center gap-2"><Calculator size={18} className="text-blue-400"/> Trade Analysis</div>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
+                    <button aria-label="Close" onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
                 </div>
                 <div className="p-6">
                     <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 font-mono">{data.ticker}</p></div>
@@ -988,7 +988,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                         <FileText size={20} className="text-blue-600"/> Session Reports
                     </h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="space-y-3">
                     <button onClick={downloadCSV} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
@@ -1022,7 +1022,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800">Position Details</h3>
-                    <button onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 
                 <div className="p-6">
@@ -1190,6 +1190,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                 <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                      <input
                         type="checkbox"
+                        aria-label={`Select ${market.event}`}
                         checked={isSelected}
                         onChange={() => onToggleSelect(market.id)}
                         className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
@@ -1417,11 +1418,12 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
 
                                         <td className="px-4 py-3 text-center flex justify-center gap-2">
                                             {item.isOrder && (
-                                                <button onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                                                <button aria-label="Cancel Order" onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
                                                     <XCircle size={16}/>
                                                 </button>
                                             )}
                                             <button 
+                                                aria-label="Trade Analysis"
                                                 onClick={() => onAnalysis(item)}
                                                 disabled={!history} 
                                                 className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
@@ -2481,6 +2483,7 @@ const KalshiDashboard = () => {
                             <th className="px-4 py-3 text-center w-12 bg-slate-50 z-20">
                                 <input
                                     type="checkbox"
+                                    aria-label="Select or Deselect All Markets"
                                     checked={groupedMarkets.length > 0 && groupedMarkets.every(([_, group]) => group.every(m => !deselectedMarketIds.has(m.id)))}
                                     onChange={() => toggleAllSelection(markets.map(m => m.id))}
                                     className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
