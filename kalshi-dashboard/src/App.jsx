@@ -1181,7 +1181,7 @@ const MarketExpandedDetails = ({ market }) => {
     );
 };
 
-const MarketRow = ({ market, onExecute, marginPercent, tradeSize, isSelected, onToggleSelect }) => {
+const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isSelected, onToggleSelect }) => {
     const [expanded, setExpanded] = useState(false);
 
     return (
@@ -1239,7 +1239,7 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize, isSelected, on
             )}
         </>
     );
-};
+});
 
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
@@ -1520,7 +1520,7 @@ const KalshiDashboard = () => {
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
 
-  const toggleMarketSelection = (id) => {
+  const toggleMarketSelection = useCallback((id) => {
       setDeselectedMarketIds(prev => {
           const next = new Set(prev);
           if (next.has(id)) {
@@ -1530,7 +1530,7 @@ const KalshiDashboard = () => {
           }
           return next;
       });
-  };
+  }, []);
 
   const toggleAllSelection = (visibleIds) => {
       const anyDeselected = visibleIds.some(id => deselectedMarketIds.has(id));
@@ -2026,7 +2026,7 @@ const KalshiDashboard = () => {
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
   }, [walletKeys, fetchPortfolio]);
 
-  const executeOrder = async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
+  const executeOrder = useCallback(async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
       if (!walletKeys) return setIsWalletOpen(true);
       if (!isForgeReady) return alert("Security library loading...");
       
@@ -2104,7 +2104,19 @@ const KalshiDashboard = () => {
           if (isSell) closingTracker.current.delete(ticker);
           else autoBidTracker.current.delete(ticker);
       }
-  };
+  }, [walletKeys, isForgeReady, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
+
+  const cancelOrder = useCallback(async (id, skipConfirm = false, skipRefresh = false) => {
+      if (!skipConfirm && !confirm("Cancel Order?")) return;
+      const ts = Date.now();
+      const sig = signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
+      const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
+      if (res.ok) {
+          addLog(`Canceled order ${id}`, 'CANCEL');
+      }
+      if (!skipRefresh) fetchPortfolio();
+      return res;
+  }, [walletKeys, fetchPortfolio, addLog]);
 
   useEffect(() => {
       if (!isRunning || !config.isAutoBid || !walletKeys) return;
@@ -2272,7 +2284,7 @@ const KalshiDashboard = () => {
       
       runAutoBid();
 
-  }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions, deselectedMarketIds]);
+  }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions, deselectedMarketIds, executeOrder, cancelOrder, fetchPortfolio]);
 
   useEffect(() => {
       if (!isRunning || !config.isAutoClose || !walletKeys) return;
@@ -2313,7 +2325,7 @@ const KalshiDashboard = () => {
       };
 
       runAutoClose();
-  }, [isRunning, config.isAutoClose, markets, positions]);
+  }, [isRunning, config.isAutoClose, markets, positions, executeOrder]);
 
   // --- CANCEL ALL ON STOP ---
   const isAutoBidActive = isRunning && config.isAutoBid;
@@ -2351,7 +2363,7 @@ const KalshiDashboard = () => {
           });
       }
       prevAutoBidActiveRef.current = isActive;
-  }, [isAutoBidActive, positions]);
+  }, [isAutoBidActive, positions, cancelOrder, fetchPortfolio]);
 
   const handleSort = (key) => {
       setSortConfig(current => ({
@@ -2367,17 +2379,6 @@ const KalshiDashboard = () => {
       }));
   };
 
-  const cancelOrder = async (id, skipConfirm = false, skipRefresh = false) => {
-      if (!skipConfirm && !confirm("Cancel Order?")) return;
-      const ts = Date.now();
-      const sig = signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
-      const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
-      if (res.ok) {
-          addLog(`Canceled order ${id}`, 'CANCEL');
-      }
-      if (!skipRefresh) fetchPortfolio();
-      return res;
-  };
 
   const groupedMarkets = useMemo(() => {
       const enriched = markets.map(m => {
@@ -2509,7 +2510,7 @@ const KalshiDashboard = () => {
                                     <MarketRow
                                         key={m.id}
                                         market={m}
-                                        onExecute={(mkt, price, isSell, qty) => executeOrder(mkt, price, isSell, qty, 'manual')}
+                                        onExecute={executeOrder}
                                         marginPercent={config.marginPercent}
                                         tradeSize={config.tradeSize}
                                         isSelected={!deselectedMarketIds.has(m.id)}
