@@ -1181,12 +1181,20 @@ const MarketExpandedDetails = ({ market }) => {
     );
 };
 
-const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
+const MarketRow = ({ market, onExecute, marginPercent, tradeSize, isSelected, onToggleSelect }) => {
     const [expanded, setExpanded] = useState(false);
 
     return (
         <>
-            <tr key={market.id} onClick={() => setExpanded(!expanded)} className="hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100">
+            <tr key={market.id} onClick={() => setExpanded(!expanded)} className={`hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100 ${!isSelected ? 'opacity-60 bg-slate-50' : ''}`}>
+                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                     <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => onToggleSelect(market.id)}
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                    />
+                </td>
                 <td className="px-4 py-3">
                     <div className="font-medium text-slate-700">{market.event}</div>
                     <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
@@ -1224,7 +1232,7 @@ const MarketRow = ({ market, onExecute, marginPercent, tradeSize }) => {
             </tr>
             {expanded && (
                 <tr className="bg-slate-50/50">
-                    <td colSpan={7} className="p-0">
+                    <td colSpan={8} className="p-0">
                         <MarketExpandedDetails market={market} />
                     </td>
                 </tr>
@@ -1504,11 +1512,40 @@ const KalshiDashboard = () => {
   const [sessionStart, setSessionStart] = useState(null);
   const [eventLogs, setEventLogs] = useState([]);
 
+  const [deselectedMarketIds, setDeselectedMarketIds] = useState(new Set());
+
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
 
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
+
+  const toggleMarketSelection = (id) => {
+      setDeselectedMarketIds(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) {
+              next.delete(id);
+          } else {
+              next.add(id);
+          }
+          return next;
+      });
+  };
+
+  const toggleAllSelection = (visibleIds) => {
+      const anyDeselected = visibleIds.some(id => deselectedMarketIds.has(id));
+      setDeselectedMarketIds(prev => {
+          const next = new Set(prev);
+          if (anyDeselected) {
+              // Select all visible
+              visibleIds.forEach(id => next.delete(id));
+          } else {
+              // Deselect all visible
+              visibleIds.forEach(id => next.add(id));
+          }
+          return next;
+      });
+  };
 
   const [config, setConfig] = useState(() => {
       const saved = localStorage.getItem('kalshi_config');
@@ -2147,6 +2184,7 @@ const KalshiDashboard = () => {
 
             for (const m of markets) {
                 if (!m.isMatchFound) continue;
+                if (deselectedMarketIds.has(m.id)) continue;
 
                 // Check for held position
                 if (executedHoldings.has(m.realMarketId)) {
@@ -2234,7 +2272,7 @@ const KalshiDashboard = () => {
       
       runAutoBid();
 
-  }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions]);
+  }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions, deselectedMarketIds]);
 
   useEffect(() => {
       if (!isRunning || !config.isAutoClose || !walletKeys) return;
@@ -2439,6 +2477,15 @@ const KalshiDashboard = () => {
                 <table className="w-full text-sm text-left">
                     <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
                         <tr>
+                            <th className="px-4 py-3 text-center w-12 bg-slate-50 z-20">
+                                <input
+                                    type="checkbox"
+                                    checked={groupedMarkets.length > 0 && groupedMarkets.every(([_, group]) => group.every(m => !deselectedMarketIds.has(m.id)))}
+                                    onChange={() => toggleAllSelection(markets.map(m => m.id))}
+                                    className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                                    title="Select/Deselect All"
+                                />
+                            </th>
                             <SortableHeader label="Event" sortKey="event" currentSort={sortConfig} onSort={handleSort} />
                             <SortableHeader label="Implied Fair Value" sortKey="fairValue" currentSort={sortConfig} onSort={handleSort} align="center" />
                             <SortableHeader label="Vol" sortKey="volatility" currentSort={sortConfig} onSort={handleSort} align="center" />
@@ -2452,14 +2499,22 @@ const KalshiDashboard = () => {
                         <React.Fragment key={dateKey}>
                             <tbody className="bg-slate-50 border-b border-slate-200">
                                 <tr>
-                                    <td colSpan={6} className="px-4 py-2 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <td colSpan={8} className="px-4 py-2 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
                                         <Calendar size={14} /> {dateKey}
                                     </td>
                                 </tr>
                             </tbody>
                             <tbody className="divide-y divide-slate-50">
                                 {groupMarkets.map(m => (
-                                    <MarketRow key={m.id} market={m} onExecute={(mkt, price, isSell, qty) => executeOrder(mkt, price, isSell, qty, 'manual')} marginPercent={config.marginPercent} tradeSize={config.tradeSize} />
+                                    <MarketRow
+                                        key={m.id}
+                                        market={m}
+                                        onExecute={(mkt, price, isSell, qty) => executeOrder(mkt, price, isSell, qty, 'manual')}
+                                        marginPercent={config.marginPercent}
+                                        tradeSize={config.tradeSize}
+                                        isSelected={!deselectedMarketIds.has(m.id)}
+                                        onToggleSelect={toggleMarketSelection}
+                                    />
                                 ))}
                             </tbody>
                         </React.Fragment>
