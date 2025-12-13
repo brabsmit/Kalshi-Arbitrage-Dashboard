@@ -2066,6 +2066,12 @@ const KalshiDashboard = () => {
 
           isFirstFetchRef.current = false;
 
+          // Process Active Positions
+          const activePositions = (pos.market_positions && pos.market_positions.length > 0 ? pos.market_positions : (pos.event_positions || pos.positions || [])).map(p => ({...p, _forcedStatus: 'unsettled'}));
+
+          // Process Settled Positions
+          const settledPositions = (settledPos.market_positions && settledPos.market_positions.length > 0 ? settledPos.market_positions : (settledPos.event_positions || settledPos.positions || [])).map(p => ({...p, _forcedStatus: 'settled'}));
+
           const mappedItems = [
               // ORDERS
               ...(orders.orders || []).map(o => ({
@@ -2082,10 +2088,7 @@ const KalshiDashboard = () => {
                   expiration: o.expiration_time 
               })),
               // POSITIONS
-              ...([
-                  ...(pos.market_positions && pos.market_positions.length > 0 ? pos.market_positions : (pos.event_positions || pos.positions || [])),
-                  ...(settledPos.market_positions && settledPos.market_positions.length > 0 ? settledPos.market_positions : (settledPos.event_positions || settledPos.positions || []))
-              ]).map(p => {
+              ...([...activePositions, ...settledPositions]).map(p => {
                   const ticker = p.ticker || p.market_ticker || p.event_ticker;
                   const qty = p.position || p.total_cost_shares || 0;
                   let avg = 0;
@@ -2093,8 +2096,12 @@ const KalshiDashboard = () => {
                   else if (p.total_cost && qty) avg = p.total_cost / qty;
                   else if (p.fees_paid && qty) avg = p.fees_paid / Math.abs(qty);
 
+                  const settlementStatus = p.settlement_status || p._forcedStatus;
+                  // Use unique ID for settled vs active to prevent React key collisions
+                  const uniqueId = settlementStatus === 'settled' ? `${ticker}-settled` : ticker;
+
                   return {
-                      id: ticker, 
+                      id: uniqueId,
                       marketId: ticker, 
                       side: 'Yes', 
                       quantity: Math.abs(qty), 
@@ -2103,11 +2110,17 @@ const KalshiDashboard = () => {
                       fees: Math.abs(p.fees_paid || 0),   
                       status: 'HELD', 
                       isOrder: false,
-                      settlementStatus: p.settlement_status,
+                      settlementStatus: settlementStatus,
                       realizedPnl: p.realized_pnl
                   };
               })
-          ].filter(p => {
+          ].filter((p, index, self) => {
+             // Deduplicate: If same ID and same Status, keep first.
+             if (!p.isOrder) {
+                 const firstIdx = self.findIndex(x => !x.isOrder && x.id === p.id && x.settlementStatus === p.settlementStatus);
+                 if (firstIdx !== index) return false;
+             }
+
              if (p.isOrder) return true;
              // Allow items with 0 quantity if they have PnL (history)
              if (p.quantity <= 0 && (!p.realizedPnl && !p.settlementStatus)) return false;
