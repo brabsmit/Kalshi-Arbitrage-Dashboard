@@ -155,7 +155,7 @@ const calculateStrategy = (market, marginPercent) => {
 };
 
 // --- CRYPTOGRAPHIC SIGNING ENGINE ---
-const signRequest = (privateKeyPem, method, path, timestamp) => {
+const signRequestSync = (privateKeyPem, method, path, timestamp) => {
     try {
         const forge = window.forge;
         if (!forge) throw new Error("Forge library not loaded");
@@ -175,6 +175,78 @@ const signRequest = (privateKeyPem, method, path, timestamp) => {
     } catch (e) {
         console.error("Signing failed:", e);
         throw new Error("Failed to sign request. Check your private key.");
+    }
+};
+
+let cachedCryptoKey = null;
+let cachedKeyString = null;
+
+const getCryptoKey = async (pem) => {
+    if (cachedCryptoKey && cachedKeyString === pem) return cachedCryptoKey;
+
+    const forge = window.forge;
+    if (!forge) return null;
+
+    const privateKey = forge.pki.privateKeyFromPem(pem);
+    const asn1 = forge.pki.privateKeyToAsn1(privateKey);
+    const info = forge.pki.wrapRsaPrivateKey(asn1);
+    const der = forge.asn1.toDer(info).getBytes();
+
+    const len = der.length;
+    const buf = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        buf[i] = der.charCodeAt(i);
+    }
+
+    const key = await window.crypto.subtle.importKey(
+        "pkcs8",
+        buf,
+        {
+            name: "RSA-PSS",
+            hash: "SHA-256",
+        },
+        false,
+        ["sign"]
+    );
+
+    cachedCryptoKey = key;
+    cachedKeyString = pem;
+    return key;
+};
+
+const signRequest = async (privateKeyPem, method, path, timestamp) => {
+    try {
+        if (!window.crypto || !window.crypto.subtle) throw new Error("WebCrypto not supported");
+
+        const key = await getCryptoKey(privateKeyPem);
+        if (!key) throw new Error("Failed to import key");
+
+        const encoder = new TextEncoder();
+        const cleanPath = path.split('?')[0];
+        const message = `${timestamp}${method}${cleanPath}`;
+        const data = encoder.encode(message);
+
+        const signature = await window.crypto.subtle.sign(
+            {
+                name: "RSA-PSS",
+                saltLength: 32,
+            },
+            key,
+            data
+        );
+        // console.log("SignRequest: Signed");
+
+        let binary = '';
+        const bytes = new Uint8Array(signature);
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return window.btoa(binary);
+
+    } catch (e) {
+        console.warn("Fast sign failed, falling back to sync. Reason:", e.message);
+        return signRequestSync(privateKeyPem, method, path, timestamp);
     }
 };
 
@@ -705,7 +777,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
         }
         setIsValidating(true);
         try {
-            signRequest(privateKey, "GET", "/test", Date.now());
+            await signRequest(privateKey, "GET", "/test", Date.now());
             onConnect({keyId, privateKey});
             onClose();
         } catch (e) {
@@ -1873,34 +1945,49 @@ const KalshiDashboard = () => {
   useEffect(() => {
       if (!isRunning || !walletKeys || !isForgeReady) return;
 
-      const ts = Date.now();
-      const sig = signRequest(walletKeys.privateKey, "GET", "/trade-api/ws/v2", ts);
-      const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + `/kalshi-ws?key=${walletKeys.keyId}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
+      let ws;
+      let isMounted = true;
 
-      const ws = new WebSocket(wsUrl);
-      ws.onopen = () => {
-          setWsStatus('OPEN');
+      const connect = async () => {
+          const ts = Date.now();
+          const sig = await signRequest(walletKeys.privateKey, "GET", "/trade-api/ws/v2", ts);
+          if (!isMounted) return;
+
+          const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + `/kalshi-ws?key=${walletKeys.keyId}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
+
+          ws = new WebSocket(wsUrl);
+          ws.onopen = () => {
+              if (isMounted) setWsStatus('OPEN');
+          };
+          ws.onmessage = (e) => {
+              if (!isMounted) return;
+              const d = JSON.parse(e.data);
+              if (d.type === 'ticker' && d.msg) {
+                  setMarkets(curr => curr.map(m => {
+                      if (m.realMarketId === d.msg.ticker) return {
+                          ...m,
+                          bestBid: d.msg.yes_bid,
+                          bestAsk: d.msg.yes_ask,
+                          lastChange: Date.now(),
+                          kalshiLastUpdate: Date.now(),
+                          usingWs: true,
+                          lastWsTimestamp: Date.now()
+                      };
+                      return m;
+                  }));
+              }
+          };
+          ws.onclose = () => {
+             if (isMounted) setWsStatus('CLOSED');
+          };
+          wsRef.current = ws;
       };
-      ws.onmessage = (e) => {
-          const d = JSON.parse(e.data);
-          if (d.type === 'ticker' && d.msg) {
-              setMarkets(curr => curr.map(m => {
-                  if (m.realMarketId === d.msg.ticker) return {
-                      ...m,
-                      bestBid: d.msg.yes_bid,
-                      bestAsk: d.msg.yes_ask,
-                      lastChange: Date.now(),
-                      kalshiLastUpdate: Date.now(),
-                      usingWs: true,
-                      lastWsTimestamp: Date.now()
-                  };
-                  return m;
-              }));
-          }
+
+      connect();
+      return () => {
+          isMounted = false;
+          if (ws) ws.close();
       };
-      ws.onclose = () => setWsStatus('CLOSED');
-      wsRef.current = ws;
-      return () => ws.close();
   }, [isRunning, walletKeys, isForgeReady]);
 
   // Memoize the list of tickers to ensure we resubscribe only when the actual market set changes,
@@ -1927,17 +2014,24 @@ const KalshiDashboard = () => {
       if (!walletKeys || !isForgeReady) return;
       try {
           const ts = Date.now();
-          const headers = (path) => ({ 
+          const getHeaders = async (path) => ({
               'KALSHI-ACCESS-KEY': walletKeys.keyId, 
-              'KALSHI-ACCESS-SIGNATURE': signRequest(walletKeys.privateKey, "GET", path, ts), 
+              'KALSHI-ACCESS-SIGNATURE': await signRequest(walletKeys.privateKey, "GET", path, ts),
               'KALSHI-ACCESS-TIMESTAMP': ts.toString() 
           });
 
+          const [hBal, hOrders, hPos, hSettled] = await Promise.all([
+              getHeaders('/trade-api/v2/portfolio/balance'),
+              getHeaders('/trade-api/v2/portfolio/orders'),
+              getHeaders('/trade-api/v2/portfolio/positions'),
+              getHeaders('/trade-api/v2/portfolio/positions?settlement_status=settled')
+          ]);
+
           const [balRes, ordersRes, posRes, settledPosRes] = await Promise.all([
-              fetch('/api/kalshi/portfolio/balance', { headers: headers('/trade-api/v2/portfolio/balance') }),
-              fetch('/api/kalshi/portfolio/orders', { headers: headers('/trade-api/v2/portfolio/orders') }),
-              fetch('/api/kalshi/portfolio/positions', { headers: headers('/trade-api/v2/portfolio/positions') }),
-              fetch('/api/kalshi/portfolio/positions?settlement_status=settled', { headers: headers('/trade-api/v2/portfolio/positions') })
+              fetch('/api/kalshi/portfolio/balance', { headers: hBal }),
+              fetch('/api/kalshi/portfolio/orders', { headers: hOrders }),
+              fetch('/api/kalshi/portfolio/positions', { headers: hPos }),
+              fetch('/api/kalshi/portfolio/positions?settlement_status=settled', { headers: hSettled })
           ]);
 
           if (!balRes.ok || !ordersRes.ok || !posRes.ok) {
@@ -2065,7 +2159,7 @@ const KalshiDashboard = () => {
           }
 
           const body = JSON.stringify(orderParams);
-          const sig = signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
+          const sig = await signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
           
           const res = await fetch('/api/kalshi/portfolio/orders', {
               method: 'POST', headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() },
@@ -2111,7 +2205,7 @@ const KalshiDashboard = () => {
   const cancelOrder = useCallback(async (id, skipConfirm = false, skipRefresh = false) => {
       if (!skipConfirm && !confirm("Cancel Order?")) return;
       const ts = Date.now();
-      const sig = signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
+      const sig = await signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
       const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
       if (res.ok) {
           addLog(`Canceled order ${id}`, 'CANCEL');
