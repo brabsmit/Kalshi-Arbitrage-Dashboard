@@ -220,19 +220,19 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
                     <div className="flex items-center justify-between">
                          <span className="font-bold text-slate-700">Enable Schedule</span>
                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" checked={schedule.enabled} onChange={e => setSchedule({...schedule, enabled: e.target.checked})} className="sr-only peer"/>
+                            <input type="checkbox" aria-label="Enable Schedule" checked={schedule.enabled} onChange={e => setSchedule({...schedule, enabled: e.target.checked})} className="sr-only peer"/>
                             <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">Start Time</label>
-                            <input type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="w-full p-2 border rounded" />
+                            <label htmlFor="schedule-start" className="block text-xs font-bold text-slate-500 mb-1">Start Time</label>
+                            <input id="schedule-start" type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="w-full p-2 border rounded" />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-slate-500 mb-1">End Time</label>
-                            <input type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="w-full p-2 border rounded" />
+                            <label htmlFor="schedule-end" className="block text-xs font-bold text-slate-500 mb-1">End Time</label>
+                            <input id="schedule-end" type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="w-full p-2 border rounded" />
                         </div>
                     </div>
 
@@ -548,31 +548,31 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                 <div className="p-6 space-y-6">
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Bid Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
-                        <input type="range" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <input type="range" aria-label="Auto-Bid Margin" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
                         <p className="text-[10px] text-slate-400 mt-1">Bot will bid <code>FairValue * (1 - Margin)</code></p>
                     </div>
 
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
-                        <input type="range" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <input type="range" aria-label="Auto-Close Margin" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
                         <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>AvgPrice * (1 + Margin)</code></p>
                     </div>
 
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Max Positions</span><span className="text-rose-600">{config.maxPositions}</span></div>
-                        <input type="range" min="1" max="20" value={config.maxPositions} onChange={e => setConfig({...config, maxPositions: parseInt(e.target.value)})} className="w-full accent-rose-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <input type="range" aria-label="Max Positions" min="1" max="20" value={config.maxPositions} onChange={e => setConfig({...config, maxPositions: parseInt(e.target.value)})} className="w-full accent-rose-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
-                            <input type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                            <label htmlFor="trade-size" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
+                            <input id="trade-size" type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
                         </div>
                     </div>
 
                     <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label>
-                        <input type="password" value={oddsApiKey} onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        <label htmlFor="odds-api-key" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label>
+                        <input id="odds-api-key" type="password" value={oddsApiKey} onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
                     </div>
                 </div>
                 <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
@@ -588,7 +588,7 @@ const ActionToast = ({ action }) => {
     const isBid = action.type === 'BID';
     
     return (
-        <div className="fixed bottom-6 right-6 bg-slate-900 text-white p-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300 z-50 max-w-sm border border-slate-700/50">
+        <div role="status" aria-live="polite" className="fixed bottom-6 right-6 bg-slate-900 text-white p-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300 z-50 max-w-sm border border-slate-700/50">
             <div className={`p-3 rounded-full flex-shrink-0 ${isBid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                 <Bot size={24} />
             </div>
@@ -731,9 +731,9 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                     <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded">
                         Keys stored locally. Supports standard PKCS#1 keys.
                     </div>
-                    <input type="text" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded" />
+                    <input type="text" aria-label="API Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded" />
                     <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative">
-                        <input type="file" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        <input type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" />
                         {fileName ? <span className="text-emerald-600 font-bold">{fileName}</span> : <span className="text-slate-400">Upload Private Key (.key)</span>}
                     </div>
                     <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50">

@@ -40,7 +40,7 @@ def test_ux_aria_labels(authenticated_page):
     expect(page.get_by_text("Bot Configuration")).to_be_visible()
 
     # Check for Close button using accessible name
-    close_btn = page.get_by_label("Close")
+    close_btn = page.get_by_role("button", name="Close", exact=True)
     expect(close_btn).to_be_visible()
     close_btn.click()
     expect(page.get_by_text("Bot Configuration")).not_to_be_visible()
@@ -50,7 +50,7 @@ def test_ux_aria_labels(authenticated_page):
     expect(page.get_by_text("Schedule Run")).to_be_visible()
 
     # Check close button
-    page.get_by_label("Close").click()
+    page.get_by_role("button", name="Close", exact=True).click()
     expect(page.get_by_text("Schedule Run")).not_to_be_visible()
 
     # Open Export Modal
@@ -58,5 +58,30 @@ def test_ux_aria_labels(authenticated_page):
     expect(page.get_by_text("Session Reports")).to_be_visible()
 
     # Check close button
-    page.get_by_label("Close").click()
+    page.get_by_role("button", name="Close", exact=True).click()
     expect(page.get_by_text("Session Reports")).not_to_be_visible()
+
+    # 4. CHECK NEW ACCESSIBILITY ATTRIBUTES
+
+    # Open Settings Modal again to check inputs
+    page.get_by_label("Settings").click()
+
+    # Check new labels
+    expect(page.get_by_label("Auto-Bid Margin")).to_be_visible()
+    expect(page.get_by_label("Auto-Close Margin")).to_be_visible()
+    expect(page.get_by_label("Max Positions")).to_be_visible()
+
+    # Check inputs with associated labels
+    expect(page.get_by_label("Trade Size (Contracts)")).to_be_visible()
+    expect(page.get_by_label("The-Odds-API Key")).to_be_visible()
+
+    page.get_by_role("button", name="Close", exact=True).click()
+
+    # Open Schedule Modal again
+    page.get_by_label("Run Schedule").click()
+
+    expect(page.get_by_label("Enable Schedule")).to_be_visible()
+    expect(page.get_by_label("Start Time")).to_be_visible()
+    expect(page.get_by_label("End Time")).to_be_visible()
+
+    page.get_by_role("button", name="Close", exact=True).click()
