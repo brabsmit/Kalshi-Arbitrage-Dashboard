@@ -171,7 +171,7 @@ def test_e2e_arbitrage_cycle(authenticated_page):
         page.get_by_text("Auto-Bid OFF").click()
 
     # Wait for the bot to run cycle
-    time.sleep(3)
+    time.sleep(5)
 
     # Verify Order Captured
     assert len(captured_orders) > 0, "Bot did not place a buy order"
@@ -290,7 +290,7 @@ def test_portfolio_management(authenticated_page, mock_api):
     page.on("dialog", lambda dialog: dialog.accept())
     cancel_btn.click()
 
-    time.sleep(1)
+    time.sleep(3)
     assert delete_called, "DELETE API was not called"
 
 

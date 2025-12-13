@@ -2210,9 +2210,18 @@ const KalshiDashboard = () => {
           fetchPortfolio();
       } catch (e) { 
           console.error(e); 
-          if (!config.isAutoBid && !config.isAutoClose) alert(e.message);
+
           if (isSell) closingTracker.current.delete(ticker);
           else autoBidTracker.current.delete(ticker);
+
+          if (e.message && e.message.toLowerCase().includes("insufficient funds")) {
+              setIsRunning(false);
+              setErrorMsg(`CRITICAL ERROR: ${e.message} - Bot Stopped.`);
+              addLog(`Critical Error: ${e.message}`, 'ERROR');
+              throw e;
+          }
+
+          if (!config.isAutoBid && !config.isAutoClose) alert(e.message);
       }
   }, [walletKeys, isForgeReady, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
 
