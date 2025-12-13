@@ -2126,12 +2126,13 @@ const KalshiDashboard = () => {
       if (!walletKeys) return setIsWalletOpen(true);
       if (!isForgeReady) return alert("Security library loading...");
       
-      const ticker = isSell ? marketOrTicker : marketOrTicker.realMarketId;
+      const ticker = isSell ? (marketOrTicker.realMarketId || marketOrTicker) : marketOrTicker.realMarketId;
       const qty = qtyOverride || config.tradeSize;
       
       // Determine side for order
       let side = 'yes';
-      if (!isSell && marketOrTicker.isInverse) {
+      // If the market object is passed (has isInverse), use it to determine side
+      if (marketOrTicker.isInverse) {
           side = 'no';
       }
 
@@ -2387,6 +2388,7 @@ const KalshiDashboard = () => {
       
       const runAutoClose = async () => {
           const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD' && p.quantity > 0 && p.settlementStatus !== 'settled');
+          const activeSellOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase()) && p.action === 'sell');
           
           for (const pos of heldPositions) {
               if (closingTracker.current.has(pos.marketId)) continue;
@@ -2395,33 +2397,55 @@ const KalshiDashboard = () => {
               const history = tradeHistory[pos.marketId];
               if (!history) continue;
 
-              // Check 2: Safety Checks
-              if (pos.avgPrice <= 0) {
-                  console.warn(`[AUTO-CLOSE] Skipping ${pos.marketId}: Invalid avgPrice ${pos.avgPrice}`);
-                  continue;
-              }
-
+              // Find current market data
               const m = markets.find(x => x.realMarketId === pos.marketId);
-              const currentBid = m ? m.bestBid : 0; 
-              const target = pos.avgPrice * (1 + config.autoCloseMarginPercent/100);
-              const limitPrice = Math.max(1, Math.ceil(target));
+              if (!m) continue; // Cannot determine Fair Value
 
-              if (limitPrice <= pos.avgPrice) {
-                  console.warn(`[AUTO-CLOSE] Skipping ${pos.marketId}: Limit ${limitPrice} <= Cost ${pos.avgPrice}`);
-                  continue;
-              }
+              // Determine Target Price (Fair Value)
+              // If we hold 'No' (isInverse), fairValue (from Odds API) is for the Target (which is No).
+              // So m.fairValue is correct for the 'No' contract too.
+              let targetPrice = m.fairValue;
+              targetPrice = Math.max(1, targetPrice); // Safety floor
 
-              if (currentBid >= target) {
-                  console.log(`[AUTO-CLOSE] ${pos.marketId}: Bid ${currentBid} >= Target ${target.toFixed(2)}. Placing limit sell @ ${limitPrice}`);
+              // Check for existing active sell order
+              const existingOrder = activeSellOrders.find(o => o.marketId === pos.marketId);
+
+              if (existingOrder) {
+                  // If price mismatch, update it
+                  if (existingOrder.price !== targetPrice) {
+                       console.log(`[AUTO-CLOSE] Updating Sell Order ${pos.marketId}: ${existingOrder.price}¢ -> ${targetPrice}¢`);
+                       addLog(`Updating sell ${pos.marketId}: ${existingOrder.price}¢ -> ${targetPrice}¢`, 'UPDATE');
+                       closingTracker.current.add(pos.marketId);
+                       try {
+                           await cancelOrder(existingOrder.id, true);
+                           await new Promise(r => setTimeout(r, 200));
+                           await executeOrder(m, targetPrice, true, pos.quantity, 'auto');
+                           await new Promise(r => setTimeout(r, 200));
+                       } catch (e) {
+                           console.error("AutoClose Update Failed", e);
+                       } finally {
+                           closingTracker.current.delete(pos.marketId);
+                       }
+                  }
+                  // Else: Order is good (priced at Fair Value), do nothing.
+              } else {
+                  // No active order, place it
+                  console.log(`[AUTO-CLOSE] Offering ${pos.marketId} @ ${targetPrice}¢ (Fair Value)`);
                   closingTracker.current.add(pos.marketId);
-                  await executeOrder(pos.marketId, limitPrice, true, pos.quantity, 'auto');
-                  await new Promise(r => setTimeout(r, 200)); // Delay
+                  try {
+                      await executeOrder(m, targetPrice, true, pos.quantity, 'auto');
+                      await new Promise(r => setTimeout(r, 200));
+                  } catch (e) {
+                      console.error("AutoClose Placement Failed", e);
+                  } finally {
+                      closingTracker.current.delete(pos.marketId);
+                  }
               }
           }
       };
 
       runAutoClose();
-  }, [isRunning, config.isAutoClose, markets, positions, executeOrder]);
+  }, [isRunning, config.isAutoClose, markets, positions, executeOrder, tradeHistory, cancelOrder, addLog]);
 
   // --- CANCEL ALL ON STOP ---
   const isAutoBidActive = isRunning && config.isAutoBid;
