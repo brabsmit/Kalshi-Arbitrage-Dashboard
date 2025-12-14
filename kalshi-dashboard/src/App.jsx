@@ -2383,6 +2383,7 @@ const KalshiDashboard = () => {
 
             for (const m of markets) {
                 if (!m.isMatchFound) continue;
+                if (m.isInverse) continue; // Only place YES bids for simplicity
                 if (deselectedMarketIds.has(m.id)) continue;
 
                 // --- VISIBILITY SAFEGUARD ---
