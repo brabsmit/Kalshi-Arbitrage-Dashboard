@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown, LogOut } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch, TEAM_ABBR } from './utils/kalshiMatching';
 
 // ==========================================
@@ -1401,6 +1401,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                         {activeTab === 'positions' && (
                             <>
                                 <SortableHeader label="Qty" sortKey="quantity" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Mkt Price" sortKey="price" currentSort={sortConfig} onSort={onSort} align="right" />
                                 <SortableHeader label="Mkt Value" sortKey="mktValue" currentSort={sortConfig} onSort={onSort} align="right" />
                                 <SortableHeader label="FV @ Buy" sortKey="fvBuy" currentSort={sortConfig} onSort={onSort} align="center" />
                                 <SortableHeader label="FV Now" sortKey="fvNow" currentSort={sortConfig} onSort={onSort} align="center" />
@@ -1455,6 +1456,9 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                                                     {item.quantity}
                                                 </td>
                                                 <td className="px-4 py-3 text-right font-mono text-slate-600">
+                                                    {getCurrentPrice(item.marketId)}¢
+                                                </td>
+                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
                                                     {formatMoney(item.quantity * getCurrentPrice(item.marketId))}
                                                 </td>
                                                 <td className="px-4 py-3 text-center font-mono text-slate-500">
@@ -1500,6 +1504,21 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                                             {item.isOrder && (
                                                 <button aria-label="Cancel Order" onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
                                                     <XCircle size={16}/>
+                                                </button>
+                                            )}
+                                            {!item.isOrder && activeTab === 'positions' && item.quantity > 0 && (
+                                                <button
+                                                    aria-label="Close Position"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        if(confirm('Close this position at market price?')) {
+                                                            onExecute(item.marketId, getCurrentPrice(item.marketId), true, item.quantity, 'manual');
+                                                        }
+                                                    }}
+                                                    className="text-slate-400 hover:text-amber-600 transition-colors"
+                                                    title="Close Position (Sell at Market Bid)"
+                                                >
+                                                    <LogOut size={16} />
                                                 </button>
                                             )}
                                             <button 
