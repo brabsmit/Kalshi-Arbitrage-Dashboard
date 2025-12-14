@@ -222,6 +222,8 @@ const getCryptoKey = async (pem) => {
     return key;
 };
 
+let hasWarnedSync = false;
+
 const signRequest = async (privateKeyPem, method, path, timestamp) => {
     try {
         if (!window.crypto || !window.crypto.subtle) throw new Error("WebCrypto not supported");
@@ -253,7 +255,13 @@ const signRequest = async (privateKeyPem, method, path, timestamp) => {
         return window.btoa(binary);
 
     } catch (e) {
-        console.warn("Fast sign failed, falling back to sync. Reason:", e.message);
+        if (!hasWarnedSync) {
+            console.warn("Fast sign failed, falling back to sync. Reason:", e.message);
+            if (e.message === "WebCrypto not supported" && window.location.protocol === 'http:' && window.location.hostname !== 'localhost') {
+                 console.info("To enable fast signing, please ensure you are using a secure context (HTTPS) or localhost.");
+            }
+            hasWarnedSync = true;
+        }
         return signRequestSync(privateKeyPem, method, path, timestamp);
     }
 };
