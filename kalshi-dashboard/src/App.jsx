@@ -1154,14 +1154,22 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
 
 const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'left' }) => {
     const isActive = currentSort.key === sortKey;
+    const ariaSort = isActive ? (currentSort.direction === 'asc' ? 'ascending' : 'descending') : 'none';
+    const justifyClass = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
+
     return (
-        <th className={`px-4 py-3 text-${align} cursor-pointer hover:bg-slate-100 transition-colors group select-none`} onClick={() => onSort(sortKey)}>
-            <div className={`flex items-center gap-1 ${align === 'right' ? 'justify-end' : 'justify-start'}`}>
-                {label}
+        <th className="p-0 bg-slate-50 border-b border-slate-200 select-none font-medium text-slate-500" aria-sort={ariaSort}>
+            <button
+                onClick={() => onSort(sortKey)}
+                className={`w-full h-full px-4 py-3 flex items-center gap-1 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 outline-none transition-colors group ${justifyClass}`}
+            >
+                <span className={align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}>
+                    {label}
+                </span>
                 <span className={`text-slate-400 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
                     {isActive && currentSort.direction === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}
                 </span>
-            </div>
+            </button>
         </th>
     );
 };

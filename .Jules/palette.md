@@ -5,3 +5,7 @@
 ## 2025-12-13 - Modal Form Accessibility
 **Learning:** Modal forms often use layout elements (div/span) as visual labels without programmatic association, leaving screen reader users lost in inputs.
 **Action:** Always verify inputs in modals have `htmlFor` matching `id`, or use `aria-label` where visual labels are complex or separated.
+
+## 2024-05-22 - Accessible Table Sorting
+**Learning:** Table headers (`<th>`) with `onClick` handlers are not focusable or actionable via keyboard, excluding users who rely on keyboard navigation.
+**Action:** Wrap sortable header content in a `<button>` inside the `<th>` and use `aria-sort` on the `<th>` to communicate state.
