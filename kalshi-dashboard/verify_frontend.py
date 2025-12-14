@@ -19,8 +19,8 @@ def verify_frontend():
         """)
 
         print("Navigating to app...")
-        # Port changed to 3001 according to logs
-        page.goto("http://localhost:3001")
+        # Port changed to 3000 according to logs
+        page.goto("http://localhost:3000")
 
         # Wait for app to load
         print("Waiting for app to load...")
