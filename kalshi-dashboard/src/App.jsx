@@ -1714,10 +1714,18 @@ const KalshiDashboard = () => {
   const lastOrdersRef = useRef({});
   const isFirstFetchRef = useRef(true);
 
+  // Refs to track latest state for async safeguards
+  const latestMarketsRef = useRef(markets);
+  const latestDeselectedRef = useRef(deselectedMarketIds);
+
   const addLog = useCallback((message, type) => {
       const log = { id: Date.now() + Math.random(), timestamp: Date.now(), message, type };
       setEventLogs(prev => [...prev.slice(-99), log]);
   }, []);
+
+  // Keep refs synced with state
+  useEffect(() => { latestMarketsRef.current = markets; }, [markets]);
+  useEffect(() => { latestDeselectedRef.current = deselectedMarketIds; }, [deselectedMarketIds]);
   
   const [tradeHistory, setTradeHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_trade_history') || '{}'));
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
@@ -2316,6 +2324,18 @@ const KalshiDashboard = () => {
             for (const m of markets) {
                 if (!m.isMatchFound) continue;
                 if (deselectedMarketIds.has(m.id)) continue;
+
+                // --- VISIBILITY SAFEGUARD ---
+                // Ensure market is still in the active 'markets' list and not deselected in the latest state.
+                // This prevents bidding on stale markets if the user switches sports or deselects during async processing.
+                const isStillDisplayed = latestMarketsRef.current.some(lm => lm.id === m.id);
+                const isNowDeselected = latestDeselectedRef.current.has(m.id);
+
+                if (!isStillDisplayed || isNowDeselected) {
+                    if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
+                    continue;
+                }
+                // ----------------------------
 
                 // Check for held position
                 if (executedHoldings.has(m.realMarketId)) {
