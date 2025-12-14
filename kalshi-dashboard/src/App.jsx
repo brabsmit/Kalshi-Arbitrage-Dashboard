@@ -1330,6 +1330,107 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
     );
 });
 
+const arePortfolioPropsEqual = (prev, next) => {
+    if (prev.activeTab !== next.activeTab) return false;
+    if (prev.currentPrice !== next.currentPrice) return false;
+    if (prev.currentFV !== next.currentFV) return false;
+
+    const p = prev.item;
+    const n = next.item;
+
+    if (p.id !== n.id) return false;
+    if (p.quantity !== n.quantity) return false;
+    if (p.filled !== n.filled) return false;
+    if (p.price !== n.price) return false;
+    if (p.status !== n.status) return false;
+    if (p.settlementStatus !== n.settlementStatus) return false;
+    if (p.payout !== n.payout) return false;
+    if (p.realizedPnl !== n.realizedPnl) return false;
+    if (p.side !== n.side) return false;
+
+    // Check historyEntry reference
+    if (prev.historyEntry !== next.historyEntry) return false;
+
+    return true;
+};
+
+const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, currentFV, onCancel, onAnalysis }) => {
+    return (
+        <tr className="hover:bg-slate-50 group">
+            <td className="px-4 py-3">
+                <div className="flex items-center gap-2">
+                    <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
+                    <span className="text-slate-400">for</span>
+                    <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
+                </div>
+            </td>
+
+            {activeTab === 'positions' && (
+                <>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
+                        {item.quantity}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-600">
+                        {formatMoney(item.quantity * currentPrice)}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-slate-500">
+                        {historyEntry ? `${historyEntry.fairValue}¢` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
+                        {currentFV}¢
+                    </td>
+                </>
+            )}
+
+            {activeTab === 'resting' && (
+                <>
+                    <td className="px-4 py-3 text-center font-mono">
+                        <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono">{item.price}¢</td>
+                    <td className="px-4 py-3 text-right font-mono text-slate-600">
+                        {formatMoney(item.price * (item.quantity - item.filled))}
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-slate-500">
+                        <div>{formatPortfolioDate(item.created)}</div>
+                        <div className="text-[10px] text-slate-400">{item.expiration ? formatPortfolioDate(item.expiration) : 'GTC'}</div>
+                    </td>
+                </>
+            )}
+
+            {activeTab === 'history' && (
+                <>
+                    <td className="px-4 py-3 text-center font-mono text-slate-500">
+                        {historyEntry ? `${historyEntry.fairValue}¢` : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
+                        {item.payout ? formatMoney(item.payout) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-slate-500">
+                        {formatPortfolioDate(item.created)}
+                    </td>
+                </>
+            )}
+
+            <td className="px-4 py-3 text-center flex justify-center gap-2">
+                {item.isOrder && (
+                    <button aria-label="Cancel Order" onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                        <XCircle size={16}/>
+                    </button>
+                )}
+                <button
+                    aria-label="Trade Analysis"
+                    onClick={() => onAnalysis(item, historyEntry)}
+                    disabled={!historyEntry}
+                    className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
+                >
+                    <Info size={16}/>
+                </button>
+            </td>
+        </tr>
+    );
+}, arePortfolioPropsEqual);
+
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
     const getGameName = (ticker) => {
@@ -1396,9 +1497,6 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
         return sortedGroups;
     }, [positions, markets, tradeHistory, sortConfig]);
 
-    const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
-    const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '-';
-
     return (
         <div className="overflow-auto flex-1">
             <table className="w-full text-sm text-left">
@@ -1446,101 +1544,18 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                             </tr>
                         </tbody>
                         <tbody className="divide-y divide-slate-50">
-                            {items.map(item => {
-                                const history = tradeHistory[item.marketId];
-                                return (
-                                    <tr key={item.id} className="hover:bg-slate-50 group">
-                                        <td className="px-4 py-3">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
-                                                <span className="text-slate-400">for</span>
-                                                <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
-                                            </div>
-                                        </td>
-
-                                        {activeTab === 'positions' && (
-                                            <>
-                                                <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
-                                                    {item.quantity}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
-                                                    {getCurrentPrice(item.marketId)}¢
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
-                                                    {formatMoney(item.quantity * getCurrentPrice(item.marketId))}
-                                                </td>
-                                                <td className="px-4 py-3 text-center font-mono text-slate-500">
-                                                    {history ? `${history.fairValue}¢` : '-'}
-                                                </td>
-                                                <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
-                                                    {getCurrentFV(item.marketId)}¢
-                                                </td>
-                                            </>
-                                        )}
-
-                                        {activeTab === 'resting' && (
-                                            <>
-                                                <td className="px-4 py-3 text-center font-mono">
-                                                    <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono">{item.price}¢</td>
-                                                <td className="px-4 py-3 text-right font-mono text-slate-600">
-                                                    {formatMoney(item.price * (item.quantity - item.filled))}
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-xs text-slate-500">
-                                                    <div>{formatDate(item.created)}</div>
-                                                    <div className="text-[10px] text-slate-400">{item.expiration ? formatDate(item.expiration) : 'GTC'}</div>
-                                                </td>
-                                            </>
-                                        )}
-
-                                        {activeTab === 'history' && (
-                                            <>
-                                                <td className="px-4 py-3 text-center font-mono text-slate-500">
-                                                    {history ? `${history.fairValue}¢` : '-'}
-                                                </td>
-                                                <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                                                    {item.payout ? formatMoney(item.payout) : '-'}
-                                                </td>
-                                                <td className="px-4 py-3 text-right text-xs text-slate-500">
-                                                    {formatDate(item.created)} 
-                                                </td>
-                                            </>
-                                        )}
-
-                                        <td className="px-4 py-3 text-center flex justify-center gap-2">
-                                            {item.isOrder && (
-                                                <button aria-label="Cancel Order" onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
-                                                    <XCircle size={16}/>
-                                                </button>
-                                            )}
-                                            {!item.isOrder && activeTab === 'positions' && item.quantity > 0 && (
-                                                <button
-                                                    aria-label="Close Position"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        if(confirm('Close this position at market price?')) {
-                                                            onExecute(item.marketId, getCurrentPrice(item.marketId), true, item.quantity, 'manual');
-                                                        }
-                                                    }}
-                                                    className="text-slate-400 hover:text-amber-600 transition-colors"
-                                                    title="Close Position (Sell at Market Bid)"
-                                                >
-                                                    <LogOut size={16} />
-                                                </button>
-                                            )}
-                                            <button 
-                                                aria-label="Trade Analysis"
-                                                onClick={() => onAnalysis(item)}
-                                                disabled={!history} 
-                                                className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
-                                            >
-                                                <Info size={16}/>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                            {items.map(item => (
+                                <PortfolioRow
+                                    key={item.id}
+                                    item={item}
+                                    activeTab={activeTab}
+                                    historyEntry={tradeHistory[item.marketId]}
+                                    currentPrice={activeTab === 'positions' ? getCurrentPrice(item.marketId) : 0}
+                                    currentFV={activeTab === 'positions' ? getCurrentFV(item.marketId) : 0}
+                                    onCancel={onCancel}
+                                    onAnalysis={onAnalysis}
+                                />
+                            ))}
                         </tbody>
                     </React.Fragment>
                 ))}
@@ -2594,6 +2609,9 @@ const KalshiDashboard = () => {
       }));
   };
 
+  const handleAnalysis = useCallback((item, historyEntry) => {
+    setAnalysisModalData({ ...historyEntry, currentStatus: item.settlementStatus || item.status });
+  }, []);
 
   const groupedMarkets = useMemo(() => {
       const enriched = markets.map(m => {
@@ -2754,7 +2772,7 @@ const KalshiDashboard = () => {
                     positions={activeContent} 
                     markets={markets} 
                     tradeHistory={tradeHistory}
-                    onAnalysis={(item) => setAnalysisModalData({ ...tradeHistory[item.marketId], currentStatus: item.settlementStatus || item.status })}
+                    onAnalysis={handleAnalysis}
                     onCancel={cancelOrder}
                     onExecute={executeOrder}
                     sortConfig={portfolioSortConfig}

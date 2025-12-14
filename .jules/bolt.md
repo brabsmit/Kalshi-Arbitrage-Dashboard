@@ -1,3 +1,4 @@
-## 2024-05-23 - Pure JS Crypto Bottleneck
-**Learning:** The application uses `node-forge` (pure JS) for RSA-PSS signing. Benchmarking revealed this takes ~50ms per signature. The dashboard makes 4 sequential signatures every 5 seconds (portfolio fetch), causing ~200ms of main thread blocking.
-**Action:** Replace `node-forge` with `window.crypto.subtle` (Web Crypto API) for signing, which is native and much faster (< 1ms), while keeping Forge for key parsing/wrapping if needed.
+
+## 2024-05-23 - Stabilization of Monolithic State Updates
+**Learning:** In a monolithic React component handling high-frequency data (WebSocket/Polling), re-creating object references for identical data causes massive re-render storms even with `React.memo` on children.
+**Action:** Implemented deep equality checks and reused previous object references within the state update function (`setMarkets`) to prevent `React.memo` cache misses.
