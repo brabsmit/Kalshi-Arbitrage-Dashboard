@@ -100,9 +100,11 @@
     *   **Filter:** Must have a corresponding entry in `tradeHistory` with `source: 'auto'` (only manages bot-opened trades).
 
 2.  **Pricing (Exit Strategy):**
-    *   **Target Price:** `Market Fair Value` (derived from `vigFreeProb`).
-    *   **Inverse Markets:** Since the system maps "No" contracts to the inverse team, the `fairValue` from the Odds API (which represents the target team's win probability) is correctly aligned with the held position's value.
-    *   **Floor:** Minimum price of 1 cent.
+    *   **Fee Calculation:** Incorporates Kalshi Taker fees using the formula `ceil(0.07 * Quantity * Price($) * (1 - Price($)))` to ensure profitability.
+    *   **Break-Even Analysis:** Dynamically calculates the minimum sell price required to cover the position's cost basis and estimated fees (`Revenue - Cost - Fees > 0`).
+    *   **Target Price:** Sets the limit sell price to the **greater** of the `Market Fair Value` or the `Break-Even Price`.
+    *   **Inverse Markets:** Since the system maps "No" contracts to the inverse team, the `fairValue` from the Odds API is correctly aligned with the held position's value.
+    *   **Limits:** Clamped to a maximum of 99 cents (Kalshi cap).
 
 3.  **Execution:**
     *   **No Active Sell Order:**

@@ -154,6 +154,14 @@ const calculateStrategy = (market, marginPercent) => {
     return { smartBid, maxWillingToPay, edge, reason };
 };
 
+const calculateKalshiFees = (priceCents, quantity) => {
+    // Formula from Fee Schedule (Taker): fees = ceil(0.07 * count * price_dollar * (1 - price_dollar))
+    if (quantity <= 0) return 0;
+    const p = priceCents / 100;
+    const rawFee = 0.07 * quantity * p * (1 - p);
+    return Math.ceil(rawFee * 100);
+};
+
 // --- CRYPTOGRAPHIC SIGNING ENGINE ---
 const signRequestSync = (privateKeyPem, method, path, timestamp) => {
     try {
@@ -2446,8 +2454,26 @@ const KalshiDashboard = () => {
               // Determine Target Price (Fair Value)
               // If we hold 'No' (isInverse), fairValue (from Odds API) is for the Target (which is No).
               // So m.fairValue is correct for the 'No' contract too.
-              let targetPrice = m.fairValue;
-              targetPrice = Math.max(1, targetPrice); // Safety floor
+              let fairValue = m.fairValue;
+              fairValue = Math.max(1, fairValue); // Safety floor
+
+              // Calculate Break-Even Price including Fees
+              const buyPrice = pos.avgPrice || 0;
+              let minSellPrice = Math.floor(buyPrice) + 1;
+
+              // Find minimum price where (Price * Qty) - (Cost) - Fees > 0
+              while (minSellPrice < 100) {
+                  const estimatedFees = calculateKalshiFees(minSellPrice, pos.quantity);
+                  const revenue = minSellPrice * pos.quantity;
+                  const cost = buyPrice * pos.quantity;
+                  if (revenue - cost - estimatedFees > 0) break;
+                  minSellPrice++;
+              }
+
+              // Set Target Price: Must be at least minSellPrice (to ensure profit)
+              // But if Fair Value is higher, take the extra profit.
+              let targetPrice = Math.max(fairValue, minSellPrice);
+              if (targetPrice > 99) targetPrice = 99;
 
               // Check for existing active sell order
               const existingOrder = activeSellOrders.find(o => o.marketId === pos.marketId);
