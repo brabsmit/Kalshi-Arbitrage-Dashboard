@@ -109,6 +109,8 @@ const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US',
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
 });
 
+const formatPortfolioDate = (ts) => formatOrderDate(ts);
+
 const formatGameTime = (isoString) => {
     if (!isoString) return '';
     const date = new Date(isoString);
