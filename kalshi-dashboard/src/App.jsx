@@ -821,12 +821,12 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                     <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded">
                         Keys stored locally. Supports standard PKCS#1 keys.
                     </div>
-                    <input type="text" aria-label="API Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded" />
-                    <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative">
+                    <input type="text" aria-label="API Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
                         <input type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" />
                         {fileName ? <span className="text-emerald-600 font-bold">{fileName}</span> : <span className="text-slate-400">Upload Private Key (.key)</span>}
                     </div>
-                    <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50">
+                    <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 outline-none">
                         {isValidating ? 'Validating...' : 'Connect'}
                     </button>
                 </div>
@@ -1571,7 +1571,39 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 ))}
                 {positions.length === 0 && (
                     <tbody>
-                        <tr><td colSpan={6} className="p-8 text-center text-slate-400 italic">No items found</td></tr>
+                        <tr>
+                            <td colSpan={activeTab === 'positions' ? 7 : (activeTab === 'resting' ? 6 : 5)} className="py-12 text-center text-slate-400">
+                                <div className="flex flex-col items-center gap-3">
+                                    {activeTab === 'positions' && (
+                                        <>
+                                            <div className="p-4 bg-slate-100 rounded-full"><Briefcase size={24} className="text-slate-400"/></div>
+                                            <div>
+                                                <p className="font-medium text-slate-600">No active positions</p>
+                                                <p className="text-xs text-slate-400 mt-1">Use the Market Scanner to find trades</p>
+                                            </div>
+                                        </>
+                                    )}
+                                    {activeTab === 'resting' && (
+                                        <>
+                                            <div className="p-4 bg-slate-100 rounded-full"><Clock size={24} className="text-slate-400"/></div>
+                                            <div>
+                                                <p className="font-medium text-slate-600">No open orders</p>
+                                                <p className="text-xs text-slate-400 mt-1">Active bids and offers will appear here</p>
+                                            </div>
+                                        </>
+                                    )}
+                                    {activeTab === 'history' && (
+                                        <>
+                                            <div className="p-4 bg-slate-100 rounded-full"><FileText size={24} className="text-slate-400"/></div>
+                                            <div>
+                                                <p className="font-medium text-slate-600">No trade history</p>
+                                                <p className="text-xs text-slate-400 mt-1">Settled auto-trades will appear here</p>
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </td>
+                        </tr>
                     </tbody>
                 )}
             </table>
