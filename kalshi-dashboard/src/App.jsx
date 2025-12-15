@@ -1862,6 +1862,7 @@ const KalshiDashboard = () => {
           const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiMarkets: r.kalshiMarkets, _seriesTicker: r.seriesTicker })));
 
           setMarkets(prev => {
+              let hasChanged = false;
               const processed = allOddsData.slice(0, 50).map(game => {
                   const kalshiData = game._kalshiMarkets;
                   const seriesTicker = game._seriesTicker;
@@ -1965,7 +1966,7 @@ const KalshiDashboard = () => {
                       bestAsk = wsBestAsk;
                   }
 
-                  return {
+                  const newMarket = {
                       id: game.id,
                       event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
                       commenceTime: game.commence_time,
@@ -1994,8 +1995,31 @@ const KalshiDashboard = () => {
                       usingWs: isWsActive,
                       lastWsTimestamp: wsLastTimestamp
                   };
+
+                  if (prevMarket) {
+                      const isSame =
+                        prevMarket.bestBid === newMarket.bestBid &&
+                        prevMarket.bestAsk === newMarket.bestAsk &&
+                        prevMarket.fairValue === newMarket.fairValue &&
+                        prevMarket.volatility.toFixed(2) === newMarket.volatility.toFixed(2) &&
+                        prevMarket.oddsLastUpdate === newMarket.oddsLastUpdate &&
+                        prevMarket.volume === newMarket.volume &&
+                        prevMarket.openInterest === newMarket.openInterest &&
+                        prevMarket.isMatchFound === newMarket.isMatchFound &&
+                        prevMarket.usingWs === newMarket.usingWs &&
+                        prevMarket.lastWsTimestamp === newMarket.lastWsTimestamp &&
+                        prevMarket.oddsDisplay === newMarket.oddsDisplay &&
+                        prevMarket.commenceTime === newMarket.commenceTime &&
+                        prevMarket.event === newMarket.event;
+
+                      if (isSame) return prevMarket;
+                  }
+
+                  hasChanged = true;
+                  return newMarket;
               }).filter(Boolean);
               
+              if (!hasChanged && processed.length === prev.length) return prev;
               return processed;
           });
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
