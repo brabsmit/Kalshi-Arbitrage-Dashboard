@@ -1295,14 +1295,24 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                     />
                 </td>
                 <td className="px-4 py-3">
-                    <div className="font-medium text-slate-700">{market.event}</div>
-                    <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                        <Clock size={10} /> {formatGameTime(market.commenceTime)}
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                        {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
-                        <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
-                    </div>
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setExpanded(!expanded); }}
+                        aria-expanded={expanded}
+                        aria-controls={`details-${market.id}`}
+                        className="w-full text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded p-1 -m-1"
+                    >
+                        <div className="font-medium text-slate-700 flex items-center gap-2">
+                            {market.event}
+                            <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        </div>
+                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                            <Clock size={10} /> {formatGameTime(market.commenceTime)}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                            {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
+                            <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
+                        </div>
+                    </button>
                 </td>
                 <td className="px-4 py-3 text-center">
                     <div className="font-bold text-slate-700">{market.fairValue}¢</div>
@@ -1332,7 +1342,9 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
             {expanded && (
                 <tr className="bg-slate-50/50">
                     <td colSpan={8} className="p-0">
-                        <MarketExpandedDetails market={market} />
+                        <div id={`details-${market.id}`}>
+                            <MarketExpandedDetails market={market} />
+                        </div>
                     </td>
                 </tr>
             )}
