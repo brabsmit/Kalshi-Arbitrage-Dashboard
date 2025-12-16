@@ -69,6 +69,16 @@ const formatDuration = (ms) => {
 
 const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
+const escapeHtml = (unsafe) => {
+    if (typeof unsafe !== 'string') return unsafe;
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+};
+
 const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', { 
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
 });
@@ -1011,14 +1021,14 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                         ${data.map(d => `
                             <tr>
                                 <td>${new Date(d.timestamp).toLocaleString()}</td>
-                                <td>${d.event}</td>
-                                <td>${d.ticker}</td>
+                                <td>${escapeHtml(d.event)}</td>
+                                <td>${escapeHtml(d.ticker)}</td>
                                 <td>${d.fairValue}</td>
                                 <td>${d.bidPrice}</td>
                                 <td>${d.edge}</td>
                                 <td>${d.latency !== null ? d.latency : '-'}</td>
                                 <td>${Number(d.oddsSpread).toFixed(3)}</td>
-                                <td>${d.status}</td>
+                                <td>${escapeHtml(d.status)}</td>
                                 <td class="${d.pnl >= 0 ? 'positive' : 'negative'}">${(d.pnl / 100).toFixed(2)}</td>
                             </tr>
                         `).join('')}
