@@ -66,7 +66,7 @@ def vite_server():
 @pytest.fixture(scope="function")
 def context(playwright):
     browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+    context = browser.new_context(ignore_https_errors=True)
     yield context
     browser.close()
 
@@ -144,7 +144,7 @@ def authenticated_page(page):
         private_key = generate_mock_key()
 
     # Navigate first to set local storage
-    page.goto("http://localhost:3000")
+    page.goto("https://localhost:3000")
 
     # We must properly escape newlines for JS template string
     private_key_js = private_key.replace('\n', '\\n')

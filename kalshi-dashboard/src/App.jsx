@@ -1,7 +1,7 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Unlink, Wallet, Upload, X, Check, Key, Lock, Loader2, Hash, ArrowUp, ArrowDown, Calendar, Trash2, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronRight, ChevronDown, LogOut } from 'lucide-react';
-import { SPORT_MAPPING, findKalshiMatch, TEAM_ABBR } from './utils/kalshiMatching';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut } from 'lucide-react';
+import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
 // ==========================================
 // 0. LIBRARY LOADER
@@ -50,42 +50,6 @@ const calculateVolatility = (history) => {
     return Math.sqrt(variance);
 };
 
-// Helper to check if a ticker is from a past date
-const isTickerExpired = (ticker) => {
-    try {
-        if (!ticker) return false;
-        // Format is usually SERIES-YYMMMDD-
-        const parts = ticker.split('-');
-        if (parts.length < 2) return false;
-        
-        const dateStr = parts[1]; // "23OCT26"
-        if (dateStr.length !== 7) return false;
-
-        const yy = parseInt(dateStr.substring(0, 2), 10);
-        const mmm = dateStr.substring(2, 5);
-        const dd = parseInt(dateStr.substring(5, 7), 10);
-
-        const months = {JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11};
-        const monthIndex = months[mmm];
-        
-        if (isNaN(yy) || monthIndex === undefined || isNaN(dd)) return false;
-
-        // Construct Expiry Date (Assume 2000s)
-        const expiry = new Date(2000 + yy, monthIndex, dd);
-        // Set expiry to end of that day
-        expiry.setHours(23, 59, 59, 999);
-        
-        // Check if expiry was before "yesterday"
-        const yesterday = new Date();
-        yesterday.setHours(0, 0, 0, 0);
-        yesterday.setDate(yesterday.getDate() - 1);
-
-        return expiry < yesterday;
-    } catch (e) {
-        return false;
-    }
-};
-
 const probabilityToAmericanOdds = (prob) => {
     if (prob <= 0 || prob >= 1) return 0;
     if (prob >= 0.5) {
@@ -108,8 +72,6 @@ const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', { 
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
 });
-
-const formatPortfolioDate = (ts) => formatOrderDate(ts);
 
 const formatGameTime = (isoString) => {
     if (!isoString) return '';
@@ -1402,8 +1364,8 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {formatMoney(item.price * (item.quantity - item.filled))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        <div>{formatPortfolioDate(item.created)}</div>
-                        <div className="text-[10px] text-slate-400">{item.expiration ? formatPortfolioDate(item.expiration) : 'GTC'}</div>
+                        <div>{formatOrderDate(item.created)}</div>
+                        <div className="text-[10px] text-slate-400">{item.expiration ? formatOrderDate(item.expiration) : 'GTC'}</div>
                     </td>
                 </>
             )}
@@ -1417,7 +1379,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {item.payout ? formatMoney(item.payout) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        {formatPortfolioDate(item.created)}
+                        {formatOrderDate(item.created)}
                     </td>
                 </>
             )}
