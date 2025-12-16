@@ -22,7 +22,7 @@ export const TEAM_ABBR = {
     'Texas Tech Red Raiders': 'TTU', 'Texas Tech': 'TTU', 'BYU Cougars': 'BYU', 'BYU': 'BYU', 'Western Michigan Broncos': 'WMU', 'Western Michigan': 'WMU', 'Miami (OH) RedHawks': 'MOH', 'Miami RedHawks': 'MOH', 'Miami (OH)': 'MOH', 'Villanova Wildcats': 'VIL', 'Villanova': 'VIL', 'Lehigh Mountain Hawks': 'LEH', 'Lehigh': 'LEH', 'Ohio State Buckeyes': 'OSU', 'Ohio State': 'OSU', 'Indiana Hoosiers': 'IND', 'Indiana': 'IND', 'Virginia Cavaliers': 'UVA', 'Virginia': 'UVA', 'Duke Blue Devils': 'DUK', 'Duke': 'DUK', 'Georgia Bulldogs': 'UGA', 'Georgia': 'UGA', 'Alabama Crimson Tide': 'ALA', 'Alabama': 'ALA', 'Michigan Wolverines': 'MICH', 'Michigan': 'MICH', 'Washington Huskies': 'WASH', 'Washington': 'WASH', 'Texas Longhorns': 'TEX', 'Texas': 'TEX', 'Florida State Seminoles': 'FSU', 'Florida State': 'FSU', 'Oregon Ducks': 'ORE', 'Oregon': 'ORE', 'USC Trojans': 'USC', 'USC': 'USC', 'LSU Tigers': 'LSU', 'LSU': 'LSU', 'Clemson Tigers': 'CLEM', 'Clemson': 'CLEM', 'Notre Dame Fighting Irish': 'ND', 'Notre Dame': 'ND', 'Oklahoma Sooners': 'OKL', 'Oklahoma': 'OKL', 'Penn State Nittany Lions': 'PSU', 'Penn State': 'PSU', 'Tennessee Volunteers': 'TENN', 'Tennessee': 'TENN', 'Ole Miss Rebels': 'MISS', 'Ole Miss': 'MISS', 'Missouri Tigers': 'MIZZ', 'Missouri': 'MIZZ', 'Louisville Cardinals': 'LOU', 'Louisville': 'LOU', 'Kentucky Wildcats': 'UK', 'Kentucky': 'UK', 'Florida Gators': 'FLA', 'Florida': 'FLA', 'Auburn Tigers': 'AUB', 'Auburn': 'AUB', 'Arkansas Razorbacks': 'ARK', 'Arkansas': 'ARK', 'Texas A&M Aggies': 'TAMU', 'Texas A&M': 'TAMU', 'Colorado Buffaloes': 'COLO', 'Colorado': 'COLO', 'Utah Utes': 'UTAH', 'Utah': 'UTAH', 'Arizona Wildcats': 'ARIZ', 'Arizona': 'ARIZ', 'Arizona State Sun Devils': 'ASU', 'Arizona State': 'ASU', 'North Carolina Tar Heels': 'UNC', 'North Carolina': 'UNC', 'NC State Wolfpack': 'NCST', 'NC State': 'NCST', 'Miami Hurricanes': 'MIA', 'Miami': 'MIA', 'Iowa Hawkeyes': 'IOWA', 'Iowa': 'IOWA', 'Wisconsin Badgers': 'WISC', 'Wisconsin': 'WISC', 'North Dakota State Bison': 'NDSU', 'North Dakota State': 'NDSU', 'Illinois State Redbirds': 'ILST', 'Illinois State': 'ILST',
     'Navy Midshipmen': 'NAVY', 'Navy': 'NAVY', 'Army Black Knights': 'ARMY', 'Army': 'ARMY',
     // NCAAB
-    'Kansas Jayhawks': 'KU', 'Kansas': 'KU', 'UConn Huskies': 'UCONN', 'UConn': 'UCONN', 'Houston Cougars': 'HOU', 'Houston': 'HOU', 'Purdue Boilermakers': 'PUR', 'Purdue': 'PUR', 'Creighton Bluejays': 'CREI', 'Creighton': 'CREI', 'Marquette Golden Eagles': 'MARQ', 'Marquette': 'MARQ', 'Illinois Fighting Illini': 'ILL', 'Illinois': 'ILL', 'Baylor Bears': 'BAY', 'Baylor': 'BAY', 'North Carolina Tar Heels': 'UNC', 'North Carolina': 'UNC', 'Duke Blue Devils': 'DUK', 'Duke': 'DUK'
+    'Kansas Jayhawks': 'KU', 'Kansas': 'KU', 'UConn Huskies': 'UCONN', 'UConn': 'UCONN', 'Houston Cougars': 'HOU', 'Houston': 'HOU', 'Purdue Boilermakers': 'PUR', 'Purdue': 'PUR', 'Creighton Bluejays': 'CREI', 'Creighton': 'CREI', 'Marquette Golden Eagles': 'MARQ', 'Marquette': 'MARQ', 'Illinois Fighting Illini': 'ILL', 'Illinois': 'ILL', 'Baylor Bears': 'BAY', 'Baylor': 'BAY'
 };
 
 export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, kalshiMarkets, seriesTicker) => {
@@ -99,23 +99,18 @@ export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, ka
     // STRATEGY 2: Fuzzy Title Matching (Fallback)
     // ---------------------------------------------------------
 
-    // Normalize string: lowercase, remove special chars
-    const normalize = (str) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
-
     const getSignificantWords = (name) => {
         return name.toLowerCase().split(' ')
             .filter(w => w.length > 2 && !['university', 'state', 'tech', 'college'].includes(w));
     };
 
-    const targetWords = getSignificantWords(targetTeam);
     const homeWords = getSignificantWords(homeTeam);
     const awayWords = getSignificantWords(awayTeam);
 
-    const useFull = (words, name) => words.length > 0 ? words : [name.toLowerCase()];
+    const getWordsOrFallback = (words, name) => words.length > 0 ? words : [name.toLowerCase()];
 
-    const tWords = useFull(targetWords, targetTeam);
-    const hWords = useFull(homeWords, homeTeam);
-    const aWords = useFull(awayWords, awayTeam);
+    const hWords = getWordsOrFallback(homeWords, homeTeam);
+    const aWords = getWordsOrFallback(awayWords, awayTeam);
 
     const titleMatch = candidates.find(k => {
         if (!k.title) return false;
