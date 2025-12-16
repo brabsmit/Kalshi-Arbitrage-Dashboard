@@ -1405,20 +1405,31 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
 
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
+    // Optimization: Create a map for O(1) market lookups
+    const marketMap = useMemo(() => {
+        const map = new Map();
+        markets.forEach(m => {
+            if (m.realMarketId && !map.has(m.realMarketId)) {
+                map.set(m.realMarketId, m);
+            }
+        });
+        return map;
+    }, [markets]);
+
     const getGameName = (ticker) => {
-        const liveMarket = markets.find(m => m.realMarketId === ticker);
+        const liveMarket = marketMap.get(ticker);
         if (liveMarket) return liveMarket.event;
         if (tradeHistory[ticker]) return tradeHistory[ticker].event;
         return ticker; 
     };
 
     const getCurrentFV = (ticker) => {
-        const liveMarket = markets.find(m => m.realMarketId === ticker);
+        const liveMarket = marketMap.get(ticker);
         return liveMarket ? liveMarket.fairValue : 0;
     };
 
     const getCurrentPrice = (ticker) => {
-        const liveMarket = markets.find(m => m.realMarketId === ticker);
+        const liveMarket = marketMap.get(ticker);
         return liveMarket ? liveMarket.bestBid : 0;
     };
 
