@@ -1986,7 +1986,7 @@ const KalshiDashboard = () => {
                   const refTargetImplied = americanToProbability(targetOutcome.price);
                   const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
 
-                  const realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                  let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
 
                   // --- WEBSOCKET PRIORITY LOGIC ---
@@ -2005,6 +2005,19 @@ const KalshiDashboard = () => {
                           wsBestAsk = prevMarket.bestAsk;
                           wsLastTimestamp = prevMarket.lastWsTimestamp;
                       }
+                  }
+
+                  // --- MATCH PERSISTENCE (Fix for "No Match" with Active WS) ---
+                  if (!realMatch && isWsActive && prevMarket && prevMarket.isMatchFound) {
+                       // If we have an active WS connection, trust the previous match even if REST failed
+                       realMatch = {
+                           ticker: prevMarket.realMarketId,
+                           isInverse: prevMarket.isInverse,
+                           yes_bid: prevMarket.bestBid,
+                           yes_ask: prevMarket.bestAsk,
+                           volume: prevMarket.volume,
+                           open_interest: prevMarket.openInterest
+                       };
                   }
 
                   // --- VOLATILITY TRACKING ---
