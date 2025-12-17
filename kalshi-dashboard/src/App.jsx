@@ -79,6 +79,17 @@ const escapeHtml = (unsafe) => {
          .replace(/'/g, "&#039;");
 };
 
+const escapeCSV = (str) => {
+    if (typeof str !== 'string') return str;
+    // Escape double quotes by doubling them
+    let escaped = str.replace(/"/g, '""');
+    // Prevent formula injection (CSV Injection) if starts with =, +, -, @
+    if (/^[=+\-@]/.test(escaped)) {
+        escaped = "'" + escaped;
+    }
+    return `"${escaped}"`;
+};
+
 const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', { 
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true 
 });
@@ -938,16 +949,16 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
         const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob"];
         const rows = data.map(d => [
             new Date(d.timestamp).toISOString(),
-            d.ticker,
-            `"${d.event.replace(/"/g, '""')}"`,
+            escapeCSV(d.ticker),
+            escapeCSV(d.event),
             d.action,
             d.odds,
             d.fairValue,
             d.bidPrice,
             d.edge,
-            d.status,
+            escapeCSV(d.status),
             d.pnl,
-            d.outcome,
+            escapeCSV(d.outcome),
             d.latency !== null ? d.latency : '',
             d.bookmakerCount,
             Number(d.oddsSpread).toFixed(3),
