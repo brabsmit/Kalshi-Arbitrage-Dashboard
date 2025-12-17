@@ -1,5 +1,5 @@
 // File: src/App.jsx
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
@@ -358,6 +358,7 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
 const SportFilter = ({ selected, options, onChange }) => {
     const [isOpen, setIsOpen] = useState(false);
     const containerRef = useRef(null);
+    const dropdownId = useId();
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -373,6 +374,10 @@ const SportFilter = ({ selected, options, onChange }) => {
         <div className="relative" ref={containerRef}>
             <button 
                 onClick={() => setIsOpen(!isOpen)} 
+                aria-expanded={isOpen}
+                aria-haspopup="dialog"
+                aria-controls={dropdownId}
+                aria-label="Filter by Sport"
                 className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
             >
                 <Trophy size={14} className="text-blue-500"/>
@@ -380,7 +385,12 @@ const SportFilter = ({ selected, options, onChange }) => {
                 <ChevronDown size={12} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}/>
             </button>
             {isOpen && (
-                <div className="absolute top-full left-0 mt-2 w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                <div
+                    id={dropdownId}
+                    role="dialog"
+                    aria-label="Select Sports"
+                    className="absolute top-full left-0 mt-2 w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                >
                     <div className="p-3">
                         <div className="flex justify-between items-center mb-2 px-1">
                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
