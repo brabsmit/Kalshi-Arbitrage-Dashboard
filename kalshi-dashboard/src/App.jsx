@@ -2149,8 +2149,21 @@ const KalshiDashboard = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN && tickerFingerprint) {
           const tickers = tickerFingerprint.split(',');
           if (tickers.length) {
-             // console.log(`[WS] Subscribing to ${tickers.length} markets...`);
-             wsRef.current.send(JSON.stringify({ id: 2, cmd: "subscribe", params: { channels: ["ticker"], market_tickers: tickers } }));
+             console.log(`[WS] Subscribing to ${tickers.length} markets individually...`);
+             // Send individual subscriptions to ensure all are registered
+             tickers.forEach((ticker, index) => {
+                 // Use a unique ID for each subscription (offset by 1000 to avoid conflicts)
+                 const msg = {
+                     id: 1000 + index,
+                     cmd: "subscribe",
+                     params: {
+                         channels: ["ticker"],
+                         market_tickers: [ticker]
+                     }
+                 };
+                 // Stagger slightly to avoid flooding if necessary, though WS handles it fine usually
+                 wsRef.current.send(JSON.stringify(msg));
+             });
           }
       }
   }, [tickerFingerprint, wsStatus]);
