@@ -11,3 +11,11 @@
 ## 2024-05-22 - [The Alias]
 **Observation:** `formatPortfolioDate` was just calling `formatOrderDate`.
 **Lesson:** Don't create a new name for the same thing. Just call the thing.
+
+## 2025-12-17 - [The Redundant Data]
+**Observation:** `TEAM_ABBR` contained 85 entries that were identical to the default logic (`substring(0,3)`).
+**Lesson:** Don't hardcode what you can calculate. Redundant data is just more places for bugs to hide.
+
+## 2025-12-17 - [The Fuzzy Match]
+**Observation:** `findKalshiMatch` had a "Strategy 2" that tried to fuzzy match teams based on first letters. It was clever, dangerous, and likely buggy for teams sharing initials.
+**Lesson:** Dumb, exact matching is better than clever, wrong matching. If it doesn't match exactly, don't bet on it.

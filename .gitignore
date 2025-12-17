@@ -1,0 +1,4 @@
+kalshi-dashboard/node_modules/
+kalshi-dashboard/dist/
+__pycache__/
+.pytest_cache/

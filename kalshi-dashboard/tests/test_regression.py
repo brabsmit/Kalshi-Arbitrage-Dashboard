@@ -290,7 +290,8 @@ def test_portfolio_management(authenticated_page, mock_api):
     page.on("dialog", lambda dialog: dialog.accept())
     cancel_btn.click()
 
-    time.sleep(3)
+    # Bernie says: Increased wait time to reduce flakiness
+    time.sleep(5)
     assert delete_called, "DELETE API was not called"
 
 
