@@ -1,4 +1,27 @@
-kalshi-dashboard/node_modules/
-kalshi-dashboard/dist/
+# General
+.DS_Store
+*.log
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build
+dist/
+build/
+**/dist/
+**/build/
+
+# Python
 __pycache__/
 .pytest_cache/
+*.pyc
+**/__pycache__/
+**/.pytest_cache/
+
+# Secrets & Env
+.env
+.secrets/
+
+# Verification artifacts
+verification/*.png
