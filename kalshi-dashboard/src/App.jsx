@@ -503,7 +503,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
     const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
 
     // --- T-STATISTIC CALCULATION ---
-    const botHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId]);
+    const botHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
 
     let tStat = 0;
     let isSignificant = false;
@@ -649,7 +649,13 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
                         <input type="range" aria-label="Auto-Close Margin" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>AvgPrice * (1 + Margin)</code></p>
+                        <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>(FairValue or BreakEven) * (1 + Margin)</code></p>
+                    </div>
+
+                    <div>
+                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Min Fair Value</span><span className="text-indigo-600">{config.minFairValue}¢</span></div>
+                        <input type="range" aria-label="Minimum Fair Value" min="1" max="80" value={config.minFairValue} onChange={e => setConfig({...config, minFairValue: parseInt(e.target.value)})} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <p className="text-[10px] text-slate-400 mt-1">Bot will ignore markets with a Fair Value below this threshold.</p>
                     </div>
 
                     <div>
@@ -1739,6 +1745,7 @@ const KalshiDashboard = () => {
       const initial = {
           marginPercent: 15,
           autoCloseMarginPercent: 15,
+          minFairValue: 20,
           tradeSize: 10,
           maxPositions: 5,
           isAutoBid: false,
@@ -2462,6 +2469,7 @@ const KalshiDashboard = () => {
                 if (!m.isMatchFound) continue;
                 if (m.isInverse) continue; // Only place YES bids for simplicity
                 if (deselectedMarketIds.has(m.id)) continue;
+                if (m.fairValue < config.minFairValue) continue;
 
                 // --- VISIBILITY SAFEGUARD ---
                 // Ensure market is still in the active 'markets' list and not deselected in the latest state.
@@ -2602,7 +2610,11 @@ const KalshiDashboard = () => {
 
               // Set Target Price: Must be at least minSellPrice (to ensure profit)
               // But if Fair Value is higher, take the extra profit.
-              let targetPrice = Math.max(fairValue, minSellPrice);
+              let basePrice = Math.max(fairValue, minSellPrice);
+
+              // Apply user-defined Auto-Close margin
+              let targetPrice = Math.floor(basePrice * (1 + config.autoCloseMarginPercent / 100));
+
               if (targetPrice > 99) targetPrice = 99;
 
               // Check for existing active sell order
