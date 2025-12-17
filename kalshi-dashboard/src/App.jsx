@@ -255,6 +255,17 @@ const signRequest = async (privateKeyPem, method, path, timestamp) => {
 // 3. SUB-COMPONENTS
 // ==========================================
 
+const TimeContext = React.createContext(Date.now());
+
+const TimeProvider = ({ children }) => {
+    const [now, setNow] = useState(Date.now());
+    useEffect(() => {
+        const i = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(i);
+    }, []);
+    return <TimeContext.Provider value={now}>{children}</TimeContext.Provider>;
+};
+
 const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
     if (!isOpen) return null;
 
@@ -1168,14 +1179,8 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'left' })
 };
 
 const LatencyDisplay = ({ timestamp }) => {
-    const [ago, setAgo] = useState(0);
-
-    useEffect(() => {
-        if (!timestamp) return;
-        setAgo(Date.now() - timestamp);
-        const i = setInterval(() => setAgo(Date.now() - timestamp), 1000);
-        return () => clearInterval(i);
-    }, [timestamp]);
+    const now = React.useContext(TimeContext);
+    const ago = timestamp ? now - timestamp : 0;
 
     if (!timestamp) return <span className="text-[9px] text-slate-300 block mt-0.5">-</span>;
 
@@ -2744,6 +2749,7 @@ const KalshiDashboard = () => {
   });
 
   return (
+    <TimeProvider>
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
@@ -2856,6 +2862,7 @@ const KalshiDashboard = () => {
         </div>
       </div>
     </div>
+    </TimeProvider>
   );
 };
 
