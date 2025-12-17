@@ -2145,13 +2145,43 @@ const KalshiDashboard = () => {
           .join(',');
   }, [markets]);
 
+  const subscribedTickersRef = useRef(new Set());
+
   useEffect(() => {
-      if (wsRef.current?.readyState === WebSocket.OPEN && tickerFingerprint) {
-          const tickers = tickerFingerprint.split(',');
-          if (tickers.length) {
-             // console.log(`[WS] Subscribing to ${tickers.length} markets...`);
-             wsRef.current.send(JSON.stringify({ id: 2, cmd: "subscribe", params: { channels: ["ticker"], market_tickers: tickers } }));
-          }
+      if (wsRef.current?.readyState !== WebSocket.OPEN) {
+          subscribedTickersRef.current.clear();
+          return;
+      }
+
+      const currentTickers = new Set(tickerFingerprint ? tickerFingerprint.split(',').filter(Boolean) : []);
+      const prevTickers = subscribedTickersRef.current;
+
+      // Identify added and removed
+      const toAdd = [...currentTickers].filter(x => !prevTickers.has(x));
+      const toRemove = [...prevTickers].filter(x => !currentTickers.has(x));
+
+      if (toRemove.length > 0) {
+          console.log(`[WS] Unsubscribing from ${toRemove.length} markets...`);
+          toRemove.forEach((ticker, i) => {
+               wsRef.current.send(JSON.stringify({
+                   id: 2000 + i, // distinct ID range for unsubs
+                   cmd: "unsubscribe",
+                   params: { channels: ["ticker"], market_tickers: [ticker] }
+               }));
+               prevTickers.delete(ticker);
+          });
+      }
+
+      if (toAdd.length > 0) {
+          console.log(`[WS] Subscribing to ${toAdd.length} markets...`);
+          toAdd.forEach((ticker, i) => {
+               wsRef.current.send(JSON.stringify({
+                   id: 3000 + i, // distinct ID range for new subs
+                   cmd: "subscribe",
+                   params: { channels: ["ticker"], market_tickers: [ticker] }
+               }));
+               prevTickers.add(ticker);
+          });
       }
   }, [tickerFingerprint, wsStatus]);
 
