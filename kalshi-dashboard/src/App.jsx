@@ -631,6 +631,10 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
 };
 
 const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
+    const bidMarginId = useId();
+    const closeMarginId = useId();
+    const minFvId = useId();
+
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -642,20 +646,20 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                 <div className="p-6 space-y-6">
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Bid Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
-                        <input type="range" aria-label="Auto-Bid Margin" min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p className="text-[10px] text-slate-400 mt-1">Bot will bid <code>FairValue * (1 - Margin)</code></p>
+                        <input type="range" aria-label="Auto-Bid Margin" aria-describedby={bidMarginId} min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <p id={bidMarginId} className="text-[10px] text-slate-400 mt-1">Bot will bid <code>FairValue * (1 - Margin)</code></p>
                     </div>
 
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
-                        <input type="range" aria-label="Auto-Close Margin" min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p className="text-[10px] text-slate-400 mt-1">Bot will ask <code>(FairValue or BreakEven) * (1 + Margin)</code></p>
+                        <input type="range" aria-label="Auto-Close Margin" aria-describedby={closeMarginId} min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <p id={closeMarginId} className="text-[10px] text-slate-400 mt-1">Bot will ask <code>(FairValue or BreakEven) * (1 + Margin)</code></p>
                     </div>
 
                     <div>
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Min Fair Value</span><span className="text-indigo-600">{config.minFairValue}¢</span></div>
-                        <input type="range" aria-label="Minimum Fair Value" min="1" max="80" value={config.minFairValue} onChange={e => setConfig({...config, minFairValue: parseInt(e.target.value)})} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p className="text-[10px] text-slate-400 mt-1">Bot will ignore markets with a Fair Value below this threshold.</p>
+                        <input type="range" aria-label="Minimum Fair Value" aria-describedby={minFvId} min="1" max="80" value={config.minFairValue} onChange={e => setConfig({...config, minFairValue: parseInt(e.target.value)})} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
+                        <p id={minFvId} className="text-[10px] text-slate-400 mt-1">Bot will ignore markets with a Fair Value below this threshold.</p>
                     </div>
 
                     <div>
@@ -978,11 +982,11 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
             new Date(d.timestamp).toISOString(),
             escapeCSV(d.ticker),
             escapeCSV(d.event),
-            d.action,
-            d.odds,
-            d.fairValue,
-            d.bidPrice,
-            d.edge,
+            escapeCSV(d.action),
+            escapeCSV(d.odds),
+            escapeCSV(d.fairValue),
+            escapeCSV(d.bidPrice),
+            escapeCSV(d.edge),
             escapeCSV(d.status),
             d.pnl,
             escapeCSV(d.outcome),
@@ -1061,9 +1065,9 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                                 <td>${new Date(d.timestamp).toLocaleString()}</td>
                                 <td>${escapeHtml(d.event)}</td>
                                 <td>${escapeHtml(d.ticker)}</td>
-                                <td>${d.fairValue}</td>
-                                <td>${d.bidPrice}</td>
-                                <td>${d.edge}</td>
+                                <td>${escapeHtml(d.fairValue)}</td>
+                                <td>${escapeHtml(d.bidPrice)}</td>
+                                <td>${escapeHtml(d.edge)}</td>
                                 <td>${d.latency !== null ? d.latency : '-'}</td>
                                 <td>${Number(d.oddsSpread).toFixed(3)}</td>
                                 <td>${escapeHtml(d.status)}</td>
@@ -2425,9 +2429,22 @@ const KalshiDashboard = () => {
       const ts = Date.now();
       const sig = await signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
       const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
+
       if (res.ok) {
           addLog(`Canceled order ${id}`, 'CANCEL');
+      } else if (res.status === 404) {
+          console.warn(`Order ${id} not found during cancellation (likely already filled/cancelled).`);
+          addLog(`Cancel skipped: Order ${id} already gone`, 'CANCEL');
+      } else {
+          try {
+             const err = await res.json();
+             console.error(`Cancel failed (${res.status}):`, err);
+             addLog(`Cancel failed: ${err.message || res.statusText}`, 'ERROR');
+          } catch (e) {
+             console.error(`Cancel failed (${res.status})`);
+          }
       }
+
       if (!skipRefresh) fetchPortfolio();
       return res;
   }, [walletKeys, fetchPortfolio, addLog]);
@@ -2846,9 +2863,9 @@ const KalshiDashboard = () => {
                     <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
-                    <button onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
-                    <button onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
+                    <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
+                    <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
+                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title="Turbo Mode (3s updates)" onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
                 </div>
             </div>
             <div className="overflow-auto flex-1">
