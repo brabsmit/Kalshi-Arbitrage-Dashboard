@@ -2425,9 +2425,22 @@ const KalshiDashboard = () => {
       const ts = Date.now();
       const sig = await signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
       const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
+
       if (res.ok) {
           addLog(`Canceled order ${id}`, 'CANCEL');
+      } else if (res.status === 404) {
+          console.warn(`Order ${id} not found during cancellation (likely already filled/cancelled).`);
+          addLog(`Cancel skipped: Order ${id} already gone`, 'CANCEL');
+      } else {
+          try {
+             const err = await res.json();
+             console.error(`Cancel failed (${res.status}):`, err);
+             addLog(`Cancel failed: ${err.message || res.statusText}`, 'ERROR');
+          } catch (e) {
+             console.error(`Cancel failed (${res.status})`);
+          }
       }
+
       if (!skipRefresh) fetchPortfolio();
       return res;
   }, [walletKeys, fetchPortfolio, addLog]);
