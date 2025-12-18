@@ -978,11 +978,11 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
             new Date(d.timestamp).toISOString(),
             escapeCSV(d.ticker),
             escapeCSV(d.event),
-            d.action,
-            d.odds,
-            d.fairValue,
-            d.bidPrice,
-            d.edge,
+            escapeCSV(d.action),
+            escapeCSV(d.odds),
+            escapeCSV(d.fairValue),
+            escapeCSV(d.bidPrice),
+            escapeCSV(d.edge),
             escapeCSV(d.status),
             d.pnl,
             escapeCSV(d.outcome),
@@ -1061,9 +1061,9 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                                 <td>${new Date(d.timestamp).toLocaleString()}</td>
                                 <td>${escapeHtml(d.event)}</td>
                                 <td>${escapeHtml(d.ticker)}</td>
-                                <td>${d.fairValue}</td>
-                                <td>${d.bidPrice}</td>
-                                <td>${d.edge}</td>
+                                <td>${escapeHtml(d.fairValue)}</td>
+                                <td>${escapeHtml(d.bidPrice)}</td>
+                                <td>${escapeHtml(d.edge)}</td>
                                 <td>${d.latency !== null ? d.latency : '-'}</td>
                                 <td>${Number(d.oddsSpread).toFixed(3)}</td>
                                 <td>${escapeHtml(d.status)}</td>
