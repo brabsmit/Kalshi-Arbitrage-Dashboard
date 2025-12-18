@@ -1975,7 +1975,7 @@ const KalshiDashboard = () => {
                   const spread = maxProb - minProb;
 
                   if (spread > 0.15) {
-                      console.warn(`Market rejected due to high variance: ${spread.toFixed(2)}`);
+                      console.warn(`${targetName} rejected due to high variance: ${spread.toFixed(2)}`);
                       return null;
                   }
 
