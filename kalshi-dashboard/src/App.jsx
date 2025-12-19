@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut, Eye, EyeOff } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
 // ==========================================
@@ -632,6 +632,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
     const bidMarginId = useId();
     const closeMarginId = useId();
     const minFvId = useId();
+    const [showApiKey, setShowApiKey] = useState(false);
 
     if (!isOpen) return null;
     return (
@@ -674,7 +675,23 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 
                     <div>
                         <label htmlFor="odds-api-key" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label>
-                        <input id="odds-api-key" type="password" value={oddsApiKey} onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                        <div className="relative">
+                            <input
+                                id="odds-api-key"
+                                type={showApiKey ? "text" : "password"}
+                                value={oddsApiKey}
+                                onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}}
+                                className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none pr-10"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowApiKey(!showApiKey)}
+                                aria-label={showApiKey ? "Hide API Key" : "Show API Key"}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-blue-600"
+                            >
+                                {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
