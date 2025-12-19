@@ -6,3 +6,7 @@
 ## 2024-05-24 - Timer Coalescing for Latency Displays
 **Learning:** Individual components managing their own high-frequency timers (e.g., `setInterval` for "time ago") scale poorly (O(N) overhead) and desynchronize updates.
 **Action:** Use a single `TimeProvider` context that ticks once and distributes the current time to all consumers, ensuring synchronized updates and reduced timer overhead.
+
+## 2025-02-14 - Isolating Stats Calculation from Render Loop
+**Learning:** High-frequency updates from WebSockets trigger top-level re-renders. Components like `StatsBanner` that derive complex statistics (T-tests, variance) from props must be memoized both at the component level (`React.memo`) and calculation level (`useMemo`) to prevent CPU spikes during market volatility. Also, aligning internal timers with a global `TimeContext` prevents desynchronized render cycles.
+**Action:** Wrapped `StatsBanner` in `React.memo`, encapsulated math in `useMemo`, and consumed `TimeContext` to eliminate redundant internal intervals.

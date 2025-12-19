@@ -1,5 +1,5 @@
 // File: src/App.jsx
-import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, useId, useContext } from 'react';
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
@@ -479,78 +479,73 @@ const CancellationModal = ({ isOpen, progress }) => {
     );
 };
 
-const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
-    const exposure = positions.reduce((acc, p) => {
-        if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
-            return acc + (p.price * (p.quantity - p.filled));
+const StatsBanner = React.memo(({ positions, tradeHistory, sessionStart, isRunning }) => {
+    const now = useContext(TimeContext);
+    const elapsed = sessionStart ? (now - sessionStart) : 0;
+
+    const { exposure, totalPotentialReturn, totalRealizedPnl, winRate, historyItems, tStat, isSignificant } = useMemo(() => {
+        const exposure = positions.reduce((acc, p) => {
+            if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
+                return acc + (p.price * (p.quantity - p.filled));
+            }
+            if (!p.isOrder && p.status === 'HELD') {
+                return acc + p.cost;
+            }
+            return acc;
+        }, 0);
+
+        const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
+        const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
+
+        const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
+        const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
+
+        // WIN RATE
+        const autoBidHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
+        const winCount = autoBidHistory.filter(p => (p.realizedPnl || 0) > 0).length;
+        const totalSettled = autoBidHistory.length;
+        const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
+
+        // T-STAT
+        const botHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
+        let tStat = 0;
+        let isSignificant = false;
+
+        if (botHistory.length > 1) {
+            const pnls = botHistory.map(p => p.realizedPnl || 0);
+            const mean = pnls.reduce((a, b) => a + b, 0) / pnls.length;
+            const variance = pnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (pnls.length - 1);
+            const stdDev = Math.sqrt(variance);
+
+            if (stdDev > 0) {
+                const stdError = stdDev / Math.sqrt(pnls.length);
+                tStat = mean / stdError;
+            }
+
+            const df = pnls.length - 1;
+            const tTable = {
+                1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+                6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+                11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
+                16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+                21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
+                26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
+                40: 2.021, 50: 2.009, 60: 2.000, 80: 1.990, 100: 1.984
+            };
+
+            const keys = Object.keys(tTable).map(Number).sort((a, b) => a - b);
+            let closestDf = keys[0];
+            for (const k of keys) {
+                if (k <= df) closestDf = k;
+                else break;
+            }
+
+            const tCrit = df > 100 ? 1.96 : tTable[closestDf];
+            isSignificant = Math.abs(tStat) > tCrit;
         }
-        if (!p.isOrder && p.status === 'HELD') {
-            return acc + p.cost;
-        }
-        return acc;
-    }, 0);
 
-    const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
-    const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
-
-    const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
-    const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
-
-    // WIN RATE: Calculated only on AUTO-BID positions
-    const autoBidHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
-    const winCount = autoBidHistory.filter(p => (p.realizedPnl || 0) > 0).length;
-    const totalSettled = autoBidHistory.length;
-    const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
-
-    // --- T-STATISTIC CALCULATION ---
-    const botHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
-
-    let tStat = 0;
-    let isSignificant = false;
-    let tCrit = 0;
-
-    if (botHistory.length > 1) {
-        const pnls = botHistory.map(p => p.realizedPnl || 0);
-        const mean = pnls.reduce((a, b) => a + b, 0) / pnls.length;
-        const variance = pnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (pnls.length - 1);
-        const stdDev = Math.sqrt(variance);
-
-        if (stdDev > 0) {
-            const stdError = stdDev / Math.sqrt(pnls.length);
-            tStat = mean / stdError;
-        }
-
-        // Critical Value Lookup (Two-tailed, alpha=0.05)
-        const df = pnls.length - 1;
-        const tTable = {
-            1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
-            6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
-            11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
-            16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
-            21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
-            26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
-            40: 2.021, 50: 2.009, 60: 2.000, 80: 1.990, 100: 1.984
-        };
-
-        // Find closest lower key or default to 1.96 (Z-score approx for large N)
-        const keys = Object.keys(tTable).map(Number).sort((a, b) => a - b);
-        let closestDf = keys[0];
-        for (const k of keys) {
-            if (k <= df) closestDf = k;
-            else break;
-        }
-
-        tCrit = df > 100 ? 1.96 : tTable[closestDf];
-        isSignificant = Math.abs(tStat) > tCrit;
-    }
-    // -------------------------------
-
-    const [elapsed, setElapsed] = useState(0);
-    useEffect(() => {
-        if (!sessionStart || !isRunning) return;
-        const i = setInterval(() => setElapsed(Date.now() - sessionStart), 1000);
-        return () => clearInterval(i);
-    }, [sessionStart, isRunning]);
+        return { exposure, totalPotentialReturn, totalRealizedPnl, winRate, historyItems, tStat, isSignificant };
+    }, [positions, tradeHistory]);
 
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
@@ -620,7 +615,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                     <Clock size={12} /> Session Time
                 </div>
                 <div className="text-2xl font-bold text-slate-800 mt-1 font-mono">
-                    {sessionStart ? formatDuration(elapsed || (Date.now() - sessionStart)) : '0s'}
+                    {sessionStart ? formatDuration(elapsed) : '0s'}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                     {isRunning ? 'Bot is running' : 'Bot is paused'}
@@ -628,7 +623,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
             </div>
         </div>
     );
-};
+});
 
 const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
     const bidMarginId = useId();
@@ -2836,7 +2831,7 @@ const KalshiDashboard = () => {
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
-      <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
+      <StatsBanner positions={positions} tradeHistory={tradeHistory} sessionStart={sessionStart} isRunning={isRunning} />
 
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
