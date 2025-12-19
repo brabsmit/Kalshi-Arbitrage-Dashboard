@@ -17,6 +17,12 @@ export default defineConfig({
     allowedHosts: [
       'bryan-desktop.ddns.net'
     ],
+    // 4. SECURITY HEADERS: Protect against clickjacking and other attacks
+    headers: {
+      'X-Frame-Options': 'DENY',
+      'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    },
     proxy: {
       '/api/kalshi': {
         target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL}/trade-api/v2` : 'https://api.elections.kalshi.com/trade-api/v2',
