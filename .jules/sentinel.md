@@ -7,3 +7,8 @@
 **Vulnerability:** User-controlled data (Event names, Tickers) exported to CSV were not sanitized for formula injection.
 **Learning:** Even in dashboards, "Export to CSV" features are attack vectors if opened in Excel. `escapeHtml` is insufficient for CSV.
 **Prevention:** Always escape fields starting with `=, +, -, @` when generating CSVs.
+
+## 2025-12-19 - Vite Dev Server Security Headers
+**Vulnerability:** The Vite development server was exposed to the local network (`host: true`) without security headers, making it potentially vulnerable to Clickjacking or MIME sniffing attacks if accessed by other users on the network.
+**Learning:** Even development servers, when exposed to a network, should implement defense-in-depth measures. `vite.config.js` allows injection of headers via `server.headers`.
+**Prevention:** Add `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` to the `server.headers` configuration in Vite.
