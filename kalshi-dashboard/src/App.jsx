@@ -740,7 +740,11 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                 </span>
                 {lastUpdated && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500"><Clock size={10} /> {lastUpdated.toLocaleTimeString()}</span>}
                 {apiUsage && (
-                    <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-indigo-50 text-indigo-600 border-indigo-100" title={`Used: ${apiUsage.used} | Remaining: ${apiUsage.remaining}`}>
+                    <span
+                        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-indigo-50 text-indigo-600 border-indigo-100"
+                        title={`Used: ${apiUsage.used} | Remaining: ${apiUsage.remaining}`}
+                        aria-label={`API Usage: ${apiUsage.used} requests used of ${apiUsage.used + apiUsage.remaining} total`}
+                    >
                         <Hash size={10} /> {apiUsage.used}/{apiUsage.used + apiUsage.remaining}
                     </span>
                 )}
@@ -1293,6 +1297,17 @@ const MarketExpandedDetails = ({ market }) => {
 
 const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isSelected, onToggleSelect }) => {
     const [expanded, setExpanded] = useState(false);
+    const [isBidding, setIsBidding] = useState(false);
+
+    const handleBid = async (e) => {
+        e.stopPropagation();
+        setIsBidding(true);
+        try {
+            await onExecute(market, market.smartBid, false);
+        } finally {
+            setIsBidding(false);
+        }
+    };
 
     return (
         <>
@@ -1348,7 +1363,13 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                     {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <button onClick={(e) => { e.stopPropagation(); onExecute(market, market.smartBid, false); }} disabled={!market.smartBid} className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed">Bid {market.smartBid}¢</button>
+                    <button
+                        onClick={handleBid}
+                        disabled={!market.smartBid || isBidding}
+                        className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px]"
+                    >
+                        {isBidding ? <Loader2 size={12} className="animate-spin" /> : `Bid ${market.smartBid}¢`}
+                    </button>
                 </td>
             </tr>
             {expanded && (
