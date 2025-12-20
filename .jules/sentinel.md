@@ -12,3 +12,8 @@
 **Vulnerability:** The Vite development server was exposed to the local network (`host: true`) without security headers, making it potentially vulnerable to Clickjacking or MIME sniffing attacks if accessed by other users on the network.
 **Learning:** Even development servers, when exposed to a network, should implement defense-in-depth measures. `vite.config.js` allows injection of headers via `server.headers`.
 **Prevention:** Add `X-Frame-Options`, `X-Content-Type-Options`, and `Referrer-Policy` to the `server.headers` configuration in Vite.
+
+## 2025-12-20 - Missing Content Security Policy (CSP)
+**Vulnerability:** The application lacked a Content Security Policy (CSP), allowing execution of scripts from any source. This is a high risk for a wallet application that handles private keys.
+**Learning:** Single Page Applications (SPAs) serving static HTML often miss CSP headers if not configured in the web server. Adding a `<meta>` tag is a robust fallback.
+**Prevention:** Added a strict CSP `<meta>` tag to `index.html` allowing only 'self' and specific APIs (The-Odds-API), while blocking object-src and limiting script-src.
