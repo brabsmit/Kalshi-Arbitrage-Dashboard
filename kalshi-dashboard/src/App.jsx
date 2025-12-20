@@ -30,7 +30,6 @@ const useForge = () => {
 // ==========================================
 
 const REFRESH_COOLDOWN = 10000; 
-const WS_RECONNECT_INTERVAL = 3000;
 const STALE_DATA_THRESHOLD = 30000; // 30 seconds
 
 // ==========================================
@@ -104,15 +103,6 @@ const formatGameTime = (isoString) => {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true
-    });
-};
-
-const hasOpenExposure = (positions, marketTicker) => {
-    return positions.some(p => {
-        if (p.marketId !== marketTicker) return false;
-        if (!p.isOrder && p.quantity > 0) return true;
-        if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase())) return true;
-        return false;
     });
 };
 
@@ -1131,7 +1121,6 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
 const PositionDetailsModal = ({ position, market, onClose }) => {
     if (!position) return null;
 
-    const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
     const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST' : '-';
 
     const safeAvgPrice = typeof position.avgPrice === 'number' ? position.avgPrice : 0;
@@ -1897,7 +1886,7 @@ const KalshiDashboard = () => {
   const fetchLiveOdds = useCallback(async (force = false) => {
       if (!oddsApiKey) return;
       const now = Date.now();
-      const cooldown = config.isTurboMode ? 2000 : 10000;
+      const cooldown = config.isTurboMode ? 2000 : REFRESH_COOLDOWN;
       if (!force && (now - lastFetchTimeRef.current < cooldown)) return;
       
       if (abortControllerRef.current) abortControllerRef.current.abort();
