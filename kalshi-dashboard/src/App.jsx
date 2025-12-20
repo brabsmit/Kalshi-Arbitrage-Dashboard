@@ -2798,14 +2798,36 @@ const KalshiDashboard = () => {
     setAnalysisModalData({ ...historyEntry, currentStatus: item.settlementStatus || item.status });
   }, []);
 
-  const groupedMarkets = useMemo(() => {
-      const enriched = markets.map(m => {
-          const { smartBid, edge, reason, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
-          return { ...m, smartBid, edge, reason, maxWillingToPay };
-      });
+  // OPTIMIZATION: Cache enriched markets to preserve object identity for React.memo
+  // This prevents all MarketRows from re-rendering when only one market updates.
+  const enrichedCache = useRef(new WeakMap());
+  const lastMarginRef = useRef(config.marginPercent);
 
+  const enrichedMarkets = useMemo(() => {
+      // If margin changed, invalidate cache (by creating new one)
+      if (lastMarginRef.current !== config.marginPercent) {
+          enrichedCache.current = new WeakMap();
+          lastMarginRef.current = config.marginPercent;
+      }
+
+      return markets.map(m => {
+          // If we have a cached version for this exact market object reference, use it.
+          // This works because setMarkets preserves object identity for unchanged markets.
+          if (enrichedCache.current.has(m)) {
+              return enrichedCache.current.get(m);
+          }
+
+          const { smartBid, edge, reason, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
+          const enriched = { ...m, smartBid, edge, reason, maxWillingToPay };
+
+          enrichedCache.current.set(m, enriched);
+          return enriched;
+      });
+  }, [markets, config.marginPercent]);
+
+  const groupedMarkets = useMemo(() => {
       const groups = {};
-      enriched.forEach(market => {
+      enrichedMarkets.forEach(market => {
           const dateObj = new Date(market.commenceTime);
           const dateKey = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
           if (!groups[dateKey]) groups[dateKey] = [];
@@ -2829,7 +2851,21 @@ const KalshiDashboard = () => {
            const dateB = new Date(b[1][0].commenceTime);
            return dateA - dateB;
       });
-  }, [markets, config.marginPercent, sortConfig]);
+  }, [enrichedMarkets, sortConfig]);
+
+  // OPTIMIZATION: Memoize active content filtering to prevent re-calculation on every market update
+  const activeContent = useMemo(() => positions.filter(p => {
+      if (activeTab === 'positions') {
+          return !p.isOrder && p.quantity > 0 && (!p.settlementStatus || p.settlementStatus === 'unsettled');
+      }
+      if (activeTab === 'resting') {
+          return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
+      }
+      if (activeTab === 'history') {
+          return !p.isOrder && ((p.settlementStatus && p.settlementStatus !== 'unsettled') || p.quantity === 0) && tradeHistory[p.marketId]?.source === 'auto';
+      }
+      return false;
+  }), [positions, activeTab, tradeHistory]);
 
   if (!isForgeReady) {
       return (
@@ -2841,19 +2877,6 @@ const KalshiDashboard = () => {
           </div>
       );
   }
-
-  const activeContent = positions.filter(p => {
-      if (activeTab === 'positions') {
-          return !p.isOrder && p.quantity > 0 && (!p.settlementStatus || p.settlementStatus === 'unsettled');
-      }
-      if (activeTab === 'resting') {
-          return p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase());
-      }
-      if (activeTab === 'history') {
-          return !p.isOrder && ((p.settlementStatus && p.settlementStatus !== 'unsettled') || p.quantity === 0) && tradeHistory[p.marketId]?.source === 'auto';
-      }
-      return false;
-  });
 
   return (
     <TimeProvider>
