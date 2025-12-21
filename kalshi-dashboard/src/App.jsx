@@ -43,9 +43,18 @@ const americanToProbability = (odds) => {
 
 const calculateVolatility = (history) => {
     if (!history || history.length < 2) return 0;
-    const values = history.map(h => h.v);
-    const mean = values.reduce((a, b) => a + b, 0) / values.length;
-    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1);
+    const n = history.length;
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+        sum += history[i].v;
+    }
+    const mean = sum / n;
+    let varianceSum = 0;
+    for (let i = 0; i < n; i++) {
+        const diff = history[i].v - mean;
+        varianceSum += diff * diff;
+    }
+    const variance = varianceSum / (n - 1);
     return Math.sqrt(variance);
 };
 
@@ -2052,11 +2061,22 @@ const KalshiDashboard = () => {
                   // --- VOLATILITY TRACKING ---
                   const now = Date.now();
                   const currentVal = vigFreeProb * 100;
-                  let history = prevMarket?.history ? [...prevMarket.history] : [];
-                  history.push({ t: now, v: currentVal });
+
+                  const prevHistory = prevMarket?.history || [];
                   // Keep last 60 mins of history for volatility calculation
                   const cutoff = now - 60 * 60 * 1000;
-                  history = history.filter(h => h.t > cutoff);
+
+                  // Efficiently slice history without full iteration/filtering
+                  let startIndex = 0;
+                  if (prevHistory.length > 0 && prevHistory[0].t <= cutoff) {
+                      while(startIndex < prevHistory.length && prevHistory[startIndex].t <= cutoff) {
+                          startIndex++;
+                      }
+                  }
+
+                  const history = prevHistory.slice(startIndex);
+                  history.push({ t: now, v: currentVal });
+
                   const volatility = calculateVolatility(history);
                   // ---------------------------
                   

@@ -6,3 +6,7 @@
 ## 2024-05-24 - Timer Coalescing for Latency Displays
 **Learning:** Individual components managing their own high-frequency timers (e.g., `setInterval` for "time ago") scale poorly (O(N) overhead) and desynchronize updates.
 **Action:** Use a single `TimeProvider` context that ticks once and distributes the current time to all consumers, ensuring synchronized updates and reduced timer overhead.
+
+## 2024-05-24 - Optimized Volatility Calculation
+**Learning:** High-frequency array manipulations (map/filter/reduce) inside state updaters for large datasets (1200+ points x 300 markets) cause significant CPU overhead. Specifically, `Array.map` + multiple `reduce` passes is 5-7x slower than a single-pass loop, and `Array.filter` on sorted time-series data is O(N) where `slice` with a found index is O(1) for the copy (conceptually, though JS engines optimize slice).
+**Action:** Replaced multi-pass statistical calculations with single-pass variance formulas and used efficient array slicing for sliding windows to reduce garbage collection and main-thread blocking time.
