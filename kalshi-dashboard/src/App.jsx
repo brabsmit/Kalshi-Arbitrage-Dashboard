@@ -670,7 +670,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 id="odds-api-key"
                                 type={showApiKey ? "text" : "password"}
                                 value={oddsApiKey}
-                                onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}}
+                                onChange={e => {setOddsApiKey(e.target.value); sessionStorage.setItem('odds_api_key', e.target.value)}}
                                 className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none pr-10"
                             />
                             <button
@@ -842,7 +842,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                         </div>
                     )}
                     <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded">
-                        Keys stored locally. Supports standard PKCS#1 keys.
+                        Keys stored in session memory (cleared on close). Supports standard PKCS#1 keys.
                     </div>
                     <input type="text" aria-label="API Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
                     <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
@@ -1880,9 +1880,9 @@ const KalshiDashboard = () => {
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
 
   useEffect(() => {
-      const k = localStorage.getItem('kalshi_keys');
+      const k = sessionStorage.getItem('kalshi_keys');
       if (k) setWalletKeys(JSON.parse(k));
-      const o = localStorage.getItem('odds_api_key');
+      const o = sessionStorage.getItem('odds_api_key');
       if (o) setOddsApiKey(o);
   }, []);
 
@@ -2886,7 +2886,7 @@ const KalshiDashboard = () => {
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
-      <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
+      <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
       <DataExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} />

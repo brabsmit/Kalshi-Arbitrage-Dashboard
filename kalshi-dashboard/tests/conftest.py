@@ -150,11 +150,11 @@ def authenticated_page(page):
     private_key_js = private_key.replace('\n', '\\n')
 
     page.evaluate(f"""() => {{
-        localStorage.setItem('kalshi_keys', JSON.stringify({{
+        sessionStorage.setItem('kalshi_keys', JSON.stringify({{
             keyId: '{key_id}',
             privateKey: `{private_key_js}`
         }}));
-        localStorage.setItem('odds_api_key', '{odds_key}');
+        sessionStorage.setItem('odds_api_key', '{odds_key}');
     }}""")
 
     page.reload()

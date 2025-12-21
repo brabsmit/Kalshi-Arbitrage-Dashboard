@@ -17,3 +17,8 @@
 **Vulnerability:** The application lacked a Content Security Policy (CSP), allowing execution of scripts from any source. This is a high risk for a wallet application that handles private keys.
 **Learning:** Single Page Applications (SPAs) serving static HTML often miss CSP headers if not configured in the web server. Adding a `<meta>` tag is a robust fallback.
 **Prevention:** Added a strict CSP `<meta>` tag to `index.html` allowing only 'self' and specific APIs (The-Odds-API), while blocking object-src and limiting script-src.
+
+## 2025-12-21 - Private Key in Session Storage
+**Vulnerability:** The application stored the user's RSA Private Key and API Keys in `localStorage`. This meant the keys persisted indefinitely, even after the browser tab was closed, increasing the risk of exposure if the device was accessed by others or if an XSS vulnerability was exploited later.
+**Learning:** For client-side wallets/dashboards, `sessionStorage` provides a better security balance than `localStorage` by ensuring sensitive credentials are cleared when the session ends (tab closed), reducing the window of opportunity for theft.
+**Prevention:** Migrated `kalshi_keys` and `odds_api_key` storage to `sessionStorage`. Updated tests (`conftest.py`) to inject credentials into `sessionStorage`.
