@@ -19,3 +19,7 @@
 ## 2025-12-17 - [The Fuzzy Match]
 **Observation:** `findKalshiMatch` had a "Strategy 2" that tried to fuzzy match teams based on first letters. It was clever, dangerous, and likely buggy for teams sharing initials.
 **Lesson:** Dumb, exact matching is better than clever, wrong matching. If it doesn't match exactly, don't bet on it.
+
+## 2025-05-27 - [The Legacy Probability]
+**Observation:** `impliedProb` was calculated in `fetchLiveOdds` using a "reference bookmaker" for "Legacy support", but was never used in the UI and shadowed by `vigFreeProb` in logic.
+**Lesson:** Legacy code is dead code. If it's not used *now*, delete it. Don't carry baggage.
