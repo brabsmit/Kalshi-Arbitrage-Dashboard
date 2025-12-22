@@ -17,3 +17,8 @@
 **Vulnerability:** The application lacked a Content Security Policy (CSP), allowing execution of scripts from any source. This is a high risk for a wallet application that handles private keys.
 **Learning:** Single Page Applications (SPAs) serving static HTML often miss CSP headers if not configured in the web server. Adding a `<meta>` tag is a robust fallback.
 **Prevention:** Added a strict CSP `<meta>` tag to `index.html` allowing only 'self' and specific APIs (The-Odds-API), while blocking object-src and limiting script-src.
+
+## 2025-02-12 - Flawed Input Sanitization Helper
+**Vulnerability:** The `escapeHtml` and `escapeCSV` helper functions relied on `typeof unsafe !== 'string'` to bypass processing. This allowed non-string objects (e.g., those with custom `toString` methods) or unexpected types to bypass sanitization, potentially leading to XSS or CSV Injection if such data entered the system.
+**Learning:** Type checks like `typeof` are insufficient for sanitization guards because template literals and string concatenation implicitly call `toString()`.
+**Prevention:** Always explicitly cast input to string (e.g., `String(input)`) before sanitizing, or handle `null`/`undefined` explicitly and default to empty string.
