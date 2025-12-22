@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut, Eye, EyeOff } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut, Eye, EyeOff, Search } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
 // ==========================================
@@ -394,6 +394,25 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
         </div>
     );
 };
+
+const MarketSearch = ({ value, onChange }) => (
+    <div className="relative group">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={14} />
+        <input
+            type="text"
+            placeholder="Search events..."
+            value={value}
+            onChange={e => onChange(e.target.value)}
+            className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-32 focus:w-48 transition-all"
+            aria-label="Filter markets by event name"
+        />
+        {value && (
+            <button type="button" onClick={() => onChange('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500" aria-label="Clear search">
+                <XCircle size={12} fill="currentColor" className="bg-white"/>
+            </button>
+        )}
+    </div>
+);
 
 const SportFilter = ({ selected, options, onChange }) => {
     const [isOpen, setIsOpen] = useState(false);
@@ -1735,6 +1754,7 @@ const KalshiDashboard = () => {
   const [eventLogs, setEventLogs] = useState([]);
 
   const [deselectedMarketIds, setDeselectedMarketIds] = useState(new Set());
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
@@ -2825,9 +2845,14 @@ const KalshiDashboard = () => {
       });
   }, [markets, config.marginPercent]);
 
+  const filteredMarkets = useMemo(() => {
+      if (!searchTerm) return enrichedMarkets;
+      return enrichedMarkets.filter(m => m.event.toLowerCase().includes(searchTerm.toLowerCase()));
+  }, [enrichedMarkets, searchTerm]);
+
   const groupedMarkets = useMemo(() => {
       const groups = {};
-      enrichedMarkets.forEach(market => {
+      filteredMarkets.forEach(market => {
           const dateObj = new Date(market.commenceTime);
           const dateKey = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
           if (!groups[dateKey]) groups[dateKey] = [];
@@ -2851,7 +2876,7 @@ const KalshiDashboard = () => {
            const dateB = new Date(b[1][0].commenceTime);
            return dateA - dateB;
       });
-  }, [enrichedMarkets, sortConfig]);
+  }, [filteredMarkets, sortConfig]);
 
   // OPTIMIZATION: Memoize active content filtering to prevent re-calculation on every market update
   const activeContent = useMemo(() => positions.filter(p => {
@@ -2909,6 +2934,8 @@ const KalshiDashboard = () => {
                 <div className="flex items-center gap-3">
                     <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
                     <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
+                    <div className="hidden md:block h-6 w-px bg-slate-200 mx-1"></div>
+                    <MarketSearch value={searchTerm} onChange={setSearchTerm} />
                 </div>
                 <div className="flex gap-2">
                     <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
