@@ -1,7 +1,7 @@
 
 const escapeHtml = (unsafe) => {
-    if (typeof unsafe !== 'string') return unsafe;
-    return unsafe
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
          .replace(/&/g, "&amp;")
          .replace(/</g, "&lt;")
          .replace(/>/g, "&gt;")
@@ -10,9 +10,9 @@ const escapeHtml = (unsafe) => {
 };
 
 const escapeCSV = (str) => {
-    if (typeof str !== 'string') return str;
+    if (str === null || str === undefined) return '""';
     // Escape double quotes by doubling them
-    let escaped = str.replace(/"/g, '""');
+    let escaped = String(str).replace(/"/g, '""');
     // Prevent formula injection (CSV Injection) if starts with =, +, -, @
     if (/^[=+\-@]/.test(escaped)) {
         escaped = "'" + escaped;
@@ -60,7 +60,7 @@ const htmlOutput = data.map(d => `
 console.log("--- HTML Output ---");
 console.log(htmlOutput);
 
-if (htmlOutput.includes("&lt;script&gt;alert('XSS')&lt;/script&gt;")) {
+if (htmlOutput.includes("&lt;script&gt;alert(&#039;XSS&#039;)&lt;/script&gt;") || htmlOutput.includes("&lt;script&gt;alert('XSS')&lt;/script&gt;")) {
     console.log("✅ HTML SAFE: Script tag escaped.");
 } else if (htmlOutput.includes("<script>")) {
     console.log("🚨 HTML VULNERABLE: Script tag found!");
@@ -94,25 +94,6 @@ if (csvRow[5] === '"<script>alert(\'XSS\')</script>"') {
      console.log("✅ CSV SAFE: fairValue escaped (quoted).");
 } else {
      console.log(`🚨 CSV CHECK FAILED for fairValue: ${csvRow[5]}`);
-}
-
-if (csvRow[6] === "'=1+1") { // Should be escaped with leading quote and NO extra quotes if it was not string? Wait.
-    // escapeCSV("=1+1") -> "'=1+1" -> then wrapping in quotes: "\"'=1+1\""
-    // Wait, escapeCSV returns `"${escaped}"`.
-    // let escaped = "=1+1";
-    // if (/^[=+\-@]/.test(escaped)) escaped = "'" + escaped; // "'=1+1"
-    // return `"${escaped}"`; // "\"'=1+1\""
-
-    // My mock data bidPrice is "=1+1" (string)
-    // escapeCSV("=1+1") should return "\"'=1+1\""
-    // Wait.
-    // If bidPrice is passed as string, escapeCSV logic:
-    // escaped = "=1+1".
-    // test /^[=+\-@]/ matches.
-    // escaped = "'=1+1".
-    // return `"'=1+1"`.
-    // So output is "'=1+1" (inside the array).
-    // The console log will show it joined by comma.
 }
 
 const expectedCSVPrice = `"'=1+1"`;

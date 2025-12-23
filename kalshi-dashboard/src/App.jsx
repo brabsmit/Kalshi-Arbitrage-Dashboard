@@ -4,28 +4,6 @@ import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, 
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
 // ==========================================
-// 0. LIBRARY LOADER
-// ==========================================
-const useForge = () => {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    if (window.forge) {
-      setIsReady(true);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = "/libs/forge.min.js";
-    script.async = true;
-    script.onload = () => setIsReady(true);
-    document.body.appendChild(script);
-  }, []);
-
-  return isReady;
-};
-
-// ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
 
@@ -69,8 +47,8 @@ const formatDuration = (ms) => {
 const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
 const escapeHtml = (unsafe) => {
-    if (typeof unsafe !== 'string') return unsafe;
-    return unsafe
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
          .replace(/&/g, "&amp;")
          .replace(/</g, "&lt;")
          .replace(/>/g, "&gt;")
@@ -79,9 +57,9 @@ const escapeHtml = (unsafe) => {
 };
 
 const escapeCSV = (str) => {
-    if (typeof str !== 'string') return str;
+    if (str === null || str === undefined) return '""';
     // Escape double quotes by doubling them
-    let escaped = str.replace(/"/g, '""');
+    let escaped = String(str).replace(/"/g, '""');
     // Prevent formula injection (CSV Injection) if starts with =, +, -, @
     if (/^[=+\-@]/.test(escaped)) {
         escaped = "'" + escaped;
@@ -840,14 +818,38 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                             <strong>Connection Failed:</strong><br/>{validationError}
                         </div>
                     )}
-                    <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded">
-                        Keys stored locally. Supports standard PKCS#1 keys.
+                    <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded flex items-start gap-2">
+                        <Info size={14} className="mt-0.5 flex-shrink-0"/>
+                        <span>Keys stored locally. Supports standard PKCS#1 keys.</span>
                     </div>
-                    <input type="text" aria-label="API Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
-                    <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
-                        <input type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        {fileName ? <span className="text-emerald-600 font-bold">{fileName}</span> : <span className="text-slate-400">Upload Private Key (.key)</span>}
+
+                    <div>
+                        <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 mb-1 uppercase">API Key ID</label>
+                        <input id="api-key-id" type="text" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
+
+                    <div>
+                        <label htmlFor="private-key-upload" className="block text-xs font-bold text-slate-500 mb-1 uppercase">Private Key</label>
+                        <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer relative transition-all group ${fileName ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'} focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2`}>
+                            <input id="private-key-upload" type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept=".key,.pem,.txt" />
+                            <div className="flex flex-col items-center gap-2">
+                                {fileName ? (
+                                    <>
+                                        <div className="p-2 bg-emerald-100 rounded-full text-emerald-600"><Check size={20} /></div>
+                                        <span className="text-emerald-700 font-bold text-sm truncate max-w-[200px]">{fileName}</span>
+                                        <span className="text-[10px] text-emerald-500">Ready to sign</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="p-2 bg-slate-100 rounded-full text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-500 transition-colors"><Upload size={20} /></div>
+                                        <span className="text-slate-600 font-medium text-sm">Click to upload .key file</span>
+                                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 outline-none">
                         {isValidating ? 'Validating...' : 'Connect'}
                     </button>
@@ -1709,7 +1711,6 @@ const EventLog = ({ logs }) => {
 // ==========================================
 
 const KalshiDashboard = () => {
-  const isForgeReady = useForge(); 
   
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -2130,7 +2131,7 @@ const KalshiDashboard = () => {
   }, [isRunning, fetchLiveOdds, config.isTurboMode]);
 
   useEffect(() => {
-      if (!isRunning || !walletKeys || !isForgeReady) return;
+      if (!isRunning || !walletKeys) return;
 
       let ws;
       let isMounted = true;
@@ -2175,7 +2176,7 @@ const KalshiDashboard = () => {
           isMounted = false;
           if (ws) ws.close();
       };
-  }, [isRunning, walletKeys, isForgeReady]);
+  }, [isRunning, walletKeys]);
 
   // Memoize the list of tickers to ensure we resubscribe only when the actual market set changes,
   // not just when markets.length changes (e.g. switching sports) or on every price tick.
@@ -2228,7 +2229,7 @@ const KalshiDashboard = () => {
   }, [tickerFingerprint, wsStatus]);
 
   const fetchPortfolio = useCallback(async () => {
-      if (!walletKeys || !isForgeReady) return;
+      if (!walletKeys) return;
       try {
           const ts = Date.now();
           const getHeaders = async (path) => ({
@@ -2346,7 +2347,7 @@ const KalshiDashboard = () => {
           
           setPositions(mappedItems);
       } catch (e) { console.error("Portfolio Error", e); }
-  }, [walletKeys, isForgeReady]);
+  }, [walletKeys]);
 
   useEffect(() => { 
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
@@ -2354,7 +2355,6 @@ const KalshiDashboard = () => {
 
   const executeOrder = useCallback(async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
       if (!walletKeys) return setIsWalletOpen(true);
-      if (!isForgeReady) return alert("Security library loading...");
       
       const ticker = isSell ? (marketOrTicker.realMarketId || marketOrTicker) : marketOrTicker.realMarketId;
       const qty = qtyOverride || config.tradeSize;
@@ -2439,7 +2439,7 @@ const KalshiDashboard = () => {
 
           if (!config.isAutoBid && !config.isAutoClose) alert(e.message);
       }
-  }, [walletKeys, isForgeReady, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
+  }, [walletKeys, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
 
   const cancelOrder = useCallback(async (id, skipConfirm = false, skipRefresh = false) => {
       if (!skipConfirm && !confirm("Cancel Order?")) return;
@@ -2858,17 +2858,6 @@ const KalshiDashboard = () => {
       }
       return false;
   }), [positions, activeTab, tradeHistory]);
-
-  if (!isForgeReady) {
-      return (
-          <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500">
-              <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="animate-spin text-blue-600" size={32} />
-                  <p>Initializing Security Libraries...</p>
-              </div>
-          </div>
-      );
-  }
 
   return (
     <TimeProvider>
