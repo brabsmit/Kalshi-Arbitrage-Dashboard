@@ -4,7 +4,7 @@ import time
 def verify_frontend():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        context = browser.new_context()
+        context = browser.new_context(ignore_https_errors=True)
         page = context.new_page()
 
         # Mock window.forge to prevent blocking
@@ -20,7 +20,7 @@ def verify_frontend():
 
         print("Navigating to app...")
         # Port changed to 3000 according to logs
-        page.goto("http://localhost:3000")
+        page.goto("https://localhost:3000")
 
         # Wait for app to load
         print("Waiting for app to load...")
@@ -32,7 +32,7 @@ def verify_frontend():
 
         # Check for "Sports" filter button
         print("Checking Sports Filter...")
-        filter_btn = page.get_by_text("Sports")
+        filter_btn = page.get_by_label("Filter by Sport")
         expect(filter_btn).to_be_visible()
 
         # Click the filter button to open dropdown
@@ -41,7 +41,7 @@ def verify_frontend():
 
         # Verify dropdown content (Sports list)
         # Assuming defaults are NFL, NBA, etc.
-        expect(page.get_by_text("Filter Sports")).to_be_visible()
+        expect(page.get_by_text("Available Sports")).to_be_visible()
         expect(page.get_by_text("Football (NFL)")).to_be_visible()
         expect(page.get_by_text("Basketball (NBA)")).to_be_visible()
 

@@ -4,28 +4,6 @@ import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, 
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
 // ==========================================
-// 0. LIBRARY LOADER
-// ==========================================
-const useForge = () => {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    if (window.forge) {
-      setIsReady(true);
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = "/libs/forge.min.js";
-    script.async = true;
-    script.onload = () => setIsReady(true);
-    document.body.appendChild(script);
-  }, []);
-
-  return isReady;
-};
-
-// ==========================================
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
 
@@ -1710,8 +1688,6 @@ const EventLog = ({ logs }) => {
 // ==========================================
 
 const KalshiDashboard = () => {
-  const isForgeReady = useForge(); 
-  
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
   const [balance, setBalance] = useState(null); 
@@ -2137,7 +2113,7 @@ const KalshiDashboard = () => {
   }, [isRunning, fetchLiveOdds, config.isTurboMode]);
 
   useEffect(() => {
-      if (!isRunning || !walletKeys || !isForgeReady) return;
+      if (!isRunning || !walletKeys) return;
 
       let ws;
       let isMounted = true;
@@ -2182,7 +2158,7 @@ const KalshiDashboard = () => {
           isMounted = false;
           if (ws) ws.close();
       };
-  }, [isRunning, walletKeys, isForgeReady]);
+  }, [isRunning, walletKeys]);
 
   // Memoize the list of tickers to ensure we resubscribe only when the actual market set changes,
   // not just when markets.length changes (e.g. switching sports) or on every price tick.
@@ -2235,7 +2211,7 @@ const KalshiDashboard = () => {
   }, [tickerFingerprint, wsStatus]);
 
   const fetchPortfolio = useCallback(async () => {
-      if (!walletKeys || !isForgeReady) return;
+      if (!walletKeys) return;
       try {
           const ts = Date.now();
           const getHeaders = async (path) => ({
@@ -2353,7 +2329,7 @@ const KalshiDashboard = () => {
           
           setPositions(mappedItems);
       } catch (e) { console.error("Portfolio Error", e); }
-  }, [walletKeys, isForgeReady]);
+  }, [walletKeys]);
 
   useEffect(() => { 
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
@@ -2361,7 +2337,6 @@ const KalshiDashboard = () => {
 
   const executeOrder = useCallback(async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
       if (!walletKeys) return setIsWalletOpen(true);
-      if (!isForgeReady) return alert("Security library loading...");
       
       const ticker = isSell ? (marketOrTicker.realMarketId || marketOrTicker) : marketOrTicker.realMarketId;
       const qty = qtyOverride || config.tradeSize;
@@ -2447,7 +2422,7 @@ const KalshiDashboard = () => {
 
           if (!config.isAutoBid && !config.isAutoClose) alert(e.message);
       }
-  }, [walletKeys, isForgeReady, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
+  }, [walletKeys, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
 
   const cancelOrder = useCallback(async (id, skipConfirm = false, skipRefresh = false) => {
       if (!skipConfirm && !confirm("Cancel Order?")) return;
@@ -2866,17 +2841,6 @@ const KalshiDashboard = () => {
       }
       return false;
   }), [positions, activeTab, tradeHistory]);
-
-  if (!isForgeReady) {
-      return (
-          <div className="flex h-screen items-center justify-center bg-slate-50 text-slate-500">
-              <div className="flex flex-col items-center gap-2">
-                  <Loader2 className="animate-spin text-blue-600" size={32} />
-                  <p>Initializing Security Libraries...</p>
-              </div>
-          </div>
-      );
-  }
 
   return (
     <TimeProvider>

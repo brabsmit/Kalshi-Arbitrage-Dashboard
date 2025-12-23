@@ -30,11 +30,6 @@
   0% { background-color: #ffe4e6; opacity: 1; } /* rose-100 */
   100% { background-color: white; opacity: 0; }
 }
-@keyframes confetti-fall {
-  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
-}
-
 .animate-flash-green {
   animation: flash-green 1s ease-out forwards;
 }
@@ -43,13 +38,4 @@
 }
 .animate-flash-red {
   animation: flash-red 0.5s ease-out forwards;
-}
-
-.confetti-piece {
-  position: fixed;
-  width: 10px;
-  height: 10px;
-  top: -20px;
-  z-index: 9999;
-  animation: confetti-fall 3s linear forwards;
 }
