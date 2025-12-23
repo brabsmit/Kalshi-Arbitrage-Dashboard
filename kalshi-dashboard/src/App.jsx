@@ -21,10 +21,18 @@ const americanToProbability = (odds) => {
 
 const calculateVolatility = (history) => {
     if (!history || history.length < 2) return 0;
-    const values = history.map(h => h.v);
-    const mean = values.reduce((a, b) => a + b, 0) / values.length;
-    const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (values.length - 1);
-    return Math.sqrt(variance);
+    let sum = 0;
+    let sumSq = 0;
+    const n = history.length;
+    // Single pass O(N) loop to avoid array allocation and multiple traversals
+    for (let i = 0; i < n; i++) {
+        const v = history[i].v;
+        sum += v;
+        sumSq += v * v;
+    }
+    // Variance = (SumSq - (Sum*Sum)/N) / (N - 1)
+    const variance = (sumSq - (sum * sum) / n) / (n - 1);
+    return Math.sqrt(Math.max(0, variance));
 };
 
 const probabilityToAmericanOdds = (prob) => {
