@@ -670,7 +670,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 id="odds-api-key"
                                 type={showApiKey ? "text" : "password"}
                                 value={oddsApiKey}
-                                onChange={e => {setOddsApiKey(e.target.value); localStorage.setItem('odds_api_key', e.target.value)}}
+                                onChange={e => {setOddsApiKey(e.target.value); sessionStorage.setItem('odds_api_key', e.target.value)}}
                                 className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none pr-10"
                             />
                             <button
@@ -1880,9 +1880,21 @@ const KalshiDashboard = () => {
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
 
   useEffect(() => {
-      const k = localStorage.getItem('kalshi_keys');
+      // SECURITY MIGRATION: Move secrets from localStorage to sessionStorage
+      const localKeys = localStorage.getItem('kalshi_keys');
+      if (localKeys) {
+          sessionStorage.setItem('kalshi_keys', localKeys);
+          localStorage.removeItem('kalshi_keys');
+      }
+      const localOddsKey = localStorage.getItem('odds_api_key');
+      if (localOddsKey) {
+          sessionStorage.setItem('odds_api_key', localOddsKey);
+          localStorage.removeItem('odds_api_key');
+      }
+
+      const k = sessionStorage.getItem('kalshi_keys');
       if (k) setWalletKeys(JSON.parse(k));
-      const o = localStorage.getItem('odds_api_key');
+      const o = sessionStorage.getItem('odds_api_key');
       if (o) setOddsApiKey(o);
   }, []);
 
@@ -2886,7 +2898,7 @@ const KalshiDashboard = () => {
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
-      <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); localStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
+      <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
       <DataExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} />

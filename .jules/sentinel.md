@@ -17,3 +17,8 @@
 **Vulnerability:** The application lacked a Content Security Policy (CSP), allowing execution of scripts from any source. This is a high risk for a wallet application that handles private keys.
 **Learning:** Single Page Applications (SPAs) serving static HTML often miss CSP headers if not configured in the web server. Adding a `<meta>` tag is a robust fallback.
 **Prevention:** Added a strict CSP `<meta>` tag to `index.html` allowing only 'self' and specific APIs (The-Odds-API), while blocking object-src and limiting script-src.
+
+## 2024-05-24 - Insecure Storage of API Credentials
+**Vulnerability:** High-value credentials (Kalshi Private Keys, Odds API Key) were stored in `localStorage`, which persists indefinitely and is accessible to any XSS exploit on the domain, even after the tab is closed.
+**Learning:** Persistence for convenience (autofill keys) often conflicts with security best practices. Developers defaulted to `localStorage` without considering the data lifecycle.
+**Prevention:** Migrated credential storage to `sessionStorage`. This ensures keys are cleared when the browser session ends (tab closed), reducing the window of opportunity for attackers while maintaining usability during page reloads. Added automatic migration logic to seamlessly upgrade existing users.
