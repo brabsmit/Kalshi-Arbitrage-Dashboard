@@ -295,7 +295,26 @@ const TimeProvider = ({ children }) => {
     return <TimeContext.Provider value={now}>{children}</TimeContext.Provider>;
 };
 
+const useModalClose = (isOpen, onClose) => {
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e) => {
+            if (e.key === 'Escape') onClose();
+        };
+        document.addEventListener('keydown', handleKeyDown);
+        return () => document.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
+    return {
+        onClick: (e) => {
+            if (e.target === e.currentTarget) onClose();
+        }
+    };
+};
+
 const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
+    const backdropProps = useModalClose(isOpen, onClose);
+
     if (!isOpen) return null;
 
     // Helper to calculate estimate
@@ -323,7 +342,7 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
     const estimate = calculateEstimate();
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Clock size={18}/> Schedule Run</h3>
@@ -619,6 +638,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
 };
 
 const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
+    const backdropProps = useModalClose(isOpen, onClose);
     const bidMarginId = useId();
     const closeMarginId = useId();
     const minFvId = useId();
@@ -626,7 +646,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
@@ -791,6 +811,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
 );
 
 const ConnectModal = ({ isOpen, onClose, onConnect }) => {
+    const backdropProps = useModalClose(isOpen, onClose);
     const [keyId, setKeyId] = useState('');
     const [privateKey, setPrivateKey] = useState('');
     const [fileName, setFileName] = useState('');
@@ -829,7 +850,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" {...backdropProps}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 m-4">
                 <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800">Connect Kalshi API</h3>
@@ -859,6 +880,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
 };
 
 const AnalysisModal = ({ data, onClose }) => {
+    const backdropProps = useModalClose(!!data, onClose);
     if (!data) return null;
     const latency = data.orderPlacedAt - data.oddsTime;
 
@@ -887,7 +909,7 @@ const AnalysisModal = ({ data, onClose }) => {
     }
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="bg-slate-900 p-4 flex justify-between items-center">
                     <div className="text-white font-bold flex items-center gap-2"><Calculator size={18} className="text-blue-400"/> Trade Analysis</div>
@@ -959,6 +981,7 @@ const AnalysisModal = ({ data, onClose }) => {
 };
 
 const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
+    const backdropProps = useModalClose(isOpen, onClose);
     if (!isOpen) return null;
 
     const generateSessionData = () => {
@@ -1095,7 +1118,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center mb-6">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
@@ -1123,6 +1146,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
 };
 
 const PositionDetailsModal = ({ position, market, onClose }) => {
+    const backdropProps = useModalClose(!!position, onClose);
     if (!position) return null;
 
     const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST' : '-';
@@ -1130,7 +1154,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
     const safeAvgPrice = typeof position.avgPrice === 'number' ? position.avgPrice : 0;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100">
                     <h3 className="font-bold text-lg text-slate-800">Position Details</h3>
