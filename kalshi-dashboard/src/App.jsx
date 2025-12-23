@@ -47,8 +47,8 @@ const formatDuration = (ms) => {
 const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
 const escapeHtml = (unsafe) => {
-    if (typeof unsafe !== 'string') return unsafe;
-    return unsafe
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
          .replace(/&/g, "&amp;")
          .replace(/</g, "&lt;")
          .replace(/>/g, "&gt;")
@@ -57,9 +57,9 @@ const escapeHtml = (unsafe) => {
 };
 
 const escapeCSV = (str) => {
-    if (typeof str !== 'string') return str;
+    if (str === null || str === undefined) return '""';
     // Escape double quotes by doubling them
-    let escaped = str.replace(/"/g, '""');
+    let escaped = String(str).replace(/"/g, '""');
     // Prevent formula injection (CSV Injection) if starts with =, +, -, @
     if (/^[=+\-@]/.test(escaped)) {
         escaped = "'" + escaped;
