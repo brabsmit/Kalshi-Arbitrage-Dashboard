@@ -819,14 +819,38 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                             <strong>Connection Failed:</strong><br/>{validationError}
                         </div>
                     )}
-                    <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded">
-                        Keys stored locally. Supports standard PKCS#1 keys.
+                    <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded flex items-start gap-2">
+                        <Info size={14} className="mt-0.5 flex-shrink-0"/>
+                        <span>Keys stored locally. Supports standard PKCS#1 keys.</span>
                     </div>
-                    <input type="text" aria-label="API Key ID" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="API Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
-                    <div className="border-2 border-dashed rounded p-4 text-center cursor-pointer relative focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2">
-                        <input type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" />
-                        {fileName ? <span className="text-emerald-600 font-bold">{fileName}</span> : <span className="text-slate-400">Upload Private Key (.key)</span>}
+
+                    <div>
+                        <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 mb-1 uppercase">API Key ID</label>
+                        <input id="api-key-id" type="text" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
+
+                    <div>
+                        <label htmlFor="private-key-upload" className="block text-xs font-bold text-slate-500 mb-1 uppercase">Private Key</label>
+                        <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer relative transition-all group ${fileName ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'} focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2`}>
+                            <input id="private-key-upload" type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept=".key,.pem,.txt" />
+                            <div className="flex flex-col items-center gap-2">
+                                {fileName ? (
+                                    <>
+                                        <div className="p-2 bg-emerald-100 rounded-full text-emerald-600"><Check size={20} /></div>
+                                        <span className="text-emerald-700 font-bold text-sm truncate max-w-[200px]">{fileName}</span>
+                                        <span className="text-[10px] text-emerald-500">Ready to sign</span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="p-2 bg-slate-100 rounded-full text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-500 transition-colors"><Upload size={20} /></div>
+                                        <span className="text-slate-600 font-medium text-sm">Click to upload .key file</span>
+                                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
                     <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 outline-none">
                         {isValidating ? 'Validating...' : 'Connect'}
                     </button>
