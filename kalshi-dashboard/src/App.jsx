@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Link as LinkIcon, Wallet, Upload, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, LogOut, Eye, EyeOff } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 
 // ==========================================
@@ -87,8 +87,7 @@ const formatGameTime = (isoString) => {
 const calculateStrategy = (market, marginPercent) => {
     if (!market.isMatchFound) return { smartBid: null, reason: "No Market", edge: -100, maxWillingToPay: 0 };
 
-    const probToUse = market.vigFreeProb || market.impliedProb;
-    const fairValue = Math.floor(probToUse); 
+    const fairValue = market.fairValue;
     
     const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
     const currentBestBid = market.bestBid || 0;
@@ -1339,7 +1338,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                             {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
-                            <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay || market.americanOdds}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay}</span>
                         </div>
                     </button>
                 </td>
@@ -2011,11 +2010,6 @@ const KalshiDashboard = () => {
 
                   const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
 
-                  // Legacy support for impliedProb display (using reference bookmaker)
-                  const refTotalImplied = refOutcomes.reduce((acc, o) => acc + americanToProbability(o.price), 0);
-                  const refTargetImplied = americanToProbability(targetOutcome.price);
-                  const refImpliedProb = (refTargetImplied / refTotalImplied) * 100;
-
                   let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
 
@@ -2077,7 +2071,6 @@ const KalshiDashboard = () => {
                       sportsbookOdds: targetOutcome.price, 
                       opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
                       oddsDisplay: oddsDisplay, 
-                      impliedProb: refImpliedProb,
                       vigFreeProb: vigFreeProb * 100, 
                       bestBid: bestBid || 0,
                       bestAsk: bestAsk || 0,
@@ -2423,7 +2416,6 @@ const KalshiDashboard = () => {
                   sportsbookOdds: marketOrTicker.sportsbookOdds,
                   opposingOdds: marketOrTicker.opposingOdds, 
                   oddsDisplay: marketOrTicker.oddsDisplay, 
-                  impliedProb: marketOrTicker.impliedProb, 
                   vigFreeProb: marketOrTicker.vigFreeProb,
                   fairValue: marketOrTicker.fairValue, bidPrice: price,
                   bookmakerCount: marketOrTicker.bookmakerCount,
