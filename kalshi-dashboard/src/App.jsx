@@ -2599,13 +2599,18 @@ const KalshiDashboard = () => {
                 }
 
                 // --- STALE DATA PROTECTION ---
-                const isStale = (Date.now() - m.oddsLastUpdate) > STALE_DATA_THRESHOLD;
-                if (isStale) {
+                // We check if our data fetch is recent. We rely on the API to give us current snapshot.
+                // We also check if the bookmaker data is extremely old (> 60 mins) to catch stuck feeds.
+                const isFetchStale = (Date.now() - lastFetchTimeRef.current) > STALE_DATA_THRESHOLD;
+                const isDataAncient = (Date.now() - m.oddsLastUpdate) > (60 * 60 * 1000);
+
+                if (isFetchStale || isDataAncient) {
                     // Check if we have an active order to cancel
                     const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
                     if (existingOrder) {
-                        console.log(`[AUTO-BID] Cancelling order ${m.realMarketId} due to stale data (${formatDuration(Date.now() - m.oddsLastUpdate)} old)`);
-                        addLog(`Cancelling bid ${m.realMarketId}: Data stale`, 'CANCEL');
+                        const reason = isFetchStale ? `Fetch stale (${formatDuration(Date.now() - lastFetchTimeRef.current)})` : `Data ancient (${formatDuration(Date.now() - m.oddsLastUpdate)})`;
+                        console.log(`[AUTO-BID] Cancelling order ${m.realMarketId} due to stale data: ${reason}`);
+                        addLog(`Cancelling bid ${m.realMarketId}: ${isFetchStale ? 'Fetch Stale' : 'Data Ancient'}`, 'CANCEL');
                         autoBidTracker.current.add(m.realMarketId);
                         await cancelOrder(existingOrder.id, true);
                         await new Promise(r => setTimeout(r, 200));
