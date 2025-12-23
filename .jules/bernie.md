@@ -19,3 +19,7 @@
 ## 2025-12-17 - [The Fuzzy Match]
 **Observation:** `findKalshiMatch` had a "Strategy 2" that tried to fuzzy match teams based on first letters. It was clever, dangerous, and likely buggy for teams sharing initials.
 **Lesson:** Dumb, exact matching is better than clever, wrong matching. If it doesn't match exactly, don't bet on it.
+
+## 2025-12-21 - [The Loading Charade]
+**Observation:** `useForge` hook. We were using a React hook, a state variable, and a `useEffect` just to inject a `<script>` tag that the app *requires* to function.
+**Lesson:** If a library is required, put it in `index.html`. Browsers are good at loading scripts. We don't need React to manage `<script>` tags for us.
