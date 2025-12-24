@@ -356,16 +356,20 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
                      <div>
                         <label className="block text-xs font-bold text-slate-500 mb-2">Active Days</label>
                         <div className="flex justify-between gap-1">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
+                            {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((dayName, i) => (
                                 <button
                                     key={i}
+                                    type="button"
+                                    aria-label={dayName}
+                                    aria-pressed={schedule.days.includes(i)}
+                                    title={dayName}
                                     onClick={() => {
                                         const newDays = schedule.days.includes(i) ? schedule.days.filter(d => d !== i) : [...schedule.days, i];
                                         setSchedule({...schedule, days: newDays});
                                     }}
-                                    className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${schedule.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                    className={`w-8 h-8 rounded-full text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${schedule.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
                                 >
-                                    {d}
+                                    {dayName[0]}
                                 </button>
                             ))}
                         </div>
