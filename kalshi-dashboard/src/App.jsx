@@ -1983,6 +1983,7 @@ const KalshiDashboard = () => {
           const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiMarkets: r.kalshiMarkets, _seriesTicker: r.seriesTicker })));
 
           setMarkets(prev => {
+              const processingTime = Date.now();
               let hasChanged = false;
               const processed = allOddsData.slice(0, 50).map(game => {
                   const kalshiData = game._kalshiMarkets;
@@ -2077,13 +2078,21 @@ const KalshiDashboard = () => {
                   }
 
                   // --- VOLATILITY TRACKING ---
-                  const now = Date.now();
                   const currentVal = vigFreeProb * 100;
-                  let history = prevMarket?.history ? [...prevMarket.history] : [];
-                  history.push({ t: now, v: currentVal });
-                  // Keep last 60 mins of history for volatility calculation
-                  const cutoff = now - 60 * 60 * 1000;
-                  history = history.filter(h => h.t > cutoff);
+
+                  // OPTIMIZATION: Use slice instead of filter+spread to reduce array allocations
+                  const oldHistory = prevMarket?.history || [];
+                  const cutoff = processingTime - 60 * 60 * 1000;
+
+                  let startIndex = 0;
+                  // History is sorted by time, so we can stop at first valid entry
+                  while (startIndex < oldHistory.length && oldHistory[startIndex].t <= cutoff) {
+                      startIndex++;
+                  }
+
+                  const history = oldHistory.slice(startIndex);
+                  history.push({ t: processingTime, v: currentVal });
+
                   const volatility = calculateVolatility(history);
                   // ---------------------------
                   
@@ -2110,8 +2119,8 @@ const KalshiDashboard = () => {
                       realMarketId: realMatch?.ticker,
                       volume: volume || 0,
                       openInterest: openInterest || 0,
-                      lastChange: Date.now(),
-                      kalshiLastUpdate: isWsActive ? wsLastTimestamp : Date.now(),
+                      lastChange: processingTime,
+                      kalshiLastUpdate: isWsActive ? wsLastTimestamp : processingTime,
                       oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100), 
                       history: history,
