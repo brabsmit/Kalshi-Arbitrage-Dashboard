@@ -72,3 +72,42 @@ def test_palette_accessibility_improvements(authenticated_page):
 
     desc_id_3 = mfv_input.get_attribute("aria-describedby")
     expect(page.locator(f'[id="{desc_id_3}"]')).to_contain_text("Bot will ignore")
+
+def test_schedule_modal_accessibility(page):
+    # Navigate to the dashboard (using HTTPS as per server config)
+    page.goto("https://localhost:3000")
+
+    # Open the Schedule Modal
+    page.get_by_role("button", name="Run Schedule").click()
+
+    # Check that the modal is visible
+    expect(page.get_by_text("Schedule Run")).to_be_visible()
+
+    # Check the day buttons
+    days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+    # Verify that we can find buttons by their full name (via aria-label)
+    for day in days:
+        button = page.get_by_label(day, exact=True)
+        expect(button).to_be_visible()
+
+        # Verify aria-pressed attribute is present
+        expect(button).to_have_attribute("aria-pressed", re.compile(r"true|false"))
+
+        # Verify title is present
+        expect(button).to_have_attribute("title", day)
+
+def test_day_selection_state(page):
+    page.goto("https://localhost:3000")
+    page.get_by_role("button", name="Run Schedule").click()
+
+    # Locate Sunday button
+    sunday_btn = page.get_by_label("Sunday", exact=True)
+
+    # Check initial state
+    initial_pressed = sunday_btn.get_attribute("aria-pressed")
+
+    sunday_btn.click()
+
+    # Expect state to flip
+    expect(sunday_btn).not_to_have_attribute("aria-pressed", initial_pressed)

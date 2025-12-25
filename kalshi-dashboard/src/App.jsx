@@ -356,18 +356,26 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
                      <div>
                         <label className="block text-xs font-bold text-slate-500 mb-2">Active Days</label>
                         <div className="flex justify-between gap-1">
-                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
-                                <button
-                                    key={i}
-                                    onClick={() => {
-                                        const newDays = schedule.days.includes(i) ? schedule.days.filter(d => d !== i) : [...schedule.days, i];
-                                        setSchedule({...schedule, days: newDays});
-                                    }}
-                                    className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${schedule.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
-                                >
-                                    {d}
-                                </button>
-                            ))}
+                            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => {
+                                const fullDay = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"][i];
+                                const isSelected = schedule.days.includes(i);
+                                return (
+                                    <button
+                                        key={i}
+                                        type="button"
+                                        onClick={() => {
+                                            const newDays = isSelected ? schedule.days.filter(d => d !== i) : [...schedule.days, i];
+                                            setSchedule({...schedule, days: newDays});
+                                        }}
+                                        title={fullDay}
+                                        aria-label={fullDay}
+                                        aria-pressed={isSelected}
+                                        className={`w-8 h-8 rounded-full text-xs font-bold transition-colors ${isSelected ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                    >
+                                        {d}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
