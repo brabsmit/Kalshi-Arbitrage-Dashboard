@@ -30,7 +30,7 @@ def run_verification(page):
     page.route("**/portfolio/positions*", log_response)
 
     logging.info("Navigating to dashboard...")
-    page.goto("http://localhost:3000")
+    page.goto("https://localhost:3000")
 
     page.wait_for_selector("text=Connect Wallet", timeout=10000)
 
@@ -117,8 +117,8 @@ if __name__ == "__main__":
     time.sleep(10)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        browser = p.chromium.launch(headless=True, args=['--ignore-certificate-errors'])
+        page = browser.new_page(viewport={"width": 1280, "height": 800}, ignore_https_errors=True)
         try:
             run_verification(page)
         except Exception as e:
