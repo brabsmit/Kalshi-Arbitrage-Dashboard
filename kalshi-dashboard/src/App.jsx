@@ -457,32 +457,37 @@ const CancellationModal = ({ isOpen, progress }) => {
 const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
     const now = React.useContext(TimeContext);
 
-    const exposure = positions.reduce((acc, p) => {
-        if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
-            return acc + (p.price * (p.quantity - p.filled));
-        }
-        if (!p.isOrder && p.status === 'HELD') {
-            return acc + p.cost;
-        }
-        return acc;
-    }, 0);
+    // Optimization: Memoize expensive stats calculations to prevent re-computation on every timer tick
+    const stats = useMemo(() => {
+        const exposure = positions.reduce((acc, p) => {
+            if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
+                return acc + (p.price * (p.quantity - p.filled));
+            }
+            if (!p.isOrder && p.status === 'HELD') {
+                return acc + p.cost;
+            }
+            return acc;
+        }, 0);
 
-    const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
-    const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
+        const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
+        const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
 
-    const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
-    const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
+        const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
+        const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
 
-    // WIN RATE: Calculated only on AUTO-BID positions
-    const autoBidHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
-    const winCount = autoBidHistory.filter(p => (p.realizedPnl || 0) > 0).length;
-    const totalSettled = autoBidHistory.length;
-    const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
+        // WIN RATE: Calculated only on AUTO-BID positions
+        const autoBidHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
+        const winCount = autoBidHistory.filter(p => (p.realizedPnl || 0) > 0).length;
+        const totalSettled = autoBidHistory.length;
+        const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
 
-    // --- T-STATISTIC CALCULATION ---
-    const pnls = autoBidHistory.map(p => p.realizedPnl || 0);
-    const { tStat, isSignificant } = calculateTStatistic(pnls);
-    // -------------------------------
+        // --- T-STATISTIC CALCULATION ---
+        const pnls = autoBidHistory.map(p => p.realizedPnl || 0);
+        const { tStat, isSignificant } = calculateTStatistic(pnls);
+        // -------------------------------
+
+        return { exposure, totalRealizedPnl, totalPotentialReturn, winRate, tStat, isSignificant, historyCount: historyItems.length };
+    }, [positions, tradeHistory]);
 
     const elapsed = sessionStart ? now - sessionStart : 0;
 
@@ -493,7 +498,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                     <Wallet size={12} /> Total Exposure
                 </div>
                 <div className="text-2xl font-bold text-slate-800 mt-1">
-                    {formatMoney(exposure)}
+                    {formatMoney(stats.exposure)}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                     Locked in trades & orders
@@ -505,7 +510,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                     <TrendingUp size={12} /> Potential Profit
                 </div>
                 <div className="text-2xl font-bold text-emerald-600 mt-1">
-                    +{formatMoney(totalPotentialReturn)}
+                    +{formatMoney(stats.totalPotentialReturn)}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                     If all positions win
@@ -516,11 +521,11 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                 <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Trophy size={12} /> Realized PnL
                 </div>
-                <div className={`text-2xl font-bold mt-1 ${totalRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {totalRealizedPnl > 0 ? '+' : ''}{formatMoney(totalRealizedPnl)}
+                <div className={`text-2xl font-bold mt-1 ${stats.totalRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {stats.totalRealizedPnl > 0 ? '+' : ''}{formatMoney(stats.totalRealizedPnl)}
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                    {historyItems.length} settled events
+                    {stats.historyCount} settled events
                 </div>
             </div>
 
@@ -529,10 +534,10 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                     <Activity size={12} /> Win Rate
                 </div>
                 <div className="text-2xl font-bold text-slate-800 mt-1">
-                    {winRate}%
+                    {stats.winRate}%
                 </div>
                 <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div className="bg-emerald-500 h-full" style={{width: `${winRate}%`}}></div>
+                    <div className="bg-emerald-500 h-full" style={{width: `${stats.winRate}%`}}></div>
                 </div>
             </div>
 
@@ -540,12 +545,12 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                 <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Calculator size={12} /> Statistical Sig.
                 </div>
-                <div className={`text-2xl font-bold mt-1 ${isSignificant ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    {tStat.toFixed(2)}
+                <div className={`text-2xl font-bold mt-1 ${stats.isSignificant ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {stats.tStat.toFixed(2)}
                 </div>
                 <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                    {isSignificant ? <Check size={12} className="text-emerald-500"/> : <XCircle size={12}/>}
-                    {isSignificant ? 'Significant' : 'Not Sig'} (α=0.05)
+                    {stats.isSignificant ? <Check size={12} className="text-emerald-500"/> : <XCircle size={12}/>}
+                    {stats.isSignificant ? 'Significant' : 'Not Sig'} (α=0.05)
                 </div>
             </div>
 
