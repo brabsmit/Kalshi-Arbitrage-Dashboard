@@ -22,3 +22,8 @@
 **Vulnerability:** The `escapeHtml` and `escapeCSV` helper functions relied on `typeof unsafe !== 'string'` to bypass processing. This allowed non-string objects (e.g., those with custom `toString` methods) or unexpected types to bypass sanitization, potentially leading to XSS or CSV Injection if such data entered the system.
 **Learning:** Type checks like `typeof` are insufficient for sanitization guards because template literals and string concatenation implicitly call `toString()`.
 **Prevention:** Always explicitly cast input to string (e.g., `String(input)`) before sanitizing, or handle `null`/`undefined` explicitly and default to empty string.
+
+## 2025-02-13 - Missing DoS Protection on Inputs
+**Vulnerability:** The application accepted unlimited length input for API keys and allowed uploading arbitrarily large files for private keys, which could crash the browser (DoS) by filling memory when read via `FileReader`.
+**Learning:** Client-side file processing logic often overlooks size limits because it assumes "trust" in the user, but large files can accidentally or maliciously freeze the UI. Similarly, text inputs without `maxLength` can accept megabytes of pasted text.
+**Prevention:** Always add `maxLength` to text inputs. Always check `file.size` before calling `reader.readAsText()` or uploading.
