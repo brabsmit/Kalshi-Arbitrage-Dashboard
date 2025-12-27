@@ -26,3 +26,6 @@
 ## 2025-12-21 - [The Loading Charade]
 **Observation:** `useForge` hook. We were using a React hook, a state variable, and a `useEffect` just to inject a `<script>` tag that the app *requires* to function.
 **Lesson:** If a library is required, put it in `index.html`. Browsers are good at loading scripts. We don't need React to manage `<script>` tags for us.
+## 2024-05-28 - [The Crypto Duality]
+**Observation:** We had two implementations of RSA signing: one using the native Web Crypto API and another using `node-forge` as a fallback. The native path required `node-forge` anyway to parse the PEM key, creating a complex dependency chain and redundant code.
+**Lesson:** Pick one tool and use it. Supporting two parallel implementations "just in case" or for "performance" (that relies on a slow parser anyway) is maintenance debt. We stripped it down to just `node-forge`. Simpler is better.

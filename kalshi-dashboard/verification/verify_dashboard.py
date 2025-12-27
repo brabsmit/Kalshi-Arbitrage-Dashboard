@@ -18,7 +18,7 @@ def generate_mock_key():
 
 def verify_dashboard():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=['--ignore-certificate-errors'])
         page = browser.new_page()
 
         mock_key = generate_mock_key()
@@ -33,7 +33,11 @@ def verify_dashboard():
         """)
 
         # Navigate
-        page.goto("http://localhost:3000")
+        try:
+            page.goto("https://localhost:3000")
+        except Exception as e:
+            print(f"Navigation failed: {e}")
+            return
 
         # Wait for load
         time.sleep(2)

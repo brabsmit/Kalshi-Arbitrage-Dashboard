@@ -162,7 +162,7 @@ const calculateTStatistic = (pnls) => {
 };
 
 // --- CRYPTOGRAPHIC SIGNING ENGINE ---
-const signRequestSync = (privateKeyPem, method, path, timestamp) => {
+const signRequest = async (privateKeyPem, method, path, timestamp) => {
     try {
         const forge = window.forge;
         if (!forge) throw new Error("Forge library not loaded");
@@ -182,86 +182,6 @@ const signRequestSync = (privateKeyPem, method, path, timestamp) => {
     } catch (e) {
         console.error("Signing failed:", e);
         throw new Error("Failed to sign request. Check your private key.");
-    }
-};
-
-let cachedCryptoKey = null;
-let cachedKeyString = null;
-
-const getCryptoKey = async (pem) => {
-    if (cachedCryptoKey && cachedKeyString === pem) return cachedCryptoKey;
-
-    const forge = window.forge;
-    if (!forge) return null;
-
-    const privateKey = forge.pki.privateKeyFromPem(pem);
-    const asn1 = forge.pki.privateKeyToAsn1(privateKey);
-    const info = forge.pki.wrapRsaPrivateKey(asn1);
-    const der = forge.asn1.toDer(info).getBytes();
-
-    const len = der.length;
-    const buf = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-        buf[i] = der.charCodeAt(i);
-    }
-
-    const key = await window.crypto.subtle.importKey(
-        "pkcs8",
-        buf,
-        {
-            name: "RSA-PSS",
-            hash: "SHA-256",
-        },
-        false,
-        ["sign"]
-    );
-
-    cachedCryptoKey = key;
-    cachedKeyString = pem;
-    return key;
-};
-
-let hasWarnedSync = false;
-
-const signRequest = async (privateKeyPem, method, path, timestamp) => {
-    try {
-        if (!window.crypto || !window.crypto.subtle) throw new Error("WebCrypto not supported");
-
-        const key = await getCryptoKey(privateKeyPem);
-        if (!key) throw new Error("Failed to import key");
-
-        const encoder = new TextEncoder();
-        const cleanPath = path.split('?')[0];
-        const message = `${timestamp}${method}${cleanPath}`;
-        const data = encoder.encode(message);
-
-        const signature = await window.crypto.subtle.sign(
-            {
-                name: "RSA-PSS",
-                saltLength: 32,
-            },
-            key,
-            data
-        );
-        // console.log("SignRequest: Signed");
-
-        let binary = '';
-        const bytes = new Uint8Array(signature);
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
-        return window.btoa(binary);
-
-    } catch (e) {
-        if (!hasWarnedSync) {
-            console.warn("Fast sign failed, falling back to sync. Reason:", e.message);
-            if (e.message === "WebCrypto not supported" && window.location.protocol === 'http:' && window.location.hostname !== 'localhost') {
-                 console.info("To enable fast signing, please ensure you are using a secure context (HTTPS) or localhost.");
-            }
-            hasWarnedSync = true;
-        }
-        return signRequestSync(privateKeyPem, method, path, timestamp);
     }
 };
 
