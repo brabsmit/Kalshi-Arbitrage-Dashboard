@@ -680,6 +680,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 type={showApiKey ? "text" : "password"}
                                 value={oddsApiKey}
                                 onChange={e => {setOddsApiKey(e.target.value); sessionStorage.setItem('odds_api_key', e.target.value)}}
+                                maxLength={100}
                                 className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none pr-10"
                             />
                             <button
@@ -812,6 +813,15 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
     const handleFile = (e) => {
         const file = e.target.files[0];
         if (!file) return;
+
+        // Security Enhancement: Limit file size to 10KB to prevent DoS
+        const MAX_KEY_SIZE = 10240; // 10KB
+        if (file.size > MAX_KEY_SIZE) {
+            setValidationError(`File too large (${(file.size/1024).toFixed(1)}KB). Max allowed is 10KB.`);
+            setFileName('');
+            return;
+        }
+
         setFileName(file.name);
         const reader = new FileReader();
         reader.onload = (ev) => {
@@ -858,7 +868,7 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
 
                     <div>
                         <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 mb-1 uppercase">API Key ID</label>
-                        <input id="api-key-id" type="text" value={keyId} onChange={e => setKeyId(e.target.value)} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <input id="api-key-id" type="text" value={keyId} onChange={e => setKeyId(e.target.value)} maxLength={100} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
 
                     <div>
