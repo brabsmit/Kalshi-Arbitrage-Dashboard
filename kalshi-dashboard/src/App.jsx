@@ -352,9 +352,23 @@ const SportFilter = ({ selected, options, onChange }) => {
                 setIsOpen(false);
             }
         };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, []);
+
+        const handleKeyDown = (event) => {
+            if (event.key === 'Escape') {
+                setIsOpen(false);
+            }
+        };
+
+        if (isOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleKeyDown);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [isOpen]);
 
     return (
         <div className="relative" ref={containerRef}>
@@ -375,7 +389,7 @@ const SportFilter = ({ selected, options, onChange }) => {
                     id={dropdownId}
                     role="dialog"
                     aria-label="Select Sports"
-                    className="absolute top-full left-0 mt-2 w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                    className="absolute top-full left-0 mt-2 w-[85vw] md:w-[600px] max-w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 >
                     <div className="p-3">
                         <div className="flex justify-between items-center mb-2 px-1">
