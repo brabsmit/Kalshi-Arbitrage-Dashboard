@@ -110,6 +110,18 @@ const calculateStrategy = (market, marginPercent) => {
     let smartBid = currentBestBid + 1;
     let reason = "Beat Market";
 
+    // Alpha Strategy: Crossing the Spread
+    // If the Best Ask is bargain-basement cheap (below our willingness to pay),
+    // we take the liquidity immediately instead of fishing for a bid.
+    // We add a small buffer (e.g. 2 cents) to cover Taker fees.
+    const TAKER_FEE_BUFFER = 2;
+
+    // Check if we can buy immediately at a discount
+    if (market.bestAsk > 0 && market.bestAsk <= (maxWillingToPay - TAKER_FEE_BUFFER)) {
+        smartBid = market.bestAsk;
+        reason = "Take Ask";
+    }
+
     if (smartBid > maxWillingToPay) {
         smartBid = maxWillingToPay;
         reason = "Max Limit";

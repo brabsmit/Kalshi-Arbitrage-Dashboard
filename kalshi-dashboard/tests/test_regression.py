@@ -156,7 +156,8 @@ def test_e2e_arbitrage_cycle(authenticated_page):
         raise
 
     # Check Smart Bid calculation
-    expect(row.get_by_text("41¢", exact=True)).to_be_visible()
+    # Alpha Refinement: With Ask 45 and MaxWilling ~51, we now cross the spread to 45
+    expect(row.get_by_text("45¢", exact=True)).to_be_visible()
 
     # 3. START BOT & VERIFY BUY ORDER
     # -------------------------------
@@ -178,7 +179,7 @@ def test_e2e_arbitrage_cycle(authenticated_page):
     order = captured_orders[0]
     assert order["action"] == "buy"
     assert order["ticker"] == "KXNFLGAME-23OCT26-TB-BUF"
-    assert order["yes_price"] == 41
+    assert order["yes_price"] == 45
 
     print("Buy Order Verified!")
 
@@ -327,6 +328,7 @@ def test_settings_impact(authenticated_page):
     # Fair Value ~60. Margin 20%. MaxPay = 60 * 0.8 = 48.
     # Bid 40. Smart Bid 41.
     # 41 <= 48. So Smart Bid remains 41.
+    # Note: Ask 45 is <= 48 - 2 (46). So it might switch to 45.
 
     # Wait, let's try a value that changes the outcome.
     # To force a change, we need Margin such that MaxPay < 41.
