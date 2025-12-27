@@ -50,6 +50,7 @@ export const TEAM_ABBR = {
 };
 
 export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, kalshiMarkets, seriesTicker) => {
+    // ⚡ Bolt Optimization: Added early returns and removed array allocations
     if (!kalshiMarkets || !homeTeam || !awayTeam || !targetTeam) return null;
 
     let datePart = "";
@@ -61,29 +62,28 @@ export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, ka
         datePart = `${yy}${mmm}${dd}`;
     }
 
-    // Filter Candidates by Series and Date first to narrow down
-    const candidates = kalshiMarkets.filter(k => {
-        const ticker = k.ticker ? k.ticker.toUpperCase() : '';
-        if (seriesTicker && !ticker.startsWith(seriesTicker)) return false;
-        if (datePart && !ticker.includes(datePart)) return false;
-        return true;
-    });
-
-    if (candidates.length === 0) return null;
-
     const homeAbbr = TEAM_ABBR[homeTeam] || homeTeam.substring(0, 3).toUpperCase();
     const awayAbbr = TEAM_ABBR[awayTeam] || awayTeam.substring(0, 3).toUpperCase();
     const targetAbbr = TEAM_ABBR[targetTeam] || targetTeam.substring(0, 3).toUpperCase();
 
-    // ---------------------------------------------------------
-    // STRATEGY 1: Exact Abbreviation Match with Inversion Logic
-    // ---------------------------------------------------------
-    const exactMatch = candidates.find(k => {
-        const ticker = k.ticker.toUpperCase();
+    // ⚡ Bolt Optimization: Replaced filter().find() chain with single loop to avoid allocating intermediate array
+    // This reduces GC pressure and iterates the list only as far as needed (early exit)
+    let exactMatch = null;
+
+    for (const k of kalshiMarkets) {
+        const ticker = k.ticker ? k.ticker.toUpperCase() : '';
+
+        // 1. Filter Logic (in-loop)
+        if (seriesTicker && !ticker.startsWith(seriesTicker)) continue;
+        if (datePart && !ticker.includes(datePart)) continue;
+
+        // 2. Exact Match Logic
         // Strict requirement: Ticker must contain both teams involved in the matchup
-        const hasTeams = (ticker.includes(homeAbbr) && ticker.includes(awayAbbr));
-        return hasTeams;
-    });
+        if (ticker.includes(homeAbbr) && ticker.includes(awayAbbr)) {
+            exactMatch = k;
+            break; // Found the first match, stop iterating
+        }
+    }
 
     if (exactMatch) {
         const ticker = exactMatch.ticker.toUpperCase();
