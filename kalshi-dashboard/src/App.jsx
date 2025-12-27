@@ -97,7 +97,13 @@ const calculateStrategy = (market, marginPercent) => {
 
     const fairValue = market.fairValue;
     
-    const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
+    // Alpha Strategy: Dynamic Volatility Padding
+    // If the market is volatile (high standard deviation in source odds), we increase the required margin.
+    // This protects against adverse selection during rapid repricing events.
+    const volatility = market.volatility || 0;
+    const effectiveMargin = marginPercent + volatility;
+
+    const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
     const edge = fairValue - currentBestBid;
 
