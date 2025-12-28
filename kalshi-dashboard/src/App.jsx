@@ -1563,7 +1563,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
     }, [positions, markets, tradeHistory, sortConfig]);
 
     return (
-        <div className="overflow-auto flex-1">
+        <div role="tabpanel" aria-labelledby={`tab-${activeTab}`} className="overflow-auto flex-1">
             <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
                     <tr>
@@ -2973,15 +2973,49 @@ const KalshiDashboard = () => {
                         </React.Fragment>
                     ))}
                 </table>
-                {markets.length === 0 && <div className="p-10 text-center text-slate-400">Loading Markets...</div>}
+                {markets.length === 0 && (
+                    <div className="flex flex-col items-center justify-center p-12 text-slate-400 animate-in fade-in zoom-in duration-300">
+                        {config.selectedSports.length === 0 ? (
+                            <>
+                                <div className="p-3 bg-slate-100 rounded-full mb-3">
+                                    <Trophy size={24} className="text-slate-400" />
+                                </div>
+                                <p className="font-bold text-slate-600">No sports selected</p>
+                                <p className="text-xs text-slate-400 mb-3">Select a sport to start scanning markets</p>
+                                <button
+                                    onClick={() => setConfig(c => ({...c, selectedSports: ['americanfootball_nfl']}))}
+                                    className="px-4 py-2 bg-blue-50 text-blue-600 text-xs font-bold rounded-lg hover:bg-blue-100 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                                >
+                                    Select NFL
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
+                                <p className="font-medium text-slate-500">Scanning markets...</p>
+                                <p className="text-xs text-slate-400 mt-1">Fetching live odds and Kalshi data</p>
+                            </>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
 
         <div className="space-y-6 flex flex-col h-full lg:col-span-1">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-[300px]">
-                <div className="flex border-b border-slate-100 bg-slate-50/50">
+                <div role="tablist" aria-label="Portfolio Views" className="flex border-b border-slate-100 bg-slate-50/50">
                     {['positions', 'resting', 'history'].map(tab => (
-                        <button key={tab} onClick={() => setActiveTab(tab)} className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all ${activeTab === tab ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-slate-400'}`}>{tab}</button>
+                        <button
+                            key={tab}
+                            role="tab"
+                            aria-selected={activeTab === tab}
+                            aria-controls="portfolio-panel"
+                            id={`tab-${tab}`}
+                            onClick={() => setActiveTab(tab)}
+                            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all hover:bg-slate-100 focus:outline-none focus-visible:bg-blue-50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${activeTab === tab ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-slate-400'}`}
+                        >
+                            {tab}
+                        </button>
                     ))}
                 </div>
                 
