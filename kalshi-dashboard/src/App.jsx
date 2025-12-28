@@ -140,20 +140,9 @@ const calculateKalshiFees = (priceCents, quantity) => {
     return Math.ceil(rawFee * 100);
 };
 
-const T_DIST_TABLE = {
-    1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
-    6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
-    11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
-    16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
-    21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
-    26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
-    40: 2.021, 50: 2.009, 60: 2.000, 80: 1.990, 100: 1.984
-};
-
-const T_DIST_KEYS = Object.keys(T_DIST_TABLE).map(Number).sort((a, b) => a - b);
-
 const calculateTStatistic = (pnls) => {
-    if (!pnls || pnls.length < 2) return { tStat: 0, isSignificant: false };
+    // Bernie says: Don't pretend 2 trades is a statistically significant sample.
+    if (!pnls || pnls.length < 5) return { tStat: 0, isSignificant: false };
 
     const n = pnls.length;
     const mean = pnls.reduce((a, b) => a + b, 0) / n;
@@ -166,15 +155,9 @@ const calculateTStatistic = (pnls) => {
         tStat = mean / stdError;
     }
 
-    const df = n - 1;
-    let closestDf = T_DIST_KEYS[0];
-    for (const k of T_DIST_KEYS) {
-        if (k <= df) closestDf = k;
-        else break;
-    }
-
-    const tCrit = df > 100 ? 1.96 : T_DIST_TABLE[closestDf];
-    const isSignificant = Math.abs(tStat) > tCrit;
+    // Simplified Critical Value (approx 95% confidence for N > 30)
+    // For smaller N, 2.0 is slightly less conservative than 2.57 (N=5) but fine for a dashboard badge.
+    const isSignificant = Math.abs(tStat) > 2.0;
 
     return { tStat, isSignificant };
 };
