@@ -27,3 +27,18 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-10-27 - The Timer (Time-to-Expiry Padding)
+
+**Hypothesis:** As an event approaches its start time, pre-match odds become "toxic" (stale) more quickly, and volatility spikes due to late-breaking news (lineups, weather). Also, betting on pre-match odds after the game starts is a guaranteed loss (adverse selection vs live feeds).
+
+**Change:**
+Old: Constant margin regardless of time.
+New:
+- If `Time < 1 hour`: `margin = margin * 1.5`.
+- If `Time <= 0` (Started): Stop trading (`maxWillingToPay = 0`).
+
+**Expected Result:**
+- Zero exposure to active games (preventing accidental live betting with pre-match logic).
+- Higher safety buffer in the final hour before kickoff.
+- Reduced "sniper" risk from sharp traders reacting to lineup news faster than our 15s poll.

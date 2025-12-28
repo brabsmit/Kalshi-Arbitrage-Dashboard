@@ -101,7 +101,21 @@ const calculateStrategy = (market, marginPercent) => {
     // If the market is volatile (high standard deviation in source odds), we increase the required margin.
     // This protects against adverse selection during rapid repricing events.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent + volatility;
+    let effectiveMargin = marginPercent + volatility;
+
+    // Alpha Strategy: The Timer
+    // As the game approaches, volatility increases and source odds can drift.
+    // We widen the margin in the final hour and hard-stop once the game begins.
+    if (market.commenceTime) {
+        const msUntilStart = new Date(market.commenceTime).getTime() - Date.now();
+        const hoursUntilStart = msUntilStart / (1000 * 60 * 60);
+
+        if (hoursUntilStart <= 0) {
+             return { smartBid: null, reason: "Game Started", edge: -100, maxWillingToPay: 0 };
+        } else if (hoursUntilStart < 1) {
+             effectiveMargin *= 1.5;
+        }
+    }
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
