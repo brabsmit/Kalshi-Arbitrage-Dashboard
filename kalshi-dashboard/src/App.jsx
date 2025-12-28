@@ -101,7 +101,8 @@ const calculateStrategy = (market, marginPercent) => {
     // If the market is volatile (high standard deviation in source odds), we increase the required margin.
     // This protects against adverse selection during rapid repricing events.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent + volatility;
+    // UPDATED: Reduce volatility impact to 25% to be more aggressive
+    const effectiveMargin = marginPercent + (volatility * 0.25);
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
@@ -114,7 +115,8 @@ const calculateStrategy = (market, marginPercent) => {
     // If the Best Ask is bargain-basement cheap (below our willingness to pay),
     // we take the liquidity immediately instead of fishing for a bid.
     // We add a small buffer (e.g. 2 cents) to cover Taker fees.
-    const TAKER_FEE_BUFFER = 2;
+    // UPDATED: Set buffer to 0 to chase hard for small arbitrage (speed over fees)
+    const TAKER_FEE_BUFFER = 0;
 
     // Check if we can buy immediately at a discount
     if (market.bestAsk > 0 && market.bestAsk <= (maxWillingToPay - TAKER_FEE_BUFFER)) {
