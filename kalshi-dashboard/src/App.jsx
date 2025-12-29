@@ -977,7 +977,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                 pnl: position ? (position.realizedPnl || 0) : 0,
                 outcome: position ? position.side : 'Yes',
                 latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null,
-                bookmakerCount: data.bookmakerCount || 0,
+                bookmakerCount: Number(data.bookmakerCount || 0),
                 oddsSpread: data.oddsSpread || 0,
                 vigFreeProb: data.vigFreeProb || 0
             };
@@ -1000,7 +1000,7 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
             d.pnl,
             escapeCSV(d.outcome),
             d.latency !== null ? d.latency : '',
-            d.bookmakerCount,
+            escapeCSV(d.bookmakerCount),
             Number(d.oddsSpread).toFixed(3),
             Number(d.vigFreeProb).toFixed(2)
         ]);
