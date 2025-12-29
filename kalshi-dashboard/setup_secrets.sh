@@ -12,9 +12,11 @@ fi
 echo "Please enter your Kalshi Demo API Key ID:"
 read -r key_id
 echo "$key_id" > "$SECRETS_DIR/demo_key_id"
+chmod 600 "$SECRETS_DIR/demo_key_id"
 
 echo "Please paste your Private Key content (including BEGIN/END headers), then press Ctrl+D:"
 cat > "$SECRETS_DIR/demo_private.key"
+chmod 600 "$SECRETS_DIR/demo_private.key"
 
-echo "Secrets saved to $SECRETS_DIR/"
+echo "Secrets saved to $SECRETS_DIR/ with restricted permissions (600)."
 echo "You can now run live tests with: TEST_LIVE=1 pytest tests/test_live.py"
