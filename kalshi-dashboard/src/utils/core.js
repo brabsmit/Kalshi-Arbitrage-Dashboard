@@ -95,8 +95,33 @@ export const calculateStrategy = (market, marginPercent) => {
     // If the market is volatile (high standard deviation in source odds), we increase the required margin.
     // This protects against adverse selection during rapid repricing events.
     const volatility = market.volatility || 0;
-    // UPDATED: Reduce volatility impact to 25% to be more aggressive
-    const effectiveMargin = marginPercent + (volatility * 0.25);
+
+    // Alpha Strategy: The Timer (Time-Decay Risk Adjustment)
+    // As the event approaches, volatility increases and the "time to exit" decreases.
+    // We increase the margin requirement to account for this risk.
+    const now = Date.now();
+    const commenceTime = market.commenceTime ? new Date(market.commenceTime).getTime() : now + (48 * 3600 * 1000);
+    const msUntilStart = commenceTime - now;
+    const hoursUntilStart = msUntilStart / (1000 * 60 * 60);
+
+    let timePenalty = 0;
+
+    // Safety Halt: If the game has started, stop trading immediately.
+    if (msUntilStart <= 0) {
+        return { smartBid: null, reason: "Game Started", edge: -100, maxWillingToPay: 0 };
+    }
+
+    // Panic Mode (<1h): High risk of stale odds / wild swings. Add 5% margin.
+    if (hoursUntilStart < 1.0) {
+        timePenalty = 5.0;
+    }
+    // Nervous Mode (<12h): Moderate risk. Add 1% margin.
+    else if (hoursUntilStart < 12.0) {
+        timePenalty = 1.0;
+    }
+
+    // UPDATED: Reduce volatility impact to 25% to be more aggressive + Add Time Penalty
+    const effectiveMargin = marginPercent + (volatility * 0.25) + timePenalty;
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
