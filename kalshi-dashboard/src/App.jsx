@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
@@ -646,14 +646,18 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                     </div>
 
                     <div>
-                        <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 mb-1 uppercase">API Key ID</label>
-                        <input id="api-key-id" type="text" value={keyId} onChange={e => setKeyId(e.target.value)} maxLength={100} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 mb-1 uppercase">
+                            API Key ID <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+                        </label>
+                        <input id="api-key-id" type="text" required value={keyId} onChange={e => setKeyId(e.target.value)} maxLength={100} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
                     </div>
 
                     <div>
-                        <label htmlFor="private-key-upload" className="block text-xs font-bold text-slate-500 mb-1 uppercase">Private Key</label>
+                        <label htmlFor="private-key-upload" className="block text-xs font-bold text-slate-500 mb-1 uppercase">
+                            Private Key <span className="text-red-500 ml-1" aria-hidden="true">*</span>
+                        </label>
                         <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer relative transition-all group ${fileName ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'} focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2`}>
-                            <input id="private-key-upload" type="file" aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept=".key,.pem,.txt" />
+                            <input id="private-key-upload" type="file" required aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept=".key,.pem,.txt" />
                             <div className="flex flex-col items-center gap-2">
                                 {fileName ? (
                                     <>
