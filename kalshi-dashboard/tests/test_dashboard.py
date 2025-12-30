@@ -4,7 +4,7 @@ import time
 
 def test_load_dashboard(page, mock_api):
     """Test that the dashboard loads correctly without crashing."""
-    page.goto("http://localhost:3000")
+    page.goto("https://localhost:3000")
     expect(page.get_by_text("Kalshi ArbBot")).to_be_visible()
     expect(page.get_by_text("Connect Wallet")).to_be_visible()
 
