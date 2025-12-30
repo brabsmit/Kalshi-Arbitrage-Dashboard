@@ -1777,10 +1777,13 @@ const KalshiDashboard = () => {
 
           const requests = selectedSportsList.map(async (sportConfig) => {
                const seriesTicker = sportConfig.kalshiSeries || '';
-               const [oddsRes, kalshiMarkets] = await Promise.all([
+               const [oddsRes, rawKalshiMarkets] = await Promise.all([
                   fetch(`https://api.the-odds-api.com/v4/sports/${sportConfig.key}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
                   fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
                ]);
+
+               // ⚡ Bolt Optimization: Pre-calculate uppercase tickers to avoid O(N*M) string allocs in matching loop
+               const kalshiMarkets = rawKalshiMarkets.map(m => ({ ...m, _uTicker: m.ticker ? m.ticker.toUpperCase() : '' }));
                
                const used = oddsRes.headers.get('x-requests-used');
                const remaining = oddsRes.headers.get('x-requests-remaining');

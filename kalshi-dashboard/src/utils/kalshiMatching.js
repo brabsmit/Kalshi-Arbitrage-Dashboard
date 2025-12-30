@@ -71,7 +71,8 @@ export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, ka
     let exactMatch = null;
 
     for (const k of kalshiMarkets) {
-        const ticker = k.ticker ? k.ticker.toUpperCase() : '';
+        // ⚡ Bolt Optimization: Use pre-calculated uppercase ticker if available
+        const ticker = k._uTicker || (k.ticker ? k.ticker.toUpperCase() : '');
 
         // 1. Filter Logic (in-loop)
         if (seriesTicker && !ticker.startsWith(seriesTicker)) continue;
