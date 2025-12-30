@@ -509,12 +509,20 @@ const ActionToast = ({ action }) => {
 };
 
 const LiquidityBadge = ({ volume, openInterest }) => {
-    const style = volume > 5000 ? 'text-emerald-700 bg-emerald-100 border-emerald-200' :
-                  volume > 500  ? 'text-amber-700 bg-amber-100 border-amber-200' : 
-                                  'text-rose-700 bg-rose-50 border-rose-100';
+    let style = 'text-rose-700 bg-rose-50 border-rose-100';
+    let label = 'Thin Mkt';
+
+    if (volume > 5000) {
+        style = 'text-emerald-700 bg-emerald-100 border-emerald-200';
+        label = 'High Liq';
+    } else if (volume > 500) {
+        style = 'text-amber-700 bg-amber-100 border-amber-200';
+        label = 'Med Liq';
+    }
+
     return (
         <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-bold uppercase tracking-wide w-fit ${style}`} title={`Vol: ${volume} | OI: ${openInterest}`}>
-            <Droplets size={10} /> {volume > 5000 ? 'High Liq' : volume > 500 ? 'Med Liq' : 'Thin Mkt'}
+            <Droplets size={10} /> {label}
         </div>
     );
 };
@@ -1975,7 +1983,7 @@ const KalshiDashboard = () => {
       } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
   }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
-  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [config.selectedSport, fetchLiveOdds]);
+  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [fetchLiveOdds]);
 
   useEffect(() => {
       if (!isRunning) return;
@@ -2032,16 +2040,6 @@ const KalshiDashboard = () => {
       };
   }, [isRunning, walletKeys]);
 
-  // Memoize the list of tickers to ensure we resubscribe only when the actual market set changes,
-  // not just when markets.length changes (e.g. switching sports) or on every price tick.
-  const tickerFingerprint = useMemo(() => {
-      return markets
-          .filter(m => m.realMarketId)
-          .map(m => m.realMarketId)
-          .sort()
-          .join(',');
-  }, [markets]);
-
   const subscribedTickersRef = useRef(new Set());
 
   useEffect(() => {
@@ -2050,12 +2048,16 @@ const KalshiDashboard = () => {
           return;
       }
 
-      const currentTickers = new Set(tickerFingerprint ? tickerFingerprint.split(',').filter(Boolean) : []);
+      // Optimization: Calculate diff using Set math instead of expensive Sort+Join in useMemo.
+      const currentTickers = new Set(markets.map(m => m.realMarketId).filter(Boolean));
       const prevTickers = subscribedTickersRef.current;
 
       // Identify added and removed
       const toAdd = [...currentTickers].filter(x => !prevTickers.has(x));
       const toRemove = [...prevTickers].filter(x => !currentTickers.has(x));
+
+      // Early exit to prevent unnecessary processing if sets are identical
+      if (toAdd.length === 0 && toRemove.length === 0) return;
 
       if (toRemove.length > 0) {
           console.log(`[WS] Unsubscribing from ${toRemove.length} markets...`);
@@ -2080,7 +2082,7 @@ const KalshiDashboard = () => {
                prevTickers.add(ticker);
           });
       }
-  }, [tickerFingerprint, wsStatus]);
+  }, [markets, wsStatus]);
 
   const fetchPortfolio = useCallback(async () => {
       if (!walletKeys) return;
