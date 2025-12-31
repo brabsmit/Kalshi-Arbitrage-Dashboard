@@ -12,27 +12,6 @@ export const formatDuration = (ms) => {
 
 export const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
-export const escapeHtml = (unsafe) => {
-    if (unsafe === null || unsafe === undefined) return '';
-    return String(unsafe)
-         .replace(/&/g, "&amp;")
-         .replace(/</g, "&lt;")
-         .replace(/>/g, "&gt;")
-         .replace(/"/g, "&quot;")
-         .replace(/'/g, "&#039;");
-};
-
-export const escapeCSV = (str) => {
-    if (str === null || str === undefined) return '""';
-    // Escape double quotes by doubling them
-    let escaped = String(str).replace(/"/g, '""');
-    // Prevent formula injection (CSV Injection) if starts with =, +, -, @
-    if (/^[=+\-@]/.test(escaped)) {
-        escaped = "'" + escaped;
-    }
-    return `"${escaped}"`;
-};
-
 export const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', {
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
 });
