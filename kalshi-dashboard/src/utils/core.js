@@ -96,7 +96,26 @@ export const calculateStrategy = (market, marginPercent) => {
     // This protects against adverse selection during rapid repricing events.
     const volatility = market.volatility || 0;
     // UPDATED: Reduce volatility impact to 25% to be more aggressive
-    const effectiveMargin = marginPercent + (volatility * 0.25);
+    let effectiveMargin = marginPercent + (volatility * 0.25);
+
+    // Alpha Strategy: The Timer
+    // As the event approaches, volatility and risk increase (news breaks, lineups release).
+    // We add a linear penalty starting 1 hour out, up to +5% margin at kickoff.
+    // If the game has started, we keep the max penalty to cover in-play volatility.
+    if (market.commenceTime) {
+        const now = Date.now();
+        const commence = new Date(market.commenceTime).getTime();
+        const diffMins = (commence - now) / 60000;
+
+        let timePenalty = 0;
+        if (diffMins <= 0) {
+            timePenalty = 5; // Max penalty for in-play
+        } else if (diffMins < 60) {
+            // Linear scale from 0% at 60m to 5% at 0m
+            timePenalty = 5 * ((60 - diffMins) / 60);
+        }
+        effectiveMargin += timePenalty;
+    }
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;

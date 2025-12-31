@@ -27,3 +27,20 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+## 2024-05-23 - The Timer (Time-Decay Margin)
+
+**Hypothesis:** As an event approaches commencement (or goes in-play), volatility increases due to lineup announcements, weather updates, and market liquidity concentration. A static margin becomes riskier as the "Time to Expiry" decreases.
+
+**Change:**
+Old: `margin = config.marginPercent + (volatility * 0.25)`
+New: `margin = config.marginPercent + (volatility * 0.25) + timePenalty`
+
+Where `timePenalty` is:
+- `0%` if > 60 mins until start.
+- `0%` to `5%` (linear) if < 60 mins until start.
+- `5%` (max) if started.
+
+**Expected Result:**
+- Wider spreads on games starting soon (reducing "sniper" risk).
+- Protection against late-breaking news.
+- Safe default for in-play markets (which often have high variance).
