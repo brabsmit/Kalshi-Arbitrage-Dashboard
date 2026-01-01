@@ -95,8 +95,27 @@ export const calculateStrategy = (market, marginPercent) => {
     // If the market is volatile (high standard deviation in source odds), we increase the required margin.
     // This protects against adverse selection during rapid repricing events.
     const volatility = market.volatility || 0;
-    // UPDATED: Reduce volatility impact to 25% to be more aggressive
-    const effectiveMargin = marginPercent + (volatility * 0.25);
+
+    // Alpha Strategy: The Timer (Time Decay)
+    // As the game approaches start (or starts), volatility and uncertainty explode.
+    // We linearly increase margin by up to 5% in the final hour to avoid "catching a falling knife".
+    let timePenalty = 0;
+    if (market.commenceTime) {
+        const now = Date.now();
+        const start = new Date(market.commenceTime).getTime();
+        const hoursUntilStart = (start - now) / (1000 * 60 * 60);
+
+        if (hoursUntilStart <= 1.0) {
+            // Linear scale: 1h -> 0%, 0h -> 5%
+            // If already started (hours < 0), max penalty 5%
+            const rawPenalty = 5 * (1 - hoursUntilStart);
+            timePenalty = Math.max(0, Math.min(5, rawPenalty));
+            if (hoursUntilStart < 0) timePenalty = 5; // Cap at max for in-play
+        }
+    }
+
+    // UPDATED: Reduce volatility impact to 25% to be more aggressive, but add Time Penalty
+    const effectiveMargin = marginPercent + (volatility * 0.25) + timePenalty;
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
