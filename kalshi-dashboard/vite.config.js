@@ -30,7 +30,8 @@ export default defineConfig({
         target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL}/trade-api/v2` : 'https://api.elections.kalshi.com/trade-api/v2',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kalshi/, ''),
-        secure: false,
+        // Sentinel: Verify SSL for production. Only disable for localhost dev.
+        secure: process.env.KALSHI_API_URL ? !process.env.KALSHI_API_URL.includes('localhost') : true,
         // CRITICAL FIX: Set Origin to the target domain to satisfy WAF/CORS checks
         configure: (proxy, _options) => {
           const target = process.env.KALSHI_API_URL || 'https://api.elections.kalshi.com';
@@ -44,7 +45,8 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
-        secure: false,
+        // Sentinel: Verify SSL for production. Only disable for localhost dev.
+        secure: process.env.KALSHI_API_URL ? !process.env.KALSHI_API_URL.includes('localhost') : true,
         configure: (proxy, _options) => {
           proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
             // FIX: Set Origin header for WS to satisfy WAF

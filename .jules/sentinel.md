@@ -27,3 +27,8 @@
 **Vulnerability:** The application accepted unlimited length input for API keys and allowed uploading arbitrarily large files for private keys, which could crash the browser (DoS) by filling memory when read via `FileReader`.
 **Learning:** Client-side file processing logic often overlooks size limits because it assumes "trust" in the user, but large files can accidentally or maliciously freeze the UI. Similarly, text inputs without `maxLength` can accept megabytes of pasted text.
 **Prevention:** Always add `maxLength` to text inputs. Always check `file.size` before calling `reader.readAsText()` or uploading.
+
+## 2025-02-19 - Insecure Proxy SSL Configuration
+**Vulnerability:** The Vite proxy was configured with `secure: false` for all connections, including the production Kalshi API. This disabled SSL certificate verification, allowing Man-in-the-Middle (MITM) attacks to intercept API keys and signed requests.
+**Learning:** Development tools often default to permissive security (like ignoring self-signed certs) for ease of use, but these configurations can expose users if the same config is used for production targets.
+**Prevention:** Conditionally enable `secure: false` only for `localhost` or specific dev environments. Default to `secure: true` for all other targets.
