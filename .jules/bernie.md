@@ -23,6 +23,11 @@
 ## 2025-05-27 - [The Legacy Probability]
 **Observation:** `impliedProb` was calculated in `fetchLiveOdds` using a "reference bookmaker" for "Legacy support", but was never used in the UI and shadowed by `vigFreeProb` in logic.
 **Lesson:** Legacy code is dead code. If it's not used *now*, delete it. Don't carry baggage.
+
 ## 2025-12-21 - [The Loading Charade]
 **Observation:** `useForge` hook. We were using a React hook, a state variable, and a `useEffect` just to inject a `<script>` tag that the app *requires* to function.
 **Lesson:** If a library is required, put it in `index.html`. Browsers are good at loading scripts. We don't need React to manage `<script>` tags for us.
+
+## 2025-12-21 - [The Utils Drawer]
+**Observation:** `escapeHtml` and `escapeCSV` were living in `src/utils/core.js` but were only used in `src/App.jsx` (specifically for `DataExportModal`).
+**Lesson:** Code that changes together should stay together. If a utility function is only used by one component, put it near that component. "Global" utils are often just a junk drawer.

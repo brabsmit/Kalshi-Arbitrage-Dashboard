@@ -8,8 +8,6 @@ import {
     probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
-    escapeHtml,
-    escapeCSV,
     formatOrderDate,
     formatGameTime,
     calculateStrategy,
@@ -792,6 +790,28 @@ const AnalysisModal = ({ data, onClose }) => {
             </div>
         </div>
     );
+};
+
+// --- Export Helpers ---
+const escapeHtml = (unsafe) => {
+    if (unsafe === null || unsafe === undefined) return '';
+    return String(unsafe)
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+};
+
+const escapeCSV = (str) => {
+    if (str === null || str === undefined) return '""';
+    // Escape double quotes by doubling them
+    let escaped = String(str).replace(/"/g, '""');
+    // Prevent formula injection (CSV Injection) if starts with =, +, -, @
+    if (/^[=+\-@]/.test(escaped)) {
+        escaped = "'" + escaped;
+    }
+    return `"${escaped}"`;
 };
 
 const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
