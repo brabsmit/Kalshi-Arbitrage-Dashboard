@@ -300,34 +300,62 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
 
     // Optimization: Memoize expensive stats calculations to prevent re-computation on every timer tick
     const stats = useMemo(() => {
-        const exposure = positions.reduce((acc, p) => {
+        let exposure = 0;
+        let totalRealizedPnl = 0;
+        let totalPotentialReturn = 0;
+        let historyCount = 0;
+
+        let autoBidCount = 0;
+        let autoBidWins = 0;
+        let sumPnl = 0;
+        let sumSqPnl = 0;
+
+        // ⚡ Bolt Optimization: Consolidated multiple array traversals into a single O(N) loop
+        for (const p of positions) {
+            // Exposure Logic
             if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
-                return acc + (p.price * (p.quantity - p.filled));
+                exposure += (p.price * (p.quantity - p.filled));
+            } else if (!p.isOrder && p.status === 'HELD') {
+                exposure += p.cost;
+                // Potential Return
+                totalPotentialReturn += ((p.quantity * 100) - p.cost);
             }
-            if (!p.isOrder && p.status === 'HELD') {
-                return acc + p.cost;
+
+            // History / Realized PnL Logic
+            if (!p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl)) {
+                const rPnl = p.realizedPnl || 0;
+                totalRealizedPnl += rPnl;
+                historyCount++;
+
+                // Auto-Bid Stats for Win Rate & T-Stat
+                if (tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto') {
+                    autoBidCount++;
+                    if (rPnl > 0) autoBidWins++;
+                    sumPnl += rPnl;
+                    sumSqPnl += rPnl * rPnl;
+                }
             }
-            return acc;
-        }, 0);
+        }
 
-        const historyItems = positions.filter(p => !p.isOrder && (p.settlementStatus === 'settled' || p.realizedPnl));
-        const totalRealizedPnl = historyItems.reduce((acc, p) => acc + (p.realizedPnl || 0), 0);
+        const winRate = autoBidCount > 0 ? Math.round((autoBidWins / autoBidCount) * 100) : 0;
 
-        const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD');
-        const totalPotentialReturn = heldPositions.reduce((acc, p) => acc + ((p.quantity * 100) - p.cost), 0);
+        // Inline T-Statistic Calculation (Welford/Standard Variance) to avoid creating intermediate PnL array
+        let tStat = 0;
+        let isSignificant = false;
 
-        // WIN RATE: Calculated only on AUTO-BID positions
-        const autoBidHistory = historyItems.filter(p => tradeHistory && tradeHistory[p.marketId] && tradeHistory[p.marketId].source === 'auto');
-        const winCount = autoBidHistory.filter(p => (p.realizedPnl || 0) > 0).length;
-        const totalSettled = autoBidHistory.length;
-        const winRate = totalSettled > 0 ? Math.round((winCount / totalSettled) * 100) : 0;
+        if (autoBidCount >= 5) {
+            const mean = sumPnl / autoBidCount;
+            const variance = (sumSqPnl - (sumPnl * sumPnl) / autoBidCount) / (autoBidCount - 1);
+            const stdDev = Math.sqrt(Math.max(0, variance));
 
-        // --- T-STATISTIC CALCULATION ---
-        const pnls = autoBidHistory.map(p => p.realizedPnl || 0);
-        const { tStat, isSignificant } = calculateTStatistic(pnls);
-        // -------------------------------
+            if (stdDev > 0) {
+                const stdError = stdDev / Math.sqrt(autoBidCount);
+                tStat = mean / stdError;
+                isSignificant = Math.abs(tStat) > 2.0;
+            }
+        }
 
-        return { exposure, totalRealizedPnl, totalPotentialReturn, winRate, tStat, isSignificant, historyCount: historyItems.length };
+        return { exposure, totalRealizedPnl, totalPotentialReturn, winRate, tStat, isSignificant, historyCount };
     }, [positions, tradeHistory]);
 
     const elapsed = sessionStart ? now - sessionStart : 0;
