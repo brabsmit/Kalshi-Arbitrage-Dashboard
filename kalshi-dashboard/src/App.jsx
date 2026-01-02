@@ -1570,6 +1570,7 @@ const KalshiDashboard = () => {
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [sessionStart, setSessionStart] = useState(null);
   const [eventLogs, setEventLogs] = useState([]);
+  const [hasScanned, setHasScanned] = useState(false);
 
   const [deselectedMarketIds, setDeselectedMarketIds] = useState(new Set());
 
@@ -1983,10 +1984,10 @@ const KalshiDashboard = () => {
               if (!hasChanged && processed.length === prev.length) return prev;
               return processed;
           });
-      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); }
+      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); } finally { setHasScanned(true); }
   }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
-  useEffect(() => { setMarkets([]); fetchLiveOdds(true); }, [fetchLiveOdds]);
+  useEffect(() => { setMarkets([]); setHasScanned(false); fetchLiveOdds(true); }, [fetchLiveOdds]);
 
   useEffect(() => {
       if (!isRunning) return;
@@ -2825,11 +2826,21 @@ const KalshiDashboard = () => {
                                     Select NFL
                                 </button>
                             </>
-                        ) : (
+                        ) : !hasScanned ? (
                             <>
                                 <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
                                 <p className="font-medium text-slate-500">Scanning markets...</p>
                                 <p className="text-xs text-slate-400 mt-1">Fetching live odds and Kalshi data</p>
+                            </>
+                        ) : (
+                            <>
+                                <div className="p-3 bg-slate-100 rounded-full mb-3">
+                                    <Clock size={24} className="text-slate-400" />
+                                </div>
+                                <p className="font-medium text-slate-600">No active markets found</p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Checked {config.selectedSports.length} sport{config.selectedSports.length > 1 ? 's' : ''}. Next scan in {config.isTurboMode ? '3s' : '15s'}.
+                                </p>
                             </>
                         )}
                     </div>
