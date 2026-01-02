@@ -8,8 +8,6 @@ import {
     probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
-    escapeHtml,
-    escapeCSV,
     formatOrderDate,
     formatGameTime,
     calculateStrategy,
