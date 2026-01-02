@@ -234,7 +234,7 @@ const SportFilter = ({ selected, options, onChange }) => {
                                             if (isSelected) onChange(selected.filter(s => s !== opt.key));
                                             else onChange([...selected, opt.key]);
                                         }}
-                                        className={`text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all border ${
+                                        className={`text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                                             isSelected
                                                 ? 'bg-blue-50 border-blue-200 text-blue-700'
                                                 : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
@@ -547,13 +547,13 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </div>
         </div>
         <div className="flex items-center gap-3">
-             <button aria-label="Run Schedule" onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
+             <button aria-label="Run Schedule" onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
                 <Clock size={20} className={isScheduled ? 'animate-pulse' : ''}/>
             </button>
-             <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Session Reports">
+             <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Session Reports">
                 <FileText size={20} />
             </button>
-             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors" title="Settings">
+             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Settings">
                 <Settings size={20} />
             </button>
             <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
@@ -2754,9 +2754,9 @@ const KalshiDashboard = () => {
                     <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
                 </div>
                 <div className="flex gap-2">
-                    <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
-                    <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
-                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title="Turbo Mode (3s updates)" onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
+                    <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
+                    <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
+                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title="Turbo Mode (3s updates)" onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
                 </div>
             </div>
             <div className="overflow-auto flex-1">
