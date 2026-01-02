@@ -11,6 +11,8 @@ export const SPORT_MAPPING = [
     { key: 'cricket_test_match', title: 'Cricket (Test)', kalshiSeries: 'KXCRICKETTESTMATCH' },
 ];
 
+const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+
 export const TEAM_ABBR = {
     // International Cricket
     'South Africa': 'SA', 'New Zealand': 'Z', 'West Indies': 'WIN', 'Sri Lanka': 'SL',
@@ -56,8 +58,9 @@ export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, ka
     let datePart = "";
     const date = new Date(commenceTime);
     if (!isNaN(date.getTime())) {
+        // ⚡ Bolt Optimization: Use array lookup instead of expensive toLocaleString
         const yy = date.getFullYear().toString().slice(-2);
-        const mmm = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+        const mmm = MONTHS[date.getMonth()];
         const dd = date.getDate().toString().padStart(2, '0');
         datePart = `${yy}${mmm}${dd}`;
     }
