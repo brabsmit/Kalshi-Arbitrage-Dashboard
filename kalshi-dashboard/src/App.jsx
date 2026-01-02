@@ -275,7 +275,14 @@ const CancellationModal = ({ isOpen, progress }) => {
                             <span>Progress</span>
                             <span>{progress.current} / {progress.total}</span>
                         </div>
-                        <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                        <div
+                            role="progressbar"
+                            aria-valuenow={percentage}
+                            aria-valuemin="0"
+                            aria-valuemax="100"
+                            aria-label="Cancellation Progress"
+                            className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"
+                        >
                             <div 
                                 className="bg-blue-600 h-full transition-all duration-300 ease-out" 
                                 style={{width: `${percentage}%`}}
@@ -1204,7 +1211,12 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                         disabled={!market.smartBid || isBidding}
                         className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px]"
                     >
-                        {isBidding ? <Loader2 size={12} className="animate-spin" /> : `Bid ${market.smartBid}¢`}
+                        {isBidding ? (
+                            <>
+                                <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+                                <span className="sr-only">Placing Bid...</span>
+                            </>
+                        ) : `Bid ${market.smartBid}¢`}
                     </button>
                 </td>
             </tr>
@@ -1305,7 +1317,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
 
             <td className="px-4 py-3 text-center flex justify-center gap-2">
                 {item.isOrder && (
-                    <button aria-label="Cancel Order" onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                    <button aria-label={`Cancel Order for ${item.marketId}`} onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
                         <XCircle size={16}/>
                     </button>
                 )}
