@@ -437,11 +437,49 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
     );
 };
 
+const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorClass, accentClass, helpText }) => {
+    return (
+        <div>
+            <div className="flex justify-between items-center mb-2">
+                <label htmlFor={`${id}-input`} className="text-xs font-bold text-slate-500">{label}</label>
+                <div className="flex items-center gap-1">
+                    <input
+                        type="number"
+                        id={`${id}-input`}
+                        min={min}
+                        max={max}
+                        value={value}
+                        onChange={e => {
+                            const val = parseInt(e.target.value);
+                            if (!isNaN(val)) onChange(Math.max(min, Math.min(max, val)));
+                        }}
+                        className={`w-12 text-right text-xs font-bold ${colorClass} border-b border-slate-200 focus:outline-none focus:border-current bg-transparent p-0`}
+                    />
+                    <span className={`text-xs font-bold ${colorClass}`}>{unit}</span>
+                </div>
+            </div>
+            <input
+                id={id}
+                type="range"
+                aria-label={label}
+                aria-describedby={helpText ? `${id}-help` : undefined}
+                min={min}
+                max={max}
+                value={value}
+                onChange={e => onChange(parseInt(e.target.value))}
+                className={`w-full ${accentClass} h-1.5 bg-slate-200 rounded-lg cursor-pointer`}
+            />
+            {helpText && <p id={`${id}-help`} className="text-[10px] text-slate-400 mt-1">{helpText}</p>}
+        </div>
+    );
+};
+
 const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const bidMarginId = useId();
     const closeMarginId = useId();
     const minFvId = useId();
+    const maxPosId = useId();
     const [showApiKey, setShowApiKey] = useState(false);
 
     if (!isOpen) return null;
@@ -453,28 +491,55 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-6">
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Bid Margin</span><span className="text-blue-600">{config.marginPercent}%</span></div>
-                        <input type="range" aria-label="Auto-Bid Margin" aria-describedby={bidMarginId} min="1" max="30" value={config.marginPercent} onChange={e => setConfig({...config, marginPercent: parseInt(e.target.value)})} className="w-full accent-blue-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p id={bidMarginId} className="text-[10px] text-slate-400 mt-1">Bot will bid <code>FairValue * (1 - Margin)</code></p>
-                    </div>
+                    <RangeSetting
+                        id={bidMarginId}
+                        label="Auto-Bid Margin"
+                        value={config.marginPercent}
+                        onChange={v => setConfig({...config, marginPercent: v})}
+                        min={1}
+                        max={30}
+                        unit="%"
+                        colorClass="text-blue-600"
+                        accentClass="accent-blue-600"
+                        helpText={<>Bot will bid <code>FairValue * (1 - Margin)</code></>}
+                    />
 
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Auto-Close Margin</span><span className="text-emerald-600">{config.autoCloseMarginPercent}%</span></div>
-                        <input type="range" aria-label="Auto-Close Margin" aria-describedby={closeMarginId} min="1" max="50" value={config.autoCloseMarginPercent} onChange={e => setConfig({...config, autoCloseMarginPercent: parseInt(e.target.value)})} className="w-full accent-emerald-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p id={closeMarginId} className="text-[10px] text-slate-400 mt-1">Bot will ask <code>(FairValue or BreakEven) * (1 + Margin)</code></p>
-                    </div>
+                    <RangeSetting
+                        id={closeMarginId}
+                        label="Auto-Close Margin"
+                        value={config.autoCloseMarginPercent}
+                        onChange={v => setConfig({...config, autoCloseMarginPercent: v})}
+                        min={1}
+                        max={50}
+                        unit="%"
+                        colorClass="text-emerald-600"
+                        accentClass="accent-emerald-600"
+                        helpText={<>Bot will ask <code>(FairValue or BreakEven) * (1 + Margin)</code></>}
+                    />
 
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Min Fair Value</span><span className="text-indigo-600">{config.minFairValue}¢</span></div>
-                        <input type="range" aria-label="Minimum Fair Value" aria-describedby={minFvId} min="1" max="80" value={config.minFairValue} onChange={e => setConfig({...config, minFairValue: parseInt(e.target.value)})} className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                        <p id={minFvId} className="text-[10px] text-slate-400 mt-1">Bot will ignore markets with a Fair Value below this threshold.</p>
-                    </div>
+                    <RangeSetting
+                        id={minFvId}
+                        label="Min Fair Value"
+                        value={config.minFairValue}
+                        onChange={v => setConfig({...config, minFairValue: v})}
+                        min={1}
+                        max={80}
+                        unit="¢"
+                        colorClass="text-indigo-600"
+                        accentClass="accent-indigo-600"
+                        helpText="Bot will ignore markets with a Fair Value below this threshold."
+                    />
 
-                    <div>
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-2"><span>Max Positions</span><span className="text-rose-600">{config.maxPositions}</span></div>
-                        <input type="range" aria-label="Max Positions" min="1" max="20" value={config.maxPositions} onChange={e => setConfig({...config, maxPositions: parseInt(e.target.value)})} className="w-full accent-rose-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"/>
-                    </div>
+                    <RangeSetting
+                        id={maxPosId}
+                        label="Max Positions"
+                        value={config.maxPositions}
+                        onChange={v => setConfig({...config, maxPositions: v})}
+                        min={1}
+                        max={20}
+                        colorClass="text-rose-600"
+                        accentClass="accent-rose-600"
+                    />
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
