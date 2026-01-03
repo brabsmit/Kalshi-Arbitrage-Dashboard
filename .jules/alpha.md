@@ -27,3 +27,16 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-23 - The Timer (Time-Decay Margin)
+
+**Hypothesis:** As the event start time approaches (within 1 hour), volatility increases and "pre-match" odds become less reliable as sharps shape the final line. We should increase our margin of safety to avoid being on the wrong side of late money.
+
+**Change:**
+Old: `margin = effectiveMargin`
+New: If `hoursUntilGame < 1`, `margin = effectiveMargin + (1 - hoursUntilGame) * 5`.
+(Linearly adds up to 5% extra margin as time hits zero).
+
+**Expected Result:**
+- Lower risk in the final hour before kickoff.
+- Avoids "picking up pennies" in front of the steamroller of sharp late money.
