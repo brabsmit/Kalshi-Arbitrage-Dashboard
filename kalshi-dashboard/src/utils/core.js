@@ -115,28 +115,6 @@ export const calculateKalshiFees = (priceCents, quantity) => {
     return Math.ceil(rawFee * 100);
 };
 
-export const calculateTStatistic = (pnls) => {
-    // Bernie says: Don't pretend 2 trades is a statistically significant sample.
-    if (!pnls || pnls.length < 5) return { tStat: 0, isSignificant: false };
-
-    const n = pnls.length;
-    const mean = pnls.reduce((a, b) => a + b, 0) / n;
-    const variance = pnls.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1);
-    const stdDev = Math.sqrt(variance);
-
-    let tStat = 0;
-    if (stdDev > 0) {
-        const stdError = stdDev / Math.sqrt(n);
-        tStat = mean / stdError;
-    }
-
-    // Simplified Critical Value (approx 95% confidence for N > 30)
-    // For smaller N, 2.0 is slightly less conservative than 2.57 (N=5) but fine for a dashboard badge.
-    const isSignificant = Math.abs(tStat) > 2.0;
-
-    return { tStat, isSignificant };
-};
-
 // ==========================================
 // CRYPTO
 // ==========================================
