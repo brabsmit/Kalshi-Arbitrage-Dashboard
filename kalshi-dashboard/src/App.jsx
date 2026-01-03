@@ -1937,6 +1937,13 @@ const KalshiDashboard = () => {
           setMarkets(prev => {
               const processingTime = Date.now();
               let hasChanged = false;
+
+              // ⚡ Bolt Optimization: Create Map for O(1) lookup to avoid O(N*M) loop inside map
+              const prevMap = new Map();
+              for (const m of prev) {
+                  prevMap.set(m.id, m);
+              }
+
               const processed = allOddsData.slice(0, 50).map(game => {
                   const kalshiData = game._kalshiMarkets;
                   const seriesTicker = game._seriesTicker;
@@ -1996,7 +2003,7 @@ const KalshiDashboard = () => {
                   const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
 
                   let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
-                  const prevMarket = prev.find(m => m.id === game.id);
+                  const prevMarket = prevMap.get(game.id);
 
                   // --- WEBSOCKET PRIORITY LOGIC ---
                   let isWsActive = false;
