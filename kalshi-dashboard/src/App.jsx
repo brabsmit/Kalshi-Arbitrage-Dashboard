@@ -12,7 +12,6 @@ import {
     formatGameTime,
     calculateStrategy,
     calculateKalshiFees,
-    calculateTStatistic,
     signRequest
 } from './utils/core';
 
