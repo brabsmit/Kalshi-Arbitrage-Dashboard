@@ -827,6 +827,31 @@ const AnalysisModal = ({ data, onClose }) => {
     );
 };
 
+const escapeHtml = (str) => {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+};
+
+const escapeCSV = (str) => {
+    if (str === null || str === undefined) return '';
+    const s = String(str);
+    // Sentinel: Prevent CSV Injection (Formula Injection) by quoting fields starting with = + - @
+    let safe = s;
+    if (/^[=+\-@]/.test(s)) {
+        safe = "'" + s;
+    }
+    // Sentinel: Standard CSV Escaping (wrap in quotes if contains comma, quote, or newline)
+    if (/[",\n\r]/.test(safe)) {
+        return '"' + safe.replace(/"/g, '""') + '"';
+    }
+    return safe;
+};
+
 const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     if (!isOpen) return null;
