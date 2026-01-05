@@ -1167,21 +1167,44 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'left' })
 };
 
 const LatencyDisplay = ({ timestamp }) => {
-    const now = React.useContext(TimeContext);
-    const ago = timestamp ? now - timestamp : 0;
+    const ref = useRef(null);
+
+    // Initial calculation for server-side rendering / first paint to avoid flash of content
+    const getInitialContent = () => {
+        if (!timestamp) return { text: '-', color: 'text-slate-300' };
+        const ago = Date.now() - timestamp;
+        let color = 'text-slate-400';
+        if (ago < 5000) color = 'text-emerald-500 font-bold';
+        else if (ago < 30000) color = 'text-amber-500';
+        else color = 'text-rose-500';
+        return { text: formatDuration(ago) + ' ago', color };
+    };
+
+    const initial = getInitialContent();
+
+    useEffect(() => {
+        if (!timestamp) return;
+
+        // ⚡ Bolt Optimization: Use direct DOM manipulation to avoid React render cycle on every second
+        const update = () => {
+            if (!ref.current) return;
+            const ago = Date.now() - timestamp;
+            ref.current.textContent = formatDuration(ago) + ' ago';
+
+            let color = 'text-slate-400';
+            if (ago < 5000) color = 'text-emerald-500 font-bold';
+            else if (ago < 30000) color = 'text-amber-500';
+            else color = 'text-rose-500';
+
+            ref.current.className = `text-[9px] font-mono mt-0.5 ${color}`;
+        };
+
+        const i = setInterval(update, 1000);
+        return () => clearInterval(i);
+    }, [timestamp]);
 
     if (!timestamp) return <span className="text-[9px] text-slate-300 block mt-0.5">-</span>;
-
-    let color = 'text-slate-400';
-    if (ago < 5000) color = 'text-emerald-500 font-bold';
-    else if (ago < 30000) color = 'text-amber-500';
-    else color = 'text-rose-500';
-
-    return (
-        <div className={`text-[9px] font-mono mt-0.5 ${color}`}>
-           {formatDuration(ago)} ago
-        </div>
-    );
+    return <div ref={ref} className={`text-[9px] font-mono mt-0.5 ${initial.color}`}>{initial.text}</div>;
 };
 
 const MarketExpandedDetails = ({ market }) => {
@@ -1632,7 +1655,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
     );
 };
 
-const EventLog = ({ logs }) => {
+const EventLog = React.memo(({ logs }) => {
     const scrollRef = useRef(null);
     useEffect(() => {
         if (scrollRef.current) {
@@ -1668,7 +1691,7 @@ const EventLog = ({ logs }) => {
             </div>
         </div>
     );
-};
+});
 
 // ==========================================
 // 4. MAIN DASHBOARD
