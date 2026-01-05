@@ -32,3 +32,8 @@
 **Vulnerability:** The Vite proxy was configured with `secure: false` for all connections, including the production Kalshi API. This disabled SSL certificate verification, allowing Man-in-the-Middle (MITM) attacks to intercept API keys and signed requests.
 **Learning:** Development tools often default to permissive security (like ignoring self-signed certs) for ease of use, but these configurations can expose users if the same config is used for production targets.
 **Prevention:** Conditionally enable `secure: false` only for `localhost` or specific dev environments. Default to `secure: true` for all other targets.
+
+## 2025-02-23 - Insecure Session Persistence
+**Vulnerability:** Users had no way to disconnect their wallet or clear private keys from memory/sessionStorage without closing the browser tab. This increases the risk of unauthorized access if a user steps away from an active session.
+**Learning:** "Connect Wallet" flows often neglect the "Disconnect" state, assuming users will just close the tab. However, long-running dashboards are often left open, making explicit session termination critical for shared or public environments.
+**Prevention:** Always implement an explicit "Disconnect" or "Logout" action that clears sensitive state and storage.
