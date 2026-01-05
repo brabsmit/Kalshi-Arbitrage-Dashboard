@@ -1350,30 +1350,6 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
     );
 });
 
-const arePortfolioPropsEqual = (prev, next) => {
-    if (prev.activeTab !== next.activeTab) return false;
-    if (prev.currentPrice !== next.currentPrice) return false;
-    if (prev.currentFV !== next.currentFV) return false;
-
-    const p = prev.item;
-    const n = next.item;
-
-    if (p.id !== n.id) return false;
-    if (p.quantity !== n.quantity) return false;
-    if (p.filled !== n.filled) return false;
-    if (p.price !== n.price) return false;
-    if (p.status !== n.status) return false;
-    if (p.settlementStatus !== n.settlementStatus) return false;
-    if (p.payout !== n.payout) return false;
-    if (p.realizedPnl !== n.realizedPnl) return false;
-    if (p.side !== n.side) return false;
-
-    // Check historyEntry reference
-    if (prev.historyEntry !== next.historyEntry) return false;
-
-    return true;
-};
-
 const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, currentFV, onCancel, onAnalysis }) => {
     return (
         <tr className="hover:bg-slate-50 group">
@@ -1449,7 +1425,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
             </td>
         </tr>
     );
-}, arePortfolioPropsEqual);
+});
 
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
