@@ -1,8 +1,3 @@
-## 2026-01-02 - Infinite Spinner Empty State
-**Learning:**
-Users were confused by the "Scanning markets..." spinner when filtering for sports that had no active games (e.g., NFL in July). The interface implied an ongoing background process that would never complete, rather than a definitive "no results" state.
-
-**Action:**
-Implemented a `hasScanned` state to differentiate between the initial data fetch and subsequent empty states.
-- **Before:** Infinite "Scanning..." spinner if `markets.length === 0`.
-- **After:** "Scanning..." only on first load. If 0 markets are found after fetch, display a "No active markets found" state with a timestamp or "Next scan in..." indicator. This gives users confidence that the system is working but there is simply no data.
+## 2026-01-05 - Event Log Copy Button
+**Learning:** Adding a simple "Copy" button to log components significantly improves debuggability without cluttering the UI. Users often need to share logs but struggle with text selection in scrollable containers.
+**Action:** Always include a copy-to-clipboard action for scrollable log/console outputs in future dashboards.
