@@ -1969,16 +1969,18 @@ const KalshiDashboard = () => {
                       const outcomes = bm.markets?.[0]?.outcomes;
                       if (!outcomes || outcomes.length < 2) continue;
 
+                      // ⚡ Bolt Optimization: Use single pass loop to avoid creating intermediate array and objects
                       let totalImplied = 0;
-                      const probs = outcomes.map(o => {
+                      let targetP = null;
+
+                      for (const o of outcomes) {
                           const p = americanToProbability(o.price);
                           totalImplied += p;
-                          return { name: o.name, p };
-                      });
+                          if (o.name === targetName) targetP = p;
+                      }
 
-                      const tProb = probs.find(o => o.name === targetName);
-                      if (tProb) {
-                          vigFreeProbs.push({ prob: tProb.p / totalImplied, source: bm.title });
+                      if (targetP !== null) {
+                          vigFreeProbs.push({ prob: targetP / totalImplied, source: bm.title });
                       }
                   }
 
