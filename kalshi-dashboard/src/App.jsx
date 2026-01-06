@@ -1044,13 +1044,12 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                         `).join('')}
                     </tbody>
                 </table>
-                <script>
-                    window.onload = function() { window.print(); }
-                </script>
             </body>
             </html>
         `);
         printWindow.document.close();
+        // Sentinel: Trigger print directly to avoid inline script (CSP compliance)
+        printWindow.print();
     };
 
     return (
