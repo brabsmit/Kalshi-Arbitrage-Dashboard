@@ -27,3 +27,18 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-22 - The Timer (Time Decay Margin)
+
+**Hypothesis:** As an event approaches its start time (or "commence time"), uncertainty increases due to potential last-minute news (injuries, weather, lineup changes) and increased market volatility. A fixed margin is unsafe in the final minutes before kickoff.
+
+**Change:**
+Old: `effectiveMargin` only accounted for historical volatility.
+New: Added a linear time penalty in the final 60 minutes before start.
+`timePenalty = MAX_TIME_PENALTY * (1 - hoursRemaining)` where `MAX_TIME_PENALTY = 5%`.
+This is added to the `effectiveMargin`.
+
+**Expected Result:**
+- Lower bids (or no bids) immediately before game start.
+- Protection against "gametime decision" adverse selection.
+- Reduced exposure to frantic pre-game price swings.
