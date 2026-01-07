@@ -2463,27 +2463,25 @@ const KalshiDashboard = () => {
           try {
             // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
             // SCOPE: Only consider markets currently displayed in the scanner to support sport switching without interference.
+            // ⚡ Bolt Optimization: Single-pass loop to avoid 4x array allocations and O(N) traversals
             const currentMarketIds = new Set(markets.map(m => m.realMarketId));
+            const executedHoldings = new Set();
+            const activeOrders = [];
+            const occupiedMarkets = new Set();
 
-            const executedHoldings = new Set(positions.filter(p => 
-                !p.isOrder && 
-                p.quantity > 0 && 
-                p.settlementStatus !== 'settled' &&
-                currentMarketIds.has(p.marketId)
-            ).map(p => p.marketId));
+            for (const p of positions) {
+                if (!currentMarketIds.has(p.marketId)) continue;
 
-            // Filter activeOrders to only those in the current market list
-            const activeOrders = positions.filter(p => 
-                p.isOrder && 
-                ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()) &&
-                currentMarketIds.has(p.marketId)
-            );
-
-            // We don't want to exceed max positions, but we also want to manage existing bids.
-            // So effectiveCount should track held positions + pending bids for *new* markets.
-            // We calculate effective count based on held positions AND active orders for current markets.
-            const marketsWithOrders = new Set(activeOrders.map(o => o.marketId));
-            const occupiedMarkets = new Set([...executedHoldings, ...marketsWithOrders]);
+                if (p.isOrder) {
+                    if (['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase())) {
+                        activeOrders.push(p);
+                        occupiedMarkets.add(p.marketId);
+                    }
+                } else if (p.quantity > 0 && p.settlementStatus !== 'settled') {
+                    executedHoldings.add(p.marketId);
+                    occupiedMarkets.add(p.marketId);
+                }
+            }
             let effectiveCount = occupiedMarkets.size;
 
             // --- LIMIT ENFORCEMENT ---
