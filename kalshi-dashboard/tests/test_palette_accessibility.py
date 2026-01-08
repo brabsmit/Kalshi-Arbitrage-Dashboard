@@ -46,7 +46,8 @@ def test_palette_accessibility_improvements(authenticated_page):
     expect(page.get_by_text("Bot Configuration")).to_be_visible()
 
     # Check Auto-Bid Margin
-    bid_margin_input = page.get_by_label("Auto-Bid Margin")
+    # Target the slider explicitly to avoid ambiguity with the number input
+    bid_margin_input = page.get_by_role("slider", name="Auto-Bid Margin")
     expect(bid_margin_input).to_be_visible()
 
     # Check for aria-describedby
@@ -60,14 +61,14 @@ def test_palette_accessibility_improvements(authenticated_page):
     expect(description_el).to_contain_text("Bot will bid")
 
     # Check Auto-Close Margin
-    close_margin_input = page.get_by_label("Auto-Close Margin")
+    close_margin_input = page.get_by_role("slider", name="Auto-Close Margin")
     expect(close_margin_input).to_have_attribute("aria-describedby", re.compile(r".+"))
 
     desc_id_2 = close_margin_input.get_attribute("aria-describedby")
     expect(page.locator(f'[id="{desc_id_2}"]')).to_contain_text("Bot will ask")
 
     # Check Min Fair Value
-    mfv_input = page.get_by_label("Minimum Fair Value")
+    mfv_input = page.get_by_role("slider", name="Min Fair Value")
     expect(mfv_input).to_have_attribute("aria-describedby", re.compile(r".+"))
 
     desc_id_3 = mfv_input.get_attribute("aria-describedby")
