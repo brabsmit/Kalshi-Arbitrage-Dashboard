@@ -5,7 +5,6 @@ import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
     calculateVolatility,
-    probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
     formatOrderDate,
@@ -798,25 +797,9 @@ const AnalysisModal = ({ data, onClose }) => {
     const targetVigFreeProb = (data.vigFreeProb || 0) / 100;
     const opposingVigFreeProb = 1 - targetVigFreeProb;
 
-    const targetFairOdds = probabilityToAmericanOdds(targetVigFreeProb);
-    const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
-
     let displayOpposingOdds = '-';
     if (data.opposingOdds !== undefined && data.opposingOdds !== null) {
         displayOpposingOdds = (data.opposingOdds > 0 ? '+' : '') + data.opposingOdds;
-    } else if (data.sportsbookOdds && data.vigFreeProb) {
-        const targetRaw = americanToProbability(data.sportsbookOdds);
-        const vigFreeDecimal = data.vigFreeProb / 100;
-        
-        if (vigFreeDecimal > 0.001) {
-            const totalImplied = targetRaw / vigFreeDecimal;
-            const opponentRaw = totalImplied - targetRaw;
-            
-            if (opponentRaw > 0 && opponentRaw < 1) {
-                const calcOdds = probabilityToAmericanOdds(opponentRaw);
-                displayOpposingOdds = (calcOdds > 0 ? '+' : '') + calcOdds + ' (Est)';
-            }
-        }
     }
 
     return (
@@ -850,13 +833,13 @@ const AnalysisModal = ({ data, onClose }) => {
                                         {(data.vigFreeProb || 0).toFixed(2)}%
                                         {data.bookmakerCount && <span className="text-[9px] text-slate-400 block font-normal">Avg of {data.bookmakerCount} bks</span>}
                                     </td>
-                                    <td className="px-4 py-2 font-mono text-right">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-right">{Math.floor(data.vigFreeProb || 0)}¢</td>
                                 </tr>
                                 <tr>
                                     <td className="px-4 py-2 text-slate-500">Opponent</td>
                                     <td className="px-4 py-2 font-mono">{displayOpposingOdds}</td>
                                     <td className="px-4 py-2 font-mono text-slate-600">{(opposingVigFreeProb * 100).toFixed(2)}%</td>
-                                    <td className="px-4 py-2 font-mono text-right">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-right">{Math.floor(opposingVigFreeProb * 100)}¢</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1185,9 +1168,7 @@ const LatencyDisplay = ({ timestamp }) => {
 };
 
 const MarketExpandedDetails = ({ market }) => {
-    const targetFairOdds = probabilityToAmericanOdds(market.vigFreeProb / 100);
     const opposingVigFreeProb = 1 - (market.vigFreeProb / 100);
-    const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
 
     return (
         <div className="p-4 border-b border-slate-200 bg-slate-50 animate-in slide-in-from-top-2">
@@ -1221,12 +1202,12 @@ const MarketExpandedDetails = ({ market }) => {
                             <span className="font-mono font-bold text-emerald-600">{(market.vigFreeProb).toFixed(2)}%</span>
                         </div>
                          <div className="flex justify-between mb-1">
-                            <span className="text-slate-500">Fair Odds:</span>
-                            <span className="font-mono font-bold text-slate-700">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</span>
+                            <span className="text-slate-500">Fair Price:</span>
+                            <span className="font-mono font-bold text-slate-700">{Math.floor(market.vigFreeProb)}¢</span>
                         </div>
                         <div className="border-t border-slate-100 my-1 pt-1 flex justify-between">
-                             <span className="text-slate-500">Opponent Fair Odds:</span>
-                             <span className="font-mono text-slate-600">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</span>
+                             <span className="text-slate-500">Opponent Price:</span>
+                             <span className="font-mono text-slate-600">{Math.floor(opposingVigFreeProb * 100)}¢</span>
                         </div>
                     </div>
                 </div>
