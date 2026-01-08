@@ -2277,7 +2277,7 @@ const KalshiDashboard = () => {
           // Process Settled Positions
           const settledPositions = (settledPos.market_positions && settledPos.market_positions.length > 0 ? settledPos.market_positions : (settledPos.event_positions || settledPos.positions || [])).map(p => ({...p, _forcedStatus: 'settled'}));
 
-          const mappedItems = [
+          const rawItems = [
               // ORDERS
               ...(orders.orders || []).map(o => ({
                   id: o.order_id, 
@@ -2319,11 +2319,17 @@ const KalshiDashboard = () => {
                       realizedPnl: p.realized_pnl
                   };
               })
-          ].filter((p, index, self) => {
+          ];
+
+          // ⚡ Bolt Optimization: Use Set for O(N) deduplication instead of O(N^2) findIndex
+          const seenPositions = new Set();
+
+          const mappedItems = rawItems.filter(p => {
              // Deduplicate: If same ID and same Status, keep first.
              if (!p.isOrder) {
-                 const firstIdx = self.findIndex(x => !x.isOrder && x.id === p.id && x.settlementStatus === p.settlementStatus);
-                 if (firstIdx !== index) return false;
+                 const uniqueKey = `${p.id}|${p.settlementStatus}`;
+                 if (seenPositions.has(uniqueKey)) return false;
+                 seenPositions.add(uniqueKey);
              }
 
              if (p.isOrder) return true;
