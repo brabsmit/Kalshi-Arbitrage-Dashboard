@@ -38,17 +38,6 @@ export const americanToProbability = (odds) => {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 };
 
-export const probabilityToAmericanOdds = (prob) => {
-    if (prob <= 0 || prob >= 1) return 0;
-    if (prob >= 0.5) {
-        const odds = - (prob / (1 - prob)) * 100;
-        return Math.round(odds);
-    } else {
-        const odds = ((1 - prob) / prob) * 100;
-        return Math.round(odds);
-    }
-};
-
 export const calculateVolatility = (history) => {
     if (!history || history.length < 2) return 0;
     let sum = 0;
