@@ -2,6 +2,19 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 
+// Helper to determine if SSL verification should be enabled
+const isSecureTarget = (url) => {
+  if (!url) return true; // Default to secure (production)
+  try {
+    const hostname = new URL(url).hostname;
+    // Only disable SSL verification for strictly localhost/127.0.0.1
+    // This prevents "localhost.evil.com" from bypassing security
+    return hostname !== 'localhost' && hostname !== '127.0.0.1';
+  } catch (e) {
+    return true; // Fail secure on invalid URL
+  }
+};
+
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
@@ -30,8 +43,8 @@ export default defineConfig({
         target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL}/trade-api/v2` : 'https://api.elections.kalshi.com/trade-api/v2',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/kalshi/, ''),
-        // Sentinel: Verify SSL for production. Only disable for localhost dev.
-        secure: process.env.KALSHI_API_URL ? !process.env.KALSHI_API_URL.includes('localhost') : true,
+        // Sentinel: Verify SSL for production. Only disable for strictly localhost dev.
+        secure: isSecureTarget(process.env.KALSHI_API_URL),
         // CRITICAL FIX: Set Origin to the target domain to satisfy WAF/CORS checks
         configure: (proxy, _options) => {
           const target = process.env.KALSHI_API_URL || 'https://api.elections.kalshi.com';
@@ -45,8 +58,8 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
-        // Sentinel: Verify SSL for production. Only disable for localhost dev.
-        secure: process.env.KALSHI_API_URL ? !process.env.KALSHI_API_URL.includes('localhost') : true,
+        // Sentinel: Verify SSL for production. Only disable for strictly localhost dev.
+        secure: isSecureTarget(process.env.KALSHI_API_URL),
         configure: (proxy, _options) => {
           proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
             // FIX: Set Origin header for WS to satisfy WAF
