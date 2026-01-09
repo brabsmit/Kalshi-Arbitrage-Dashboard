@@ -12,16 +12,11 @@ export const formatDuration = (ms) => {
 
 export const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
-export const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', {
-    month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-});
-
-export const formatGameTime = (isoString) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
-        weekday: 'short',
-        month: 'short',
+export const formatDate = (ts, includeDay = false) => {
+    if (!ts) return '-';
+    return new Date(ts).toLocaleString('en-US', {
+        weekday: includeDay ? 'short' : undefined,
+        month: includeDay ? 'short' : 'numeric',
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
@@ -36,17 +31,6 @@ export const formatGameTime = (isoString) => {
 export const americanToProbability = (odds) => {
   if (odds > 0) return 100 / (odds + 100);
   return Math.abs(odds) / (Math.abs(odds) + 100);
-};
-
-export const probabilityToAmericanOdds = (prob) => {
-    if (prob <= 0 || prob >= 1) return 0;
-    if (prob >= 0.5) {
-        const odds = - (prob / (1 - prob)) * 100;
-        return Math.round(odds);
-    } else {
-        const odds = ((1 - prob) / prob) * 100;
-        return Math.round(odds);
-    }
 };
 
 export const calculateVolatility = (history) => {
