@@ -5,11 +5,9 @@ import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
     calculateVolatility,
-    probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
-    formatOrderDate,
-    formatGameTime,
+    formatDate,
     calculateStrategy,
     calculateKalshiFees,
     signRequest
@@ -798,25 +796,13 @@ const AnalysisModal = ({ data, onClose }) => {
     const targetVigFreeProb = (data.vigFreeProb || 0) / 100;
     const opposingVigFreeProb = 1 - targetVigFreeProb;
 
-    const targetFairOdds = probabilityToAmericanOdds(targetVigFreeProb);
-    const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
+    // Use cents for Fair Value instead of American Odds
+    const targetFairValue = Math.floor(targetVigFreeProb * 100);
+    const opposingFairValue = Math.floor(opposingVigFreeProb * 100);
 
     let displayOpposingOdds = '-';
     if (data.opposingOdds !== undefined && data.opposingOdds !== null) {
         displayOpposingOdds = (data.opposingOdds > 0 ? '+' : '') + data.opposingOdds;
-    } else if (data.sportsbookOdds && data.vigFreeProb) {
-        const targetRaw = americanToProbability(data.sportsbookOdds);
-        const vigFreeDecimal = data.vigFreeProb / 100;
-        
-        if (vigFreeDecimal > 0.001) {
-            const totalImplied = targetRaw / vigFreeDecimal;
-            const opponentRaw = totalImplied - targetRaw;
-            
-            if (opponentRaw > 0 && opponentRaw < 1) {
-                const calcOdds = probabilityToAmericanOdds(opponentRaw);
-                displayOpposingOdds = (calcOdds > 0 ? '+' : '') + calcOdds + ' (Est)';
-            }
-        }
     }
 
     return (
@@ -839,7 +825,7 @@ const AnalysisModal = ({ data, onClose }) => {
                                     <th className="px-4 py-2 font-medium">Outcome</th>
                                     <th className="px-4 py-2 font-medium">Odds</th>
                                     <th className="px-4 py-2 font-medium">No-Vig %</th>
-                                    <th className="px-4 py-2 font-medium text-right">Fair Odds</th>
+                                    <th className="px-4 py-2 font-medium text-right">Fair Value</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -850,13 +836,13 @@ const AnalysisModal = ({ data, onClose }) => {
                                         {(data.vigFreeProb || 0).toFixed(2)}%
                                         {data.bookmakerCount && <span className="text-[9px] text-slate-400 block font-normal">Avg of {data.bookmakerCount} bks</span>}
                                     </td>
-                                    <td className="px-4 py-2 font-mono text-right">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-right font-bold text-slate-700">{targetFairValue}¢</td>
                                 </tr>
                                 <tr>
                                     <td className="px-4 py-2 text-slate-500">Opponent</td>
                                     <td className="px-4 py-2 font-mono">{displayOpposingOdds}</td>
                                     <td className="px-4 py-2 font-mono text-slate-600">{(opposingVigFreeProb * 100).toFixed(2)}%</td>
-                                    <td className="px-4 py-2 font-mono text-right">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-right text-slate-600">{opposingFairValue}¢</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -876,8 +862,8 @@ const AnalysisModal = ({ data, onClose }) => {
                     </div>
 
                     <div className="space-y-3 border-t border-slate-100 pt-4">
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatDate(data.oddsTime)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatDate(data.orderPlacedAt)}</span></div>
                          <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
                          
                          <div className="flex justify-between items-center text-sm">
@@ -1085,8 +1071,6 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
     const backdropProps = useModalClose(!!position, onClose);
     if (!position) return null;
 
-    const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST' : '-';
-
     const safeAvgPrice = typeof position.avgPrice === 'number' ? position.avgPrice : 0;
 
     return (
@@ -1132,7 +1116,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
                                     <td className="py-4 text-right font-mono">{formatMoney(position.cost)}</td>
                                     <td className="py-4 text-right font-mono">{formatMoney(position.fees)}</td>
                                     <td className="py-4 text-right font-mono text-slate-500 text-xs">
-                                        {formatDate(position.created || Date.now())}
+                                        {formatDate(position.created || Date.now(), true)}
                                     </td>
                                 </tr>
                             </tbody>
@@ -1185,9 +1169,10 @@ const LatencyDisplay = ({ timestamp }) => {
 };
 
 const MarketExpandedDetails = ({ market }) => {
-    const targetFairOdds = probabilityToAmericanOdds(market.vigFreeProb / 100);
-    const opposingVigFreeProb = 1 - (market.vigFreeProb / 100);
-    const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
+    // Show Cents instead of American Odds for consistency
+    const targetFairValue = Math.floor(market.vigFreeProb);
+    const opposingVigFreeProb = 100 - market.vigFreeProb;
+    const opposingFairValue = Math.floor(opposingVigFreeProb);
 
     return (
         <div className="p-4 border-b border-slate-200 bg-slate-50 animate-in slide-in-from-top-2">
@@ -1221,12 +1206,12 @@ const MarketExpandedDetails = ({ market }) => {
                             <span className="font-mono font-bold text-emerald-600">{(market.vigFreeProb).toFixed(2)}%</span>
                         </div>
                          <div className="flex justify-between mb-1">
-                            <span className="text-slate-500">Fair Odds:</span>
-                            <span className="font-mono font-bold text-slate-700">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</span>
+                            <span className="text-slate-500">Fair Value:</span>
+                            <span className="font-mono font-bold text-slate-700">{targetFairValue}¢</span>
                         </div>
                         <div className="border-t border-slate-100 my-1 pt-1 flex justify-between">
-                             <span className="text-slate-500">Opponent Fair Odds:</span>
-                             <span className="font-mono text-slate-600">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</span>
+                             <span className="text-slate-500">Opponent Fair Value:</span>
+                             <span className="font-mono text-slate-600">{opposingFairValue}¢</span>
                         </div>
                     </div>
                 </div>
@@ -1293,7 +1278,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                             <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                            <Clock size={10} /> {formatGameTime(market.commenceTime)}
+                            <Clock size={10} /> {formatDate(market.commenceTime, true)}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                             {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
@@ -1412,8 +1397,8 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {formatMoney(item.price * (item.quantity - item.filled))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        <div>{formatOrderDate(item.created)}</div>
-                        <div className="text-[10px] text-slate-400">{item.expiration ? formatOrderDate(item.expiration) : 'GTC'}</div>
+                        <div>{formatDate(item.created)}</div>
+                        <div className="text-[10px] text-slate-400">{item.expiration ? formatDate(item.expiration) : 'GTC'}</div>
                     </td>
                 </>
             )}
@@ -1427,7 +1412,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {item.payout ? formatMoney(item.payout) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        {formatOrderDate(item.created)}
+                        {formatDate(item.created)}
                     </td>
                 </>
             )}
