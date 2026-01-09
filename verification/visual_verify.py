@@ -1,48 +1,60 @@
-
 from playwright.sync_api import sync_playwright
 
-def verify_sport_filter_visuals():
+def verify_copy_logs_ui():
     with sync_playwright() as p:
-        # Launch browser with ignore_https_errors since we use self-signed certs
-        browser = p.chromium.launch(headless=True, args=["--ignore-certificate-errors"])
+        browser = p.chromium.launch(headless=True)
+        # Create a new context with ignored HTTPS errors
         context = browser.new_context(ignore_https_errors=True)
         page = context.new_page()
 
-        # Mock window.forge to prevent errors
-        page.add_init_script("""
-            window.forge = {
-                pki: { privateKeyFromPem: () => ({ sign: () => 'sig' }) },
-                md: { sha256: { create: () => ({ update: () => {} }) } },
-                mgf: { mgf1: { create: () => {} } },
-                pss: { create: () => {} },
-                util: { encode64: () => 'encoded' }
-            };
-        """)
-
-        # Set viewport to mobile size to verify responsive width
-        page.set_viewport_size({"width": 375, "height": 667})
-
         try:
-            print("Navigating to app...")
+            print("Navigating to dashboard...")
             page.goto("https://localhost:3000")
-            page.wait_for_load_state("networkidle")
 
-            print("Opening Sport Filter...")
-            filter_btn = page.get_by_label("Filter by Sport")
-            filter_btn.click()
+            # Wait for the dashboard to load (look for the Header)
+            page.wait_for_selector("text=Kalshi ArbBot")
 
-            # Wait for dropdown animation
-            page.wait_for_timeout(500)
+            # Locate Event Log header
+            print("Locating Event Log...")
+            event_log = page.get_by_text("Event Log", exact=False)
+            event_log.scroll_into_view_if_needed()
 
-            # Take screenshot
-            screenshot_path = "verification/sport_filter_mobile.png"
-            page.screenshot(path=screenshot_path)
-            print(f"Screenshot saved to {screenshot_path}")
+            # Locate the Copy Button
+            print("Locating Copy Button...")
+            copy_button = page.get_by_role("button", name="Copy logs to clipboard")
+
+            if copy_button.is_visible():
+                print("SUCCESS: Copy button is visible.")
+
+                # Take a screenshot of the Event Log area
+                # We can try to screenshot just the Event Log container if possible,
+                # or the whole page.
+                # Let's find the container. It's the parent div of the header.
+                container = copy_button.locator("xpath=../..")
+                container.screenshot(path="verification/copy_logs_ui.png")
+                print("Screenshot saved to verification/copy_logs_ui.png")
+
+                # Test interaction (click)
+                print("Clicking Copy Button...")
+                copy_button.click()
+
+                # Check for visual feedback (Check icon should appear)
+                # We wait a bit for React to update
+                page.wait_for_timeout(200)
+
+                # After click, the icon inside button should change.
+                # We can take another screenshot or just rely on the script not failing.
+                container.screenshot(path="verification/copy_logs_clicked.png")
+                print("Clicked screenshot saved.")
+
+            else:
+                print("FAILURE: Copy button not visible.")
 
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"An error occurred: {e}")
+            page.screenshot(path="verification/error_screenshot.png")
         finally:
             browser.close()
 
 if __name__ == "__main__":
-    verify_sport_filter_visuals()
+    verify_copy_logs_ui()
