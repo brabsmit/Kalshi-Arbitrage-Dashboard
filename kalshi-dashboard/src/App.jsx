@@ -2332,7 +2332,12 @@ const KalshiDashboard = () => {
              return true;
           });
           
-          setPositions(mappedItems);
+          setPositions(prev => {
+              // ⚡ Bolt Optimization: Avoid unnecessary re-renders if positions haven't changed.
+              // This is critical because setPositions triggers the entire dashboard tree update.
+              if (JSON.stringify(prev) === JSON.stringify(mappedItems)) return prev;
+              return mappedItems;
+          });
       } catch (e) { console.error("Portfolio Error", e); }
   }, [walletKeys]);
 
