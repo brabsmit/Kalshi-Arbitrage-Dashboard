@@ -1970,15 +1970,18 @@ const KalshiDashboard = () => {
                       if (!outcomes || outcomes.length < 2) continue;
 
                       let totalImplied = 0;
-                      const probs = outcomes.map(o => {
+                      let targetP = 0;
+
+                      // ⚡ Bolt Optimization: Single-pass loop to avoid allocating intermediate arrays
+                      // Replaces: outcomes.map(...).find(...) which created N objects per bookmaker per game
+                      for (const o of outcomes) {
                           const p = americanToProbability(o.price);
                           totalImplied += p;
-                          return { name: o.name, p };
-                      });
+                          if (o.name === targetName) targetP = p;
+                      }
 
-                      const tProb = probs.find(o => o.name === targetName);
-                      if (tProb) {
-                          vigFreeProbs.push({ prob: tProb.p / totalImplied, source: bm.title });
+                      if (targetP > 0) {
+                          vigFreeProbs.push({ prob: targetP / totalImplied, source: bm.title });
                       }
                   }
 
