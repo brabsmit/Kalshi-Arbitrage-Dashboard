@@ -27,3 +27,18 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2026-01-11 - The Timer (Time-Decay Margin)
+
+**Hypothesis:** As an event approaches its start time, "unknown unknowns" (injuries, lineup changes, sharp money) increase the risk of adverse selection. Our static margin doesn't account for this heightened volatility near kickoff.
+
+**Change:**
+Old: `margin = base_margin + vol_padding`
+New:
+- If < 24h to start: `margin += 1%`
+- If < 1h to start: `margin += 5%`
+
+**Expected Result:**
+- Reduced exposure to pre-game volatility spikes.
+- Lower probability of being "picked off" by informed traders reacting to late breaking news before our odds feed updates.
+- Slightly lower fill rate on game day, but higher quality fills.
