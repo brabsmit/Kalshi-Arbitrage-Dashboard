@@ -8,8 +8,7 @@ import {
     probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
-    formatOrderDate,
-    formatGameTime,
+    formatDateTime,
     calculateStrategy,
     calculateKalshiFees,
     signRequest
@@ -659,7 +658,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                 {connected ? <Check size={16} /> : <Wallet size={16} />} <span className="font-medium text-sm">{connected ? "Wallet Active" : "Connect Wallet"}</span>
             </button>
             <div className="bg-slate-100 px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-2 min-w-[100px] justify-end">
-                <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
+                <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? formatMoney(balance).replace('$', '') : '-'}</span>
             </div>
             <button
                 onClick={() => setIsRunning(!isRunning)}
@@ -876,8 +875,8 @@ const AnalysisModal = ({ data, onClose }) => {
                     </div>
 
                     <div className="space-y-3 border-t border-slate-100 pt-4">
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatDateTime(data.oddsTime)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatDateTime(data.orderPlacedAt)}</span></div>
                          <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
                          
                          <div className="flex justify-between items-center text-sm">
@@ -1085,8 +1084,6 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
     const backdropProps = useModalClose(!!position, onClose);
     if (!position) return null;
 
-    const formatDate = (ts) => ts ? new Date(ts).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true }) + ' EST' : '-';
-
     const safeAvgPrice = typeof position.avgPrice === 'number' ? position.avgPrice : 0;
 
     return (
@@ -1132,7 +1129,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
                                     <td className="py-4 text-right font-mono">{formatMoney(position.cost)}</td>
                                     <td className="py-4 text-right font-mono">{formatMoney(position.fees)}</td>
                                     <td className="py-4 text-right font-mono text-slate-500 text-xs">
-                                        {formatDate(position.created || Date.now())}
+                                        {formatDateTime(position.created || Date.now())}
                                     </td>
                                 </tr>
                             </tbody>
@@ -1293,7 +1290,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                             <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                            <Clock size={10} /> {formatGameTime(market.commenceTime)}
+                            <Clock size={10} /> {formatDateTime(market.commenceTime)}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                             {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
@@ -1412,8 +1409,8 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {formatMoney(item.price * (item.quantity - item.filled))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        <div>{formatOrderDate(item.created)}</div>
-                        <div className="text-[10px] text-slate-400">{item.expiration ? formatOrderDate(item.expiration) : 'GTC'}</div>
+                        <div>{formatDateTime(item.created)}</div>
+                        <div className="text-[10px] text-slate-400">{item.expiration ? formatDateTime(item.expiration) : 'GTC'}</div>
                     </td>
                 </>
             )}
@@ -1427,7 +1424,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {item.payout ? formatMoney(item.payout) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        {formatOrderDate(item.created)}
+                        {formatDateTime(item.created)}
                     </td>
                 </>
             )}

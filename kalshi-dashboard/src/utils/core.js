@@ -12,22 +12,9 @@ export const formatDuration = (ms) => {
 
 export const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
-export const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', {
+export const formatDateTime = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', {
     month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
 });
-
-export const formatGameTime = (isoString) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
-    return date.toLocaleString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-    });
-};
 
 // ==========================================
 // MATH & STRATEGY
