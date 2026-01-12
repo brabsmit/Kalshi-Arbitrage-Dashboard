@@ -2332,7 +2332,18 @@ const KalshiDashboard = () => {
              return true;
           });
           
-          setPositions(mappedItems);
+          // ⚡ Bolt Optimization: Prevent unnecessary re-renders of the entire dashboard
+          // by checking if the portfolio data has actually changed.
+          setPositions(prev => {
+              if (prev.length !== mappedItems.length) return mappedItems;
+
+              // fast path: check if every item is identical (shallow or deep logic needed?)
+              // Since mappedItems are newly created objects, ref equality fails.
+              // JSON.stringify is simple but can be slow.
+              // However, for < 50 items it is usually < 0.1ms, while React Render is > 5ms.
+              if (JSON.stringify(prev) === JSON.stringify(mappedItems)) return prev;
+              return mappedItems;
+          });
       } catch (e) { console.error("Portfolio Error", e); }
   }, [walletKeys]);
 
