@@ -3,10 +3,21 @@ import react from '@vitejs/plugin-react'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => ({
   plugins: [
     react(),
-    basicSsl()
+    basicSsl(),
+    {
+      name: 'csp-transform',
+      transformIndexHtml(html) {
+        if (command === 'serve') return html;
+        // Sentinel: Enforce strict CSP in production by removing 'unsafe-inline' from script-src
+        return html.replace(
+          /script-src 'self' 'unsafe-inline'/g,
+          "script-src 'self'"
+        );
+      }
+    }
   ],
   server: {
     // 1. HOST: true exposes the app to your local network (and internet via port forwarding)
@@ -68,4 +79,4 @@ export default defineConfig({
       }
     },
   },
-})
+}))
