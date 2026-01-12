@@ -27,3 +27,17 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-23 - The Timer (Time Decay Margin)
+
+**Hypothesis:** As an event approaches execution, market volatility increases and the "time-to-react" (ability to cancel stale orders) decreases. Pre-game odds become stale faster. We must demand a higher margin of safety for events starting soon.
+
+**Change:**
+Added a `timePenalty` to the `effectiveMargin` calculation:
+- If event starts in < 24 hours: +1% margin.
+- If event starts in < 1 hour (or has started): +5% margin.
+
+**Expected Result:**
+- Lower max bid prices for events starting soon.
+- Reduced exposure to "Gametime" volatility.
+- Prevents the bot from aggressively bidding on events that are about to lock or go live.
