@@ -45,8 +45,8 @@ def vite_server():
     # Start Vite server
     # We assume the user runs pytest from the 'kalshi-dashboard' directory.
     process = subprocess.Popen(
-        ["node", "./node_modules/vite/bin/vite.js", "--port", "3000", "--host", "0.0.0.0"],
-        cwd=".",
+        ["node", "./node_modules/vite/bin/vite.js", "--port", "3000", "--host", "127.0.0.1"],
+        cwd="kalshi-dashboard",
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
@@ -144,7 +144,7 @@ def authenticated_page(page):
         private_key = generate_mock_key()
 
     # Navigate first to set local storage
-    page.goto("https://localhost:3000")
+    page.goto("https://127.0.0.1:3000")
 
     # We must properly escape newlines for JS template string
     private_key_js = private_key.replace('\n', '\\n')

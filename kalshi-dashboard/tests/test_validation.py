@@ -92,8 +92,8 @@ def test_live_data_validation(authenticated_page):
     if count > 0:
         first_row = rows.first
         # Check for presence of essential data columns
-        # Ticker/Event info
-        expect(first_row.locator("td").first).not_to_be_empty()
+        # The first column is a checkbox, so we check the second column for Event Name
+        expect(first_row.locator("td").nth(1)).not_to_be_empty()
 
         # Odds Column (should contain percentage or price)
         # We look for the "Smart Bid" or any numeric value in the odds section

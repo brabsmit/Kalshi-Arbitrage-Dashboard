@@ -75,7 +75,21 @@ export const calculateStrategy = (market, marginPercent) => {
     // This protects against adverse selection during rapid repricing events.
     const volatility = market.volatility || 0;
     // UPDATED: Reduce volatility impact to 25% to be more aggressive
-    const effectiveMargin = marginPercent + (volatility * 0.25);
+    let effectiveMargin = marginPercent + (volatility * 0.25);
+
+    // Alpha Strategy: The Timer
+    // Increase margin as the event approaches to account for stale data risk and high volatility.
+    if (market.commenceTime) {
+        const now = Date.now();
+        const start = new Date(market.commenceTime).getTime();
+        const hoursRemaining = (start - now) / (1000 * 60 * 60);
+
+        if (hoursRemaining < 1) {
+             effectiveMargin += 5; // Imminent/Live: +5% margin safety
+        } else if (hoursRemaining < 24) {
+             effectiveMargin += 1; // < 24h: +1% margin safety
+        }
+    }
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
