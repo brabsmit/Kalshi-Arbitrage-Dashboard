@@ -1962,7 +1962,7 @@ const KalshiDashboard = () => {
 
                   for (const bm of bookmakers) {
                       if (bm.last_update) {
-                          const ts = new Date(bm.last_update).getTime();
+                          const ts = Date.parse(bm.last_update);
                           if (ts > maxLastUpdate) maxLastUpdate = ts;
                       }
 
@@ -1970,15 +1970,17 @@ const KalshiDashboard = () => {
                       if (!outcomes || outcomes.length < 2) continue;
 
                       let totalImplied = 0;
-                      const probs = outcomes.map(o => {
+                      let targetP = 0;
+
+                      // ⚡ Bolt Optimization: Single-pass loop to avoid .map/.find array allocations
+                      for (const o of outcomes) {
                           const p = americanToProbability(o.price);
                           totalImplied += p;
-                          return { name: o.name, p };
-                      });
+                          if (o.name === targetName) targetP = p;
+                      }
 
-                      const tProb = probs.find(o => o.name === targetName);
-                      if (tProb) {
-                          vigFreeProbs.push({ prob: tProb.p / totalImplied, source: bm.title });
+                      if (targetP > 0) {
+                          vigFreeProbs.push({ prob: targetP / totalImplied, source: bm.title });
                       }
                   }
 
