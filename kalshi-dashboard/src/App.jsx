@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, LogOut } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
@@ -684,7 +684,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
     </header>
 );
 
-const ConnectModal = ({ isOpen, onClose, onConnect }) => {
+const ConnectModal = ({ isOpen, onClose, onConnect, connected, onDisconnect, currentKeyId }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const [keyId, setKeyId] = useState('');
     const [privateKey, setPrivateKey] = useState('');
@@ -693,6 +693,38 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
     const [validationError, setValidationError] = useState('');
 
     if (!isOpen) return null;
+
+    if (connected) {
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" {...backdropProps}>
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 m-4 animate-in fade-in zoom-in duration-200">
+                     <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+                        <h3 className="font-bold text-lg text-slate-800">Wallet Connected</h3>
+                        <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400" /></button>
+                    </div>
+                    <div className="space-y-6 text-center py-4">
+                        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                            <Check size={32} />
+                        </div>
+                        <div>
+                            <p className="text-slate-500 font-medium">Connected with Key ID</p>
+                            <p className="font-mono text-sm font-bold text-slate-800 mt-1 truncate px-8" title={currentKeyId}>{currentKeyId || 'Unknown'}</p>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100">
+                            <button
+                                onClick={onDisconnect}
+                                className="w-full bg-white border border-rose-200 text-rose-600 py-3 rounded-lg font-bold hover:bg-rose-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-rose-500 outline-none flex items-center justify-center gap-2"
+                            >
+                                <LogOut size={18} /> Disconnect Wallet
+                            </button>
+                            <p className="text-[10px] text-slate-400 mt-2">This will clear your keys from this session.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     const handleFile = (e) => {
         const file = e.target.files[0];
@@ -1732,6 +1764,13 @@ const KalshiDashboard = () => {
           }
           return next;
       });
+  };
+
+  const handleDisconnect = () => {
+      setWalletKeys(null);
+      sessionStorage.removeItem('kalshi_keys');
+      setIsWalletOpen(false);
+      addLog("Wallet disconnected", "UPDATE");
   };
 
   const [config, setConfig] = useState(() => {
@@ -2859,7 +2898,14 @@ const KalshiDashboard = () => {
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
-      <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
+      <ConnectModal
+          isOpen={isWalletOpen}
+          onClose={() => setIsWalletOpen(false)}
+          onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}}
+          connected={!!walletKeys}
+          onDisconnect={handleDisconnect}
+          currentKeyId={walletKeys?.keyId}
+      />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
       <DataExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} />
