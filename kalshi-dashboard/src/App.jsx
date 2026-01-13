@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Copy } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
@@ -1634,6 +1634,8 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
 
 const EventLog = ({ logs }) => {
     const scrollRef = useRef(null);
+    const [copied, setCopied] = useState(false);
+
     useEffect(() => {
         if (scrollRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
@@ -1644,12 +1646,41 @@ const EventLog = ({ logs }) => {
         }
     }, [logs]);
 
+    const handleCopy = async () => {
+        if (logs.length === 0) return;
+        const text = logs.map(l =>
+            `[${new Date(l.timestamp).toLocaleTimeString()}] [${l.type}] ${l.message}`
+        ).join('\n');
+
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error('Failed to copy logs', err);
+        }
+    };
+
     return (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[300px]">
-             <div className="p-4 border-b border-slate-100 bg-slate-50/50">
+             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText size={18} className="text-slate-400"/> Event Log</h3>
+                <button
+                    onClick={handleCopy}
+                    disabled={logs.length === 0}
+                    aria-label={copied ? "Logs Copied" : "Copy Logs"}
+                    className="text-xs font-bold text-slate-500 hover:text-blue-600 flex items-center gap-1 transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1"
+                >
+                    {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    {copied ? <span className="text-emerald-600">Copied</span> : "Copy"}
+                </button>
             </div>
-            <div ref={scrollRef} className="overflow-y-auto p-4 space-y-2 flex-1 font-mono text-xs">
+            <div
+                ref={scrollRef}
+                role="log"
+                aria-live="polite"
+                className="overflow-y-auto p-4 space-y-2 flex-1 font-mono text-xs"
+            >
                 {logs.length === 0 && <div className="text-slate-400 text-center italic mt-10">No events yet</div>}
                 {logs.map(log => (
                     <div key={log.id} className="flex gap-2 border-b border-slate-50 pb-1 last:border-0">

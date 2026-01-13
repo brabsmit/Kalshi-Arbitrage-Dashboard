@@ -1,8 +1,3 @@
-## 2026-01-02 - Infinite Spinner Empty State
-**Learning:**
-Users were confused by the "Scanning markets..." spinner when filtering for sports that had no active games (e.g., NFL in July). The interface implied an ongoing background process that would never complete, rather than a definitive "no results" state.
-
-**Action:**
-Implemented a `hasScanned` state to differentiate between the initial data fetch and subsequent empty states.
-- **Before:** Infinite "Scanning..." spinner if `markets.length === 0`.
-- **After:** "Scanning..." only on first load. If 0 markets are found after fetch, display a "No active markets found" state with a timestamp or "Next scan in..." indicator. This gives users confidence that the system is working but there is simply no data.
+## 2024-05-23 - Event Log Accessibility and Usability
+**Learning:** The `role="log"` with `aria-live="polite"` is the standard pattern for real-time event logs, but it must be applied to the container of the log items. Also, adding a "Copy" feature to logs significantly improves the debugging experience for power users.
+**Action:** Always include "Copy" functionality for any data-heavy logs or JSON outputs, and ensure `role="log"` is present for screen reader announcements.
