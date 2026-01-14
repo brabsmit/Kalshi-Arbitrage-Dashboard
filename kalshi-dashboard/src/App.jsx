@@ -8,8 +8,9 @@ import {
     probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
-    formatOrderDate,
-    formatGameTime,
+    formatDateTime,
+    escapeHtml,
+    escapeCSV,
     calculateStrategy,
     calculateKalshiFees,
     signRequest
@@ -876,8 +877,8 @@ const AnalysisModal = ({ data, onClose }) => {
                     </div>
 
                     <div className="space-y-3 border-t border-slate-100 pt-4">
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatDateTime(data.oddsTime)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatDateTime(data.orderPlacedAt)}</span></div>
                          <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
                          
                          <div className="flex justify-between items-center text-sm">
@@ -891,30 +892,6 @@ const AnalysisModal = ({ data, onClose }) => {
     );
 };
 
-const escapeHtml = (str) => {
-    if (str === null || str === undefined) return '';
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-};
-
-const escapeCSV = (str) => {
-    if (str === null || str === undefined) return '';
-    const s = String(str);
-    // Sentinel: Prevent CSV Injection (Formula Injection) by quoting fields starting with = + - @
-    let safe = s;
-    if (/^[=+\-@]/.test(s)) {
-        safe = "'" + s;
-    }
-    // Sentinel: Standard CSV Escaping (wrap in quotes if contains comma, quote, or newline)
-    if (/[",\n\r]/.test(safe)) {
-        return '"' + safe.replace(/"/g, '""') + '"';
-    }
-    return safe;
-};
 
 const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
     const backdropProps = useModalClose(isOpen, onClose);
@@ -1293,7 +1270,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                             <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                            <Clock size={10} /> {formatGameTime(market.commenceTime)}
+                            <Clock size={10} /> {formatDateTime(market.commenceTime)}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
                             {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
@@ -1412,8 +1389,8 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {formatMoney(item.price * (item.quantity - item.filled))}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        <div>{formatOrderDate(item.created)}</div>
-                        <div className="text-[10px] text-slate-400">{item.expiration ? formatOrderDate(item.expiration) : 'GTC'}</div>
+                        <div>{formatDateTime(item.created)}</div>
+                        <div className="text-[10px] text-slate-400">{item.expiration ? formatDateTime(item.expiration) : 'GTC'}</div>
                     </td>
                 </>
             )}
@@ -1427,7 +1404,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                         {item.payout ? formatMoney(item.payout) : '-'}
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        {formatOrderDate(item.created)}
+                        {formatDateTime(item.created)}
                     </td>
                 </>
             )}

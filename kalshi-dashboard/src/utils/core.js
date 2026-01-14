@@ -12,13 +12,9 @@ export const formatDuration = (ms) => {
 
 export const formatMoney = (val) => val ? `$${(val / 100).toFixed(2)}` : '$0.00';
 
-export const formatOrderDate = (ts) => !ts ? '-' : new Date(ts).toLocaleString('en-US', {
-    month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true
-});
-
-export const formatGameTime = (isoString) => {
-    if (!isoString) return '';
-    const date = new Date(isoString);
+export const formatDateTime = (val) => {
+    if (!val) return '-';
+    const date = new Date(val);
     return date.toLocaleString('en-US', {
         weekday: 'short',
         month: 'short',
@@ -27,6 +23,31 @@ export const formatGameTime = (isoString) => {
         minute: '2-digit',
         hour12: true
     });
+};
+
+export const escapeHtml = (str) => {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+};
+
+export const escapeCSV = (str) => {
+    if (str === null || str === undefined) return '';
+    const s = String(str);
+    // Sentinel: Prevent CSV Injection (Formula Injection) by quoting fields starting with = + - @
+    let safe = s;
+    if (/^[=+\-@]/.test(s)) {
+        safe = "'" + s;
+    }
+    // Sentinel: Standard CSV Escaping (wrap in quotes if contains comma, quote, or newline)
+    if (/[",\n\r]/.test(safe)) {
+        return '"' + safe.replace(/"/g, '""') + '"';
+    }
+    return safe;
 };
 
 // ==========================================
