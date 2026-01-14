@@ -1970,22 +1970,36 @@ const KalshiDashboard = () => {
                       if (!outcomes || outcomes.length < 2) continue;
 
                       let totalImplied = 0;
-                      const probs = outcomes.map(o => {
+                      let targetProb = 0;
+
+                      // ⚡ Bolt Optimization: Single-pass loop to avoid array allocation
+                      for (const o of outcomes) {
                           const p = americanToProbability(o.price);
                           totalImplied += p;
-                          return { name: o.name, p };
-                      });
+                          if (o.name === targetName) {
+                              targetProb = p;
+                          }
+                      }
 
-                      const tProb = probs.find(o => o.name === targetName);
-                      if (tProb) {
-                          vigFreeProbs.push({ prob: tProb.p / totalImplied, source: bm.title });
+                      if (targetProb > 0) {
+                          vigFreeProbs.push({ prob: targetProb / totalImplied, source: bm.title });
                       }
                   }
 
                   if (vigFreeProbs.length === 0) return null;
 
-                  const minProb = Math.min(...vigFreeProbs.map(v => v.prob));
-                  const maxProb = Math.max(...vigFreeProbs.map(v => v.prob));
+                  // ⚡ Bolt Optimization: Single-pass stats calculation
+                  let sumProb = 0;
+                  let minProb = 1;
+                  let maxProb = 0;
+
+                  for (const v of vigFreeProbs) {
+                      const p = v.prob;
+                      sumProb += p;
+                      if (p < minProb) minProb = p;
+                      if (p > maxProb) maxProb = p;
+                  }
+
                   const spread = maxProb - minProb;
 
                   if (spread > 0.15) {
@@ -1993,7 +2007,7 @@ const KalshiDashboard = () => {
                       return null;
                   }
 
-                  const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
+                  const vigFreeProb = sumProb / vigFreeProbs.length;
 
                   let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
