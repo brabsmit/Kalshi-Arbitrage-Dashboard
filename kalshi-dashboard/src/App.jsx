@@ -14,6 +14,9 @@ import {
     calculateKalshiFees,
     signRequest
 } from './utils/core';
+import { createOrderManager } from './bot/orderManager';
+import { runAutoBid } from './bot/autoBid';
+import { runAutoClose } from './bot/autoClose';
 
 // ==========================================
 // 1. CONFIGURATION & CONSTANTS
@@ -2340,391 +2343,77 @@ const KalshiDashboard = () => {
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
   }, [walletKeys, fetchPortfolio]);
 
+  // Create order manager with bot logic extracted to separate modules
+  const orderManager = useMemo(() => {
+      if (!walletKeys) return null;
+
+      return createOrderManager({
+          walletKeys,
+          fetchPortfolio,
+          addLog,
+          setIsRunning,
+          setErrorMsg,
+          setIsWalletOpen,
+          setActiveAction,
+          config,
+          trackers: {
+              autoBidTracker,
+              closingTracker
+          }
+      });
+  }, [walletKeys, fetchPortfolio, addLog, config.tradeSize, config.isAutoBid, config.isAutoClose]);
+
+  // Wrapper functions to maintain compatibility with existing UI code
   const executeOrder = useCallback(async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
-      if (!walletKeys) return setIsWalletOpen(true);
-      
-      const ticker = isSell ? (marketOrTicker.realMarketId || marketOrTicker) : marketOrTicker.realMarketId;
-      const qty = qtyOverride || config.tradeSize;
-      
-      // Determine side for order
-      let side = 'yes';
-      // If the market object is passed (has isInverse), use it to determine side
-      if (marketOrTicker.isInverse) {
-          side = 'no';
-      }
-
-      if (source !== 'manual') {
-          setActiveAction({ type: isSell ? 'CLOSE' : 'BID', ticker, price });
-          setTimeout(() => setActiveAction(null), 3000);
-      }
-
-      try {
-          const ts = Date.now();
-          const effectivePrice = isSell ? (price || 1) : price;
-
-          const orderParams = {
-              action: isSell ? 'sell' : 'buy',
-              ticker,
-              count: qty,
-              type: 'limit',
-              side: side,
-          };
-
-          if (side === 'yes') {
-              orderParams.yes_price = effectivePrice;
-          } else {
-              orderParams.no_price = effectivePrice;
-          }
-
-          const body = JSON.stringify(orderParams);
-          const sig = await signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
-          
-          const res = await fetch('/api/kalshi/portfolio/orders', {
-              method: 'POST', headers: { 'Content-Type': 'application/json', 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() },
-              body
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.message || "Order Failed");
-
-          console.log(`Order Placed: ${data.order_id}`);
-
-          if (isSell) {
-             addLog(`Closing position on ${ticker} (Qty: ${qty})`, 'CLOSE');
-          } else {
-             const mktId = marketOrTicker.realMarketId || marketOrTicker.id;
-             addLog(`Placed bid on ${mktId} @ ${price}¢ (Qty: ${qty}) [Side: ${side}]`, 'BID');
-          }
-
-          if (!isSell) {
-              autoBidTracker.current.add(ticker);
-              setTradeHistory(prev => ({ ...prev, [ticker]: { 
-                  ticker, orderId: data.order_id, event: marketOrTicker.event, oddsTime: marketOrTicker.lastChange, 
-                  orderPlacedAt: Date.now(), 
-                  sportsbookOdds: marketOrTicker.sportsbookOdds,
-                  opposingOdds: marketOrTicker.opposingOdds, 
-                  oddsDisplay: marketOrTicker.oddsDisplay, 
-                  vigFreeProb: marketOrTicker.vigFreeProb,
-                  fairValue: marketOrTicker.fairValue, bidPrice: price,
-                  bookmakerCount: marketOrTicker.bookmakerCount,
-                  oddsSpread: marketOrTicker.oddsSpread,
-                  source: source
-              }}));
-          }
-          fetchPortfolio();
-      } catch (e) { 
-          console.error(e); 
-
-          if (isSell) closingTracker.current.delete(ticker);
-          else autoBidTracker.current.delete(ticker);
-
-          if (e.message && e.message.toLowerCase().includes("insufficient funds")) {
-              setIsRunning(false);
-              setErrorMsg(`CRITICAL ERROR: ${e.message} - Bot Stopped.`);
-              addLog(`Critical Error: ${e.message}`, 'ERROR');
-              throw e;
-          }
-
-          if (!config.isAutoBid && !config.isAutoClose) alert(e.message);
-      }
-  }, [walletKeys, config.tradeSize, config.isAutoBid, config.isAutoClose, fetchPortfolio, addLog]);
+      if (!orderManager) return;
+      await orderManager.executeOrder(marketOrTicker, price, isSell, qtyOverride, source, setTradeHistory);
+  }, [orderManager]);
 
   const cancelOrder = useCallback(async (id, skipConfirm = false, skipRefresh = false) => {
-      if (!skipConfirm && !confirm("Cancel Order?")) return;
-      const ts = Date.now();
-      const sig = await signRequest(walletKeys.privateKey, "DELETE", `/trade-api/v2/portfolio/orders/${id}`, ts);
-      const res = await fetch(`/api/kalshi/portfolio/orders/${id}`, { method: 'DELETE', headers: { 'KALSHI-ACCESS-KEY': walletKeys.keyId, 'KALSHI-ACCESS-SIGNATURE': sig, 'KALSHI-ACCESS-TIMESTAMP': ts.toString() }});
+      if (!orderManager) return;
+      return await orderManager.cancelOrder(id, skipConfirm, skipRefresh);
+  }, [orderManager]);
 
-      if (res.ok) {
-          addLog(`Canceled order ${id}`, 'CANCEL');
-      } else if (res.status === 404) {
-          console.warn(`Order ${id} not found during cancellation (likely already filled/cancelled).`);
-          addLog(`Cancel skipped: Order ${id} already gone`, 'CANCEL');
-      } else {
-          try {
-             const err = await res.json();
-             console.error(`Cancel failed (${res.status}):`, err);
-             addLog(`Cancel failed: ${err.message || res.statusText}`, 'ERROR');
-          } catch (e) {
-             console.error(`Cancel failed (${res.status})`);
-          }
-      }
-
-      if (!skipRefresh) fetchPortfolio();
-      return res;
-  }, [walletKeys, fetchPortfolio, addLog]);
-
+  // Auto-Bid Bot (extracted to separate module)
   useEffect(() => {
-      if (!isRunning || !config.isAutoBid || !walletKeys) return;
+      if (!isRunning || !config.isAutoBid || !walletKeys || !orderManager) return;
 
-      const runAutoBid = async () => {
-          if (isAutoBidProcessing.current) return;
-          isAutoBidProcessing.current = true;
+      runAutoBid({
+          markets,
+          positions,
+          config,
+          deselectedMarketIds,
+          refs: {
+              isAutoBidProcessing,
+              autoBidTracker,
+              lastFetchTimeRef,
+              latestMarketsRef,
+              latestDeselectedRef,
+              fetchPortfolio
+          },
+          orderManager,
+          addLog
+      });
 
-          try {
-            // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
-            // SCOPE: Only consider markets currently displayed in the scanner to support sport switching without interference.
-            const currentMarketIds = new Set(markets.map(m => m.realMarketId));
+  }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions, config.minFairValue, deselectedMarketIds, orderManager]);
 
-            const executedHoldings = new Set(positions.filter(p => 
-                !p.isOrder && 
-                p.quantity > 0 && 
-                p.settlementStatus !== 'settled' &&
-                currentMarketIds.has(p.marketId)
-            ).map(p => p.marketId));
-
-            // Filter activeOrders to only those in the current market list
-            const activeOrders = positions.filter(p => 
-                p.isOrder && 
-                ['active', 'resting', 'bidding', 'pending'].includes(p.status.toLowerCase()) &&
-                currentMarketIds.has(p.marketId)
-            );
-
-            // We don't want to exceed max positions, but we also want to manage existing bids.
-            // So effectiveCount should track held positions + pending bids for *new* markets.
-            // We calculate effective count based on held positions AND active orders for current markets.
-            const marketsWithOrders = new Set(activeOrders.map(o => o.marketId));
-            const occupiedMarkets = new Set([...executedHoldings, ...marketsWithOrders]);
-            let effectiveCount = occupiedMarkets.size;
-
-            // --- LIMIT ENFORCEMENT ---
-            // If we have reached the max positions, ensure no pending buy orders remain for *new* positions.
-            // Note: executedHoldings tracks markets where we have a filled position.
-            if (executedHoldings.size >= config.maxPositions) {
-                const activeBuyOrders = activeOrders.filter(o => o.action === 'buy');
-
-                if (activeBuyOrders.length > 0) {
-                     console.log(`[AUTO-BID] Max positions reached (${executedHoldings.size}/${config.maxPositions}). Cancelling ${activeBuyOrders.length} active buy orders.`);
-                     for (const o of activeBuyOrders) {
-                         await cancelOrder(o.id, true, true);
-                         await new Promise(r => setTimeout(r, 200));
-                     }
-                     fetchPortfolio();
-                }
-                isAutoBidProcessing.current = false;
-                return;
-            }
-
-            // --- DUPLICATE PROTECTION ---
-            const orderMap = new Map();
-            const duplicates = [];
-
-            for (const o of activeOrders) {
-                if (orderMap.has(o.marketId)) {
-                    duplicates.push(o);
-                } else {
-                    orderMap.set(o.marketId, o);
-                }
-            }
-            
-            if (duplicates.length > 0) {
-                console.log("[AUTO-BID] Cleaning up duplicates...", duplicates);
-                for (const d of duplicates) {
-                    await cancelOrder(d.id, true, true);
-                    await new Promise(r => setTimeout(r, 100));
-                }
-                fetchPortfolio();
-                return; // Exit to let state settle
-            }
-            // ---------------------------
-
-            const activeOrderTickers = new Set(activeOrders.map(o => o.marketId));
-
-            for (const m of markets) {
-                if (!m.isMatchFound) continue;
-                if (m.isInverse) continue; // Only place YES bids for simplicity
-                if (deselectedMarketIds.has(m.id)) continue;
-                if (m.fairValue < config.minFairValue) continue;
-
-                // --- VISIBILITY SAFEGUARD ---
-                // Ensure market is still in the active 'markets' list and not deselected in the latest state.
-                // This prevents bidding on stale markets if the user switches sports or deselects during async processing.
-                const isStillDisplayed = latestMarketsRef.current.some(lm => lm.id === m.id);
-                const isNowDeselected = latestDeselectedRef.current.has(m.id);
-
-                if (!isStillDisplayed || isNowDeselected) {
-                    if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
-                    continue;
-                }
-                // ----------------------------
-
-                // Check for held position
-                if (executedHoldings.has(m.realMarketId)) {
-                    if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
-                    continue;
-                }
-
-                // --- STALE DATA PROTECTION ---
-                // We check if our data fetch is recent. We rely on the API to give us current snapshot.
-                // We also check if the bookmaker data is extremely old (> 60 mins) to catch stuck feeds.
-                const isFetchStale = (Date.now() - lastFetchTimeRef.current) > STALE_DATA_THRESHOLD;
-                const isDataAncient = (Date.now() - m.oddsLastUpdate) > (60 * 60 * 1000);
-
-                if (isFetchStale || isDataAncient) {
-                    // Check if we have an active order to cancel
-                    const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
-                    if (existingOrder) {
-                        const reason = isFetchStale ? `Fetch stale (${formatDuration(Date.now() - lastFetchTimeRef.current)})` : `Data ancient (${formatDuration(Date.now() - m.oddsLastUpdate)})`;
-                        console.log(`[AUTO-BID] Cancelling order ${m.realMarketId} due to stale data: ${reason}`);
-                        addLog(`Cancelling bid ${m.realMarketId}: ${isFetchStale ? 'Fetch Stale' : 'Data Ancient'}`, 'CANCEL');
-                        autoBidTracker.current.add(m.realMarketId);
-                        await cancelOrder(existingOrder.id, true);
-                        await new Promise(r => setTimeout(r, 200));
-                    }
-                    continue; // Skip bidding on stale data
-                }
-                // -----------------------------
-
-                const existingOrder = activeOrders.find(o => o.marketId === m.realMarketId);
-
-                if (existingOrder && autoBidTracker.current.has(m.realMarketId)) {
-                    autoBidTracker.current.delete(m.realMarketId);
-                }
-
-                // Prevent race condition if we are already acting on this market
-                if (autoBidTracker.current.has(m.realMarketId)) continue;
-
-                const { smartBid, maxWillingToPay } = calculateStrategy(m, config.marginPercent);
-
-                if (existingOrder) {
-                    // 1. Check if order is stale or bad
-                    if (smartBid === null || smartBid > maxWillingToPay) {
-                        // Strategy says don't bid (loss of edge), but we have an order. Cancel it.
-                        console.log(`[AUTO-BID] Cancelling stale/bad order ${m.realMarketId} (Bid: ${existingOrder.price}, Max: ${maxWillingToPay})`);
-                        autoBidTracker.current.add(m.realMarketId);
-                        await cancelOrder(existingOrder.id, true);
-                        await new Promise(r => setTimeout(r, 200)); // Delay
-                        continue;
-                    }
-
-                    if (existingOrder.price !== smartBid) {
-                        // Price improvement or adjustment needed
-                        console.log(`[AUTO-BID] Updating ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`);
-                        addLog(`Updating bid ${m.realMarketId}: ${existingOrder.price}¢ -> ${smartBid}¢`, 'UPDATE');
-                        autoBidTracker.current.add(m.realMarketId);
-
-                        // Cancel then Place
-                        try {
-                            await cancelOrder(existingOrder.id, true);
-                            await new Promise(r => setTimeout(r, 200)); // Delay
-                            await executeOrder(m, smartBid, false, null, 'auto');
-                            await new Promise(r => setTimeout(r, 200)); // Delay
-                        } catch (e) {
-                            console.error("Update failed", e);
-                            autoBidTracker.current.delete(m.realMarketId);
-                        }
-                    }
-                    // Else: Order is good, do nothing.
-                    continue;
-                }
-
-                // New Bid Logic
-                if (effectiveCount >= config.maxPositions) continue;
-
-                // Check if we already have an active order (should be covered by existingOrder check, but double check)
-                if (activeOrderTickers.has(m.realMarketId)) continue;
-
-                if (smartBid && smartBid <= maxWillingToPay) {
-                    console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
-                    effectiveCount++;
-                    autoBidTracker.current.add(m.realMarketId);
-                    await executeOrder(m, smartBid, false, null, 'auto');
-                    await new Promise(r => setTimeout(r, 200)); // Delay
-                }
-            }
-          } finally {
-              isAutoBidProcessing.current = false;
-          }
-      };
-      
-      runAutoBid();
-
-  }, [isRunning, config.isAutoBid, markets, positions, config.marginPercent, config.maxPositions, deselectedMarketIds, executeOrder, cancelOrder, fetchPortfolio]);
-
+  // Auto-Close Bot (extracted to separate module)
   useEffect(() => {
-      if (!isRunning || !config.isAutoClose || !walletKeys) return;
-      
-      const runAutoClose = async () => {
-          const heldPositions = positions.filter(p => !p.isOrder && p.status === 'HELD' && p.quantity > 0 && p.settlementStatus !== 'settled');
-          const activeSellOrders = positions.filter(p => p.isOrder && ['active', 'resting', 'pending'].includes(p.status.toLowerCase()) && p.action === 'sell');
-          
-          for (const pos of heldPositions) {
-              if (closingTracker.current.has(pos.marketId)) continue;
+      if (!isRunning || !config.isAutoClose || !walletKeys || !orderManager) return;
 
-              // Check 1: Must be opened by bot (in tradeHistory)
-              const history = tradeHistory[pos.marketId];
-              if (!history) continue;
+      runAutoClose({
+          markets,
+          positions,
+          config,
+          tradeHistory,
+          refs: {
+              closingTracker
+          },
+          orderManager,
+          addLog
+      });
 
-              // Find current market data
-              const m = markets.find(x => x.realMarketId === pos.marketId);
-              if (!m) continue; // Cannot determine Fair Value
-
-              // Determine Target Price (Fair Value)
-              // If we hold 'No' (isInverse), fairValue (from Odds API) is for the Target (which is No).
-              // So m.fairValue is correct for the 'No' contract too.
-              let fairValue = m.fairValue;
-              fairValue = Math.max(1, fairValue); // Safety floor
-
-              // Calculate Break-Even Price including Fees
-              const buyPrice = pos.avgPrice || 0;
-              let minSellPrice = Math.floor(buyPrice) + 1;
-
-              // Find minimum price where (Price * Qty) - (Cost) - Fees > 0
-              while (minSellPrice < 100) {
-                  const estimatedFees = calculateKalshiFees(minSellPrice, pos.quantity);
-                  const revenue = minSellPrice * pos.quantity;
-                  const cost = buyPrice * pos.quantity;
-                  if (revenue - cost - estimatedFees > 0) break;
-                  minSellPrice++;
-              }
-
-              // Set Target Price: Must be at least minSellPrice (to ensure profit)
-              // But if Fair Value is higher, take the extra profit.
-              let basePrice = Math.max(fairValue, minSellPrice);
-
-              // Apply user-defined Auto-Close margin
-              let targetPrice = Math.floor(basePrice * (1 + config.autoCloseMarginPercent / 100));
-
-              if (targetPrice > 99) targetPrice = 99;
-
-              // Check for existing active sell order
-              const existingOrder = activeSellOrders.find(o => o.marketId === pos.marketId);
-
-              if (existingOrder) {
-                  // If price mismatch, update it
-                  if (existingOrder.price !== targetPrice) {
-                       console.log(`[AUTO-CLOSE] Updating Sell Order ${pos.marketId}: ${existingOrder.price}¢ -> ${targetPrice}¢`);
-                       addLog(`Updating sell ${pos.marketId}: ${existingOrder.price}¢ -> ${targetPrice}¢`, 'UPDATE');
-                       closingTracker.current.add(pos.marketId);
-                       try {
-                           await cancelOrder(existingOrder.id, true);
-                           await new Promise(r => setTimeout(r, 200));
-                           await executeOrder(m, targetPrice, true, pos.quantity, 'auto');
-                           await new Promise(r => setTimeout(r, 200));
-                       } catch (e) {
-                           console.error("AutoClose Update Failed", e);
-                       } finally {
-                           closingTracker.current.delete(pos.marketId);
-                       }
-                  }
-                  // Else: Order is good (priced at Fair Value), do nothing.
-              } else {
-                  // No active order, place it
-                  console.log(`[AUTO-CLOSE] Offering ${pos.marketId} @ ${targetPrice}¢ (Fair Value)`);
-                  closingTracker.current.add(pos.marketId);
-                  try {
-                      await executeOrder(m, targetPrice, true, pos.quantity, 'auto');
-                      await new Promise(r => setTimeout(r, 200));
-                  } catch (e) {
-                      console.error("AutoClose Placement Failed", e);
-                  } finally {
-                      closingTracker.current.delete(pos.marketId);
-                  }
-              }
-          }
-      };
-
-      runAutoClose();
-  }, [isRunning, config.isAutoClose, markets, positions, executeOrder, tradeHistory, cancelOrder, addLog]);
+  }, [isRunning, config.isAutoClose, markets, positions, config.autoCloseMarginPercent, tradeHistory, orderManager]);
 
   // --- CANCEL ALL ON STOP ---
   const isAutoBidActive = isRunning && config.isAutoBid;

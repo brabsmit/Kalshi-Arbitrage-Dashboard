@@ -70,12 +70,17 @@ export const calculateStrategy = (market, marginPercent) => {
 
     const fairValue = market.fairValue;
 
-    // Alpha Strategy: Dynamic Volatility Padding
-    // If the market is volatile (high standard deviation in source odds), we increase the required margin.
-    // This protects against adverse selection during rapid repricing events.
+    // STRATEGY FIX: Volatility padding has been removed.
+    // Previous logic increased margin during high volatility, but this was backwards:
+    // - High volatility in sports betting indicates breaking news, injury reports, lineup changes
+    // - These create the BEST arbitrage opportunities (books update at different speeds)
+    // - Increasing margin during volatility meant AVOIDING the highest-edge trades
+    // - In sports betting, unlike financial markets, volatility = opportunity, not risk
+    //
+    // New approach: Use base margin only. Volatility is now tracked for informational purposes
+    // but does not affect position sizing or bid prices.
     const volatility = market.volatility || 0;
-    // UPDATED: Reduce volatility impact to 25% to be more aggressive
-    const effectiveMargin = marginPercent + (volatility * 0.25);
+    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
@@ -84,14 +89,21 @@ export const calculateStrategy = (market, marginPercent) => {
     let smartBid = currentBestBid + 1;
     let reason = "Beat Market";
 
-    // Alpha Strategy: Crossing the Spread
-    // If the Best Ask is bargain-basement cheap (below our willingness to pay),
-    // we take the liquidity immediately instead of fishing for a bid.
-    // We add a small buffer (e.g. 2 cents) to cover Taker fees.
-    // UPDATED: Set buffer to 0 to chase hard for small arbitrage (speed over fees)
-    const TAKER_FEE_BUFFER = 0;
+    // Alpha Strategy: Crossing the Spread (with Fee Protection)
+    // If the Best Ask is significantly below our fair value, we take liquidity immediately
+    // instead of waiting as a maker. However, we must account for Kalshi taker fees.
+    //
+    // Kalshi Taker Fee: ~7% of payout = ceil(0.07 * qty * price * (1-price))
+    // Example: Buying 10 contracts at 50¢ = ~$1.75 in fees = ~1.75¢ per contract
+    //
+    // STRATEGY FIX: Increased buffer from 0¢ to 3¢ to ensure profitability after fees.
+    // - At 0¢ buffer: Many "profitable" trades became break-even or losers after fees
+    // - At 3¢ buffer: Ensures minimum ~1-2¢ profit per contract after typical taker fees
+    // - This aligns with stated strategy of "patient maker-side arbitrage"
+    // - Only cross the spread when edge is CLEARLY profitable, not marginally so
+    const TAKER_FEE_BUFFER = 3;
 
-    // Check if we can buy immediately at a discount
+    // Check if we can buy immediately at a significant discount (after accounting for fees)
     if (market.bestAsk > 0 && market.bestAsk <= (maxWillingToPay - TAKER_FEE_BUFFER)) {
         smartBid = market.bestAsk;
         reason = "Take Ask";
