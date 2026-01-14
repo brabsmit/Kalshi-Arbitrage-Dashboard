@@ -551,6 +551,89 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                         </div>
                     </div>
 
+                    {/* Risk Management Section */}
+                    <div className="border-t border-slate-200 pt-6">
+                        <h4 className="text-xs font-bold text-slate-600 uppercase mb-4 flex items-center gap-2">
+                            <AlertCircle size={14} />
+                            Risk Management
+                        </h4>
+
+                        <div className="space-y-4">
+                            {/* Sport Diversification */}
+                            <div className="flex items-center justify-between">
+                                <label htmlFor="enable-sport-div" className="text-sm text-slate-700 flex-1">
+                                    Sport Diversification
+                                    <div className="text-xs text-slate-500 mt-0.5">Limit positions per sport to reduce correlation risk</div>
+                                </label>
+                                <input
+                                    id="enable-sport-div"
+                                    type="checkbox"
+                                    checked={config.enableSportDiversification}
+                                    onChange={e => setConfig({...config, enableSportDiversification: e.target.checked})}
+                                    className="w-4 h-4 accent-blue-600"
+                                />
+                            </div>
+
+                            {config.enableSportDiversification && (
+                                <div className="ml-4">
+                                    <label htmlFor="max-per-sport" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Max Per Sport</label>
+                                    <input
+                                        id="max-per-sport"
+                                        type="number"
+                                        value={config.maxPositionsPerSport}
+                                        onChange={e => setConfig({...config, maxPositionsPerSport: parseInt(e.target.value) || 1})}
+                                        min={1}
+                                        max={config.maxPositions}
+                                        className="w-24 p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Liquidity Checks */}
+                            <div className="flex items-center justify-between">
+                                <label htmlFor="enable-liquidity" className="text-sm text-slate-700 flex-1">
+                                    Liquidity Filtering
+                                    <div className="text-xs text-slate-500 mt-0.5">Only bid on markets with sufficient volume and tight spreads</div>
+                                </label>
+                                <input
+                                    id="enable-liquidity"
+                                    type="checkbox"
+                                    checked={config.enableLiquidityChecks}
+                                    onChange={e => setConfig({...config, enableLiquidityChecks: e.target.checked})}
+                                    className="w-4 h-4 accent-blue-600"
+                                />
+                            </div>
+
+                            {config.enableLiquidityChecks && (
+                                <div className="ml-4 grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label htmlFor="min-liquidity" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Min Volume</label>
+                                        <input
+                                            id="min-liquidity"
+                                            type="number"
+                                            value={config.minLiquidity}
+                                            onChange={e => setConfig({...config, minLiquidity: parseInt(e.target.value) || 0})}
+                                            min={0}
+                                            className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="max-spread" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Max Spread (¢)</label>
+                                        <input
+                                            id="max-spread"
+                                            type="number"
+                                            value={config.maxBidAskSpread}
+                                            onChange={e => setConfig({...config, maxBidAskSpread: parseInt(e.target.value) || 1})}
+                                            min={1}
+                                            max={20}
+                                            className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
                     <div>
                         <label htmlFor="odds-api-key" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">The-Odds-API Key</label>
                         <div className="relative">
@@ -645,7 +728,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                         <Hash size={10} /> {apiUsage.used}/{apiUsage.used + apiUsage.remaining}
                     </span>
                 )}
-                {isTurboMode && <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-200 animate-pulse flex items-center gap-1"><Zap size={10} fill="currentColor"/> TURBO</span>}
+                {isTurboMode && <span title="⚠️ Turbo Mode uses 5x more API requests (3s vs 15s polling)" className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-200 animate-pulse flex items-center gap-1 cursor-help"><Zap size={10} fill="currentColor"/> TURBO</span>}
             </div>
         </div>
         <div className="flex items-center gap-3">
@@ -1745,6 +1828,11 @@ const KalshiDashboard = () => {
           minFairValue: 20,
           tradeSize: 10,
           maxPositions: 5,
+          maxPositionsPerSport: 3, // Risk Management: Limit per sport for diversification
+          enableSportDiversification: true, // Risk Management: Enable sport-level position limits
+          minLiquidity: 50, // Risk Management: Minimum total volume (contracts traded)
+          maxBidAskSpread: 5, // Risk Management: Maximum spread in cents (5¢ = 5%)
+          enableLiquidityChecks: true, // Risk Management: Enable liquidity filtering
           isAutoBid: false,
           isAutoClose: true,
           holdStrategy: 'sell_limit',
@@ -2575,7 +2663,7 @@ const KalshiDashboard = () => {
                 <div className="flex gap-2">
                     <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
                     <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
-                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title="Turbo Mode (3s updates)" onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
+                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title={config.isTurboMode ? "Turbo Mode ON (3s updates, 5x API cost) - Click to disable" : "Turbo Mode OFF (15s updates) - Click to enable"} onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
                 </div>
             </div>
             <div className="overflow-auto flex-1">
