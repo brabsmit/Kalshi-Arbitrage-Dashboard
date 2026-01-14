@@ -110,11 +110,53 @@ export async function runAutoBid(params) {
 
         const activeOrderTickers = new Set(activeOrders.map(o => o.marketId));
 
+        // --- SPORT DIVERSIFICATION CHECK ---
+        // Count positions per sport to prevent correlation risk
+        let positionsPerSport = {};
+        if (config.enableSportDiversification) {
+            for (const marketId of executedHoldings) {
+                const market = markets.find(m => m.realMarketId === marketId);
+                if (market && market.sport) {
+                    positionsPerSport[market.sport] = (positionsPerSport[market.sport] || 0) + 1;
+                }
+            }
+        }
+        // ----------------------------------
+
         for (const m of markets) {
             if (!m.isMatchFound) continue;
             if (m.isInverse) continue; // Only place YES bids for simplicity
             if (deselectedMarketIds.has(m.id)) continue;
             if (m.fairValue < config.minFairValue) continue;
+
+            // --- LIQUIDITY CHECKS ---
+            // Check if market has sufficient liquidity to ensure we can exit when needed
+            if (config.enableLiquidityChecks) {
+                // Check 1: Total volume (contracts traded)
+                if (m.volume && m.volume < config.minLiquidity) {
+                    console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Low volume (${m.volume} < ${config.minLiquidity})`);
+                    continue;
+                }
+
+                // Check 2: Bid-Ask spread (tight spread = good liquidity)
+                const spread = (m.bestAsk && m.bestBid) ? (m.bestAsk - m.bestBid) : 999;
+                if (spread > config.maxBidAskSpread) {
+                    console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Wide spread (${spread}¢ > ${config.maxBidAskSpread}¢)`);
+                    continue;
+                }
+            }
+            // -------------------------
+
+            // --- SPORT DIVERSIFICATION CHECK ---
+            // Prevent too many positions in a single sport (correlation risk)
+            if (config.enableSportDiversification && m.sport) {
+                const sportCount = positionsPerSport[m.sport] || 0;
+                if (sportCount >= config.maxPositionsPerSport && !executedHoldings.has(m.realMarketId)) {
+                    console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Sport limit reached (${sportCount}/${config.maxPositionsPerSport} in ${m.sport})`);
+                    continue;
+                }
+            }
+            // --------------------------------------
 
             // --- VISIBILITY SAFEGUARD ---
             // Ensure market is still in the active 'markets' list and not deselected in the latest state.
@@ -207,6 +249,12 @@ export async function runAutoBid(params) {
             if (smartBid && smartBid <= maxWillingToPay) {
                 console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
                 effectiveCount++;
+
+                // Update sport counter for diversification tracking
+                if (config.enableSportDiversification && m.sport) {
+                    positionsPerSport[m.sport] = (positionsPerSport[m.sport] || 0) + 1;
+                }
+
                 autoBidTracker.current.add(m.realMarketId);
                 await orderManager.executeOrder(m, smartBid, false, null, 'auto');
                 await new Promise(r => setTimeout(r, 200)); // Delay

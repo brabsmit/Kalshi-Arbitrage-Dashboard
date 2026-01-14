@@ -116,4 +116,44 @@
         *   If `Order Price` == `Target Price`: No action (order is well-positioned).
 
 ### Note on Configuration
-*   While a `config.autoCloseMarginPercent` exists in the Settings UI, the current implementation strictly follows the **Fair Value** (plus/minus 0 margin) for exits to maximize liquidity provision at the true probability.
+
+**Auto-Close Margin Implementation:**
+
+The `config.autoCloseMarginPercent` setting IS actively used for calculating exit prices. Here's the actual logic:
+
+1. **Base Price Calculation:**
+   ```
+   basePrice = max(fairValue, breakEvenPrice)
+   ```
+   This ensures we never sell at a loss - we always exit at either Fair Value OR break-even, whichever is higher.
+
+2. **Target Price with Margin:**
+   ```
+   targetPrice = basePrice * (1 + autoCloseMarginPercent / 100)
+   ```
+   The margin is applied ON TOP of the base price, allowing you to capture additional profit.
+
+**Why This Works:**
+
+* **Entry:** Buy at `fairValue - marginPercent` (e.g., 50¢ - 3% = 48.5¢)
+* **Exit:** Sell at `max(fairValue, breakEven) * (1 + autoCloseMarginPercent)` (e.g., 50¢ * 1.01 = 50.5¢)
+* **Total Edge:** Captures both entry discount AND exit premium
+
+**Example:**
+```
+Entry: Buy at 48¢ when Fair Value = 50¢
+Fair Value rises to 52¢
+Break-even (with fees): 49¢
+autoCloseMarginPercent: 1%
+
+Exit calculation:
+  basePrice = max(52¢, 49¢) = 52¢
+  targetPrice = 52¢ * 1.01 = 52.52¢ → 52¢ (floor)
+
+Profit: 52¢ - 48¢ = 4¢ per contract
+```
+
+**Recommended Settings:**
+* **Conservative:** `autoCloseMarginPercent = 0%` (exit at Fair Value)
+* **Balanced:** `autoCloseMarginPercent = 1-2%` (capture small premium)
+* **Aggressive:** `autoCloseMarginPercent = 3-5%` (wait for better price, risk not filling)
