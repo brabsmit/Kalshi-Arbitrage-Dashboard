@@ -94,7 +94,7 @@ export async function runAutoBid(params) {
                 console.log(`[AUTO-BID] Max positions reached (${executedHoldings.size}/${config.maxPositions}). Cancelling ${activeBuyOrders.length} active buy orders.`);
                 for (const o of activeBuyOrders) {
                     await orderManager.cancelOrder(o.id, true, true);
-                    await new Promise(r => setTimeout(r, 200));
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms
                 }
                 await refs.fetchPortfolio();
             }
@@ -140,7 +140,16 @@ export async function runAutoBid(params) {
         }
         // ----------------------------------
 
-        for (const m of markets) {
+        // OPTIMIZATION: Priority-Based Order Queue
+        // Sort markets by edge (fairValue - bestBid) to process high-edge opportunities first
+        // This ensures that even if bot is slow, we capture the best opportunities
+        const sortedMarkets = [...markets].sort((a, b) => {
+            const edgeA = (a.fairValue || 0) - (a.bestBid || 0);
+            const edgeB = (b.fairValue || 0) - (b.bestBid || 0);
+            return edgeB - edgeA; // Descending order (highest edge first)
+        });
+
+        for (const m of sortedMarkets) {
             if (!m.isMatchFound) continue;
             if (m.isInverse) continue; // Only place YES bids for simplicity
             if (deselectedMarketIds.has(m.id)) continue;
@@ -198,7 +207,7 @@ export async function runAutoBid(params) {
                         console.log(`[AUTO-BID] Per-ticker limit reached for ${m.realMarketId} (${tickerPositionCount} positions). Cancelling pending order.`);
                         addLog(`Cancelling ${m.realMarketId}: ${tickerPositionCount} positions (limit: ${MAX_POSITIONS_PER_TICKER})`, 'CANCEL');
                         await orderManager.cancelOrder(pendingOrder.id, true, true);
-                        await new Promise(r => setTimeout(r, 200));
+                        await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms
                     }
                 }
                 if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
@@ -220,7 +229,7 @@ export async function runAutoBid(params) {
                     addLog(`Cancelling bid ${m.realMarketId}: ${isFetchStale ? 'Fetch Stale' : 'Data Ancient'}`, 'CANCEL');
                     autoBidTracker.current.add(m.realMarketId);
                     await orderManager.cancelOrder(existingOrder.id, true);
-                    await new Promise(r => setTimeout(r, 200));
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms
                 }
                 continue; // Skip bidding on stale data
             }
@@ -244,7 +253,7 @@ export async function runAutoBid(params) {
                     console.log(`[AUTO-BID] Cancelling stale/bad order ${m.realMarketId} (Bid: ${existingOrder.price}, Max: ${maxWillingToPay})`);
                     autoBidTracker.current.add(m.realMarketId);
                     await orderManager.cancelOrder(existingOrder.id, true);
-                    await new Promise(r => setTimeout(r, 200)); // Delay
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                     continue;
                 }
 
@@ -257,9 +266,9 @@ export async function runAutoBid(params) {
                     // Cancel then Place
                     try {
                         await orderManager.cancelOrder(existingOrder.id, true);
-                        await new Promise(r => setTimeout(r, 200)); // Delay
+                        await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                         await orderManager.executeOrder(m, smartBid, false, null, 'auto');
-                        await new Promise(r => setTimeout(r, 200)); // Delay
+                        await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                     } catch (e) {
                         console.error("Update failed", e);
                         autoBidTracker.current.delete(m.realMarketId);
@@ -301,7 +310,7 @@ export async function runAutoBid(params) {
 
                 try {
                     await orderManager.executeOrder(m, smartBid, false, null, 'auto');
-                    await new Promise(r => setTimeout(r, 200)); // Delay
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                 } catch (e) {
                     // If order fails, remove from tracker
                     console.error(`[AUTO-BID] Order failed for ${m.realMarketId}:`, e);

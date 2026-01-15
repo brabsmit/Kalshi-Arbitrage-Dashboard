@@ -14,6 +14,7 @@ import { signRequest } from '../utils/core.js';
  * @param {Function} dependencies.setIsWalletOpen - Callback to open wallet modal
  * @param {Function} dependencies.setActiveAction - Callback to show active action in UI
  * @param {Function} dependencies.setTradeHistory - Callback to update trade history
+ * @param {Function} dependencies.setPositions - Callback to optimistically update positions
  * @param {Object} dependencies.config - Bot configuration
  * @param {Object} dependencies.trackers - Ref objects for tracking state
  * @returns {Object} Order management functions
@@ -28,6 +29,7 @@ export function createOrderManager(dependencies) {
         setIsWalletOpen,
         setActiveAction,
         setTradeHistory,
+        setPositions,
         config,
         trackers
     } = dependencies;
@@ -126,6 +128,42 @@ export function createOrderManager(dependencies) {
                         source: source
                     }
                 }));
+
+                // OPTIMIZATION: Optimistic position tracking
+                // Check if order filled immediately (fill_count > 0)
+                if (data.order && data.order.fill_count > 0 && setPositions) {
+                    console.log(`[OPTIMISTIC] Order ${data.order_id} filled ${data.order.fill_count}/${qty} immediately`);
+
+                    // Add optimistic position immediately (don't wait for 5s portfolio poll)
+                    setPositions(prev => {
+                        // Check if position already exists
+                        const existingPosition = prev.find(p => !p.isOrder && p.marketId === ticker && !p._optimistic);
+
+                        if (existingPosition) {
+                            // Position already exists (from previous fill), don't add optimistic
+                            return prev;
+                        }
+
+                        // Add optimistic position
+                        const optimisticPosition = {
+                            id: `${ticker}-optimistic-${Date.now()}`,
+                            marketId: ticker,
+                            side: side === 'yes' ? 'Yes' : 'No',
+                            quantity: data.order.fill_count,
+                            avgPrice: effectivePrice,
+                            cost: data.order.fill_count * effectivePrice,
+                            fees: 0, // Will be updated by portfolio poll
+                            status: 'HELD',
+                            isOrder: false,
+                            settlementStatus: 'unsettled',
+                            _optimistic: true,
+                            _optimisticTimestamp: Date.now()
+                        };
+
+                        console.log(`[OPTIMISTIC] Added optimistic position for ${ticker} (qty: ${data.order.fill_count})`);
+                        return [...prev, optimisticPosition];
+                    });
+                }
             }
             fetchPortfolio();
         } catch (e) {
