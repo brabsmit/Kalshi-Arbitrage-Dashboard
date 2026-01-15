@@ -41,16 +41,24 @@ export async function runAutoClose(params) {
         p.action === 'sell'
     );
 
+    console.log(`[AUTO-CLOSE] Running with ${heldPositions.length} held positions, ${activeSellOrders.length} active sell orders`);
+
     for (const pos of heldPositions) {
         if (closingTracker.current.has(pos.marketId)) continue;
 
         // Check 1: Must be opened by bot (in tradeHistory)
         const history = tradeHistory[pos.marketId];
-        if (!history) continue;
+        if (!history) {
+            console.log(`[AUTO-CLOSE] Skipping ${pos.marketId}: Not in trade history (not opened by bot)`);
+            continue;
+        }
 
         // Find current market data
         const m = markets.find(x => x.realMarketId === pos.marketId);
-        if (!m) continue; // Cannot determine Fair Value
+        if (!m) {
+            console.log(`[AUTO-CLOSE] Skipping ${pos.marketId}: Market not found in current markets list (check sport filter)`);
+            continue;
+        }
 
         // Determine Target Price (Fair Value)
         // If we hold 'No' (isInverse), fairValue (from Odds API) is for the Target (which is No).

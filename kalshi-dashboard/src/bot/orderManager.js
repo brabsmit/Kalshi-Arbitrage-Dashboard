@@ -13,6 +13,7 @@ import { signRequest } from '../utils/core.js';
  * @param {Function} dependencies.setErrorMsg - Callback to set error message
  * @param {Function} dependencies.setIsWalletOpen - Callback to open wallet modal
  * @param {Function} dependencies.setActiveAction - Callback to show active action in UI
+ * @param {Function} dependencies.setTradeHistory - Callback to update trade history
  * @param {Object} dependencies.config - Bot configuration
  * @param {Object} dependencies.trackers - Ref objects for tracking state
  * @returns {Object} Order management functions
@@ -26,6 +27,7 @@ export function createOrderManager(dependencies) {
         setErrorMsg,
         setIsWalletOpen,
         setActiveAction,
+        setTradeHistory,
         config,
         trackers
     } = dependencies;
@@ -37,10 +39,9 @@ export function createOrderManager(dependencies) {
      * @param {boolean} isSell - True for sell, false for buy
      * @param {number|null} qtyOverride - Optional quantity override
      * @param {string} source - Order source ('manual' or 'auto')
-     * @param {Function} setTradeHistory - Callback to update trade history
      * @returns {Promise<void>}
      */
-    async function executeOrder(marketOrTicker, price, isSell, qtyOverride, source = 'manual', setTradeHistory) {
+    async function executeOrder(marketOrTicker, price, isSell, qtyOverride, source = 'manual') {
         if (!walletKeys) {
             setIsWalletOpen(true);
             return;
