@@ -1252,23 +1252,47 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'left' })
     );
 };
 
-const LatencyDisplay = ({ timestamp }) => {
-    const now = React.useContext(TimeContext);
-    const ago = timestamp ? now - timestamp : 0;
+const LatencyDisplay = React.memo(({ timestamp }) => {
+    // Optimization: Direct DOM manipulation to avoid React re-rendering this component (and its 100+ instances) every second.
+    // This removes ~100 re-renders per second from the main thread.
+    const ref = useRef(null);
 
-    if (!timestamp) return <span className="text-[9px] text-slate-300 block mt-0.5">-</span>;
+    // Helper to calculate display state
+    const getDisplayState = (ts) => {
+        if (!ts) return { text: '-', className: 'text-[9px] text-slate-300 block mt-0.5' };
 
-    let color = 'text-slate-400';
-    if (ago < 5000) color = 'text-emerald-500 font-bold';
-    else if (ago < 30000) color = 'text-amber-500';
-    else color = 'text-rose-500';
+        const ago = Date.now() - ts;
+        let color = 'text-slate-400';
+        if (ago < 5000) color = 'text-emerald-500 font-bold';
+        else if (ago < 30000) color = 'text-amber-500';
+        else color = 'text-rose-500';
 
-    return (
-        <div className={`text-[9px] font-mono mt-0.5 ${color}`}>
-           {formatDuration(ago)} ago
-        </div>
-    );
-};
+        return {
+            text: `${formatDuration(ago)} ago`,
+            className: `text-[9px] font-mono mt-0.5 ${color}`
+        };
+    };
+
+    useEffect(() => {
+        if (!timestamp) return;
+
+        const update = () => {
+            if (!ref.current) return;
+            const state = getDisplayState(timestamp);
+            ref.current.textContent = state.text;
+            ref.current.className = state.className;
+        };
+
+        const interval = setInterval(update, 1000);
+        return () => clearInterval(interval);
+    }, [timestamp]);
+
+    const initial = getDisplayState(timestamp);
+
+    if (!timestamp) return <span className={initial.className}>{initial.text}</span>;
+
+    return <div ref={ref} className={initial.className}>{initial.text}</div>;
+});
 
 const MarketExpandedDetails = ({ market }) => {
     const targetFairOdds = probabilityToAmericanOdds(market.vigFreeProb / 100);
