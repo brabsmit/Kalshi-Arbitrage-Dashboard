@@ -26,3 +26,7 @@
 ## 2025-12-21 - [The Loading Charade]
 **Observation:** `useForge` hook. We were using a React hook, a state variable, and a `useEffect` just to inject a `<script>` tag that the app *requires* to function.
 **Lesson:** If a library is required, put it in `index.html`. Browsers are good at loading scripts. We don't need React to manage `<script>` tags for us.
+
+## 2025-05-23 - [The Odds Conversion]
+**Observation:** `probabilityToAmericanOdds` util was converting probabilities *back* to American Odds for display, mixing units in a Cents-based UI.
+**Lesson:** Pick one unit and stick to it. We trade in Cents (Fair Value). Converting back and forth just confuses the user and the code.

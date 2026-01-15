@@ -38,17 +38,6 @@ export const americanToProbability = (odds) => {
   return Math.abs(odds) / (Math.abs(odds) + 100);
 };
 
-export const probabilityToAmericanOdds = (prob) => {
-    if (prob <= 0 || prob >= 1) return 0;
-    if (prob >= 0.5) {
-        const odds = - (prob / (1 - prob)) * 100;
-        return Math.round(odds);
-    } else {
-        const odds = ((1 - prob) / prob) * 100;
-        return Math.round(odds);
-    }
-};
-
 export const calculateVolatility = (history) => {
     if (!history || history.length < 2) return 0;
     let sum = 0;
@@ -71,18 +60,10 @@ export const calculateStrategy = (market, marginPercent) => {
     const fairValue = market.fairValue;
 
     // STRATEGY FIX: Volatility padding has been removed.
-    // Previous logic increased margin during high volatility, but this was backwards:
-    // - High volatility in sports betting indicates breaking news, injury reports, lineup changes
-    // - These create the BEST arbitrage opportunities (books update at different speeds)
-    // - Increasing margin during volatility meant AVOIDING the highest-edge trades
-    // - In sports betting, unlike financial markets, volatility = opportunity, not risk
-    //
-    // New approach: Use base margin only. Volatility is now tracked for informational purposes
-    // but does not affect position sizing or bid prices.
-    const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
-
-    const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
+    // Previous logic increased margin during high volatility, but this was backwards.
+    // In sports betting, unlike financial markets, volatility = opportunity, not risk.
+    // New approach: Use base margin only. Volatility is tracked elsewhere for display.
+    const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
     const currentBestBid = market.bestBid || 0;
     const edge = fairValue - currentBestBid;
 
