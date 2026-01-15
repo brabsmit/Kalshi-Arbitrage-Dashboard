@@ -2219,50 +2219,166 @@ const KalshiDashboard = () => {
 
       let ws;
       let isMounted = true;
+      let reconnectAttempts = 0;
+      let reconnectTimeout;
+      let heartbeatInterval;
 
       const connect = async () => {
-          const ts = Date.now();
-          const sig = await signRequest(walletKeys.privateKey, "GET", "/trade-api/ws/v2", ts);
-          if (!isMounted) return;
-
-          const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + `/kalshi-ws?key=${walletKeys.keyId}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
-
-          ws = new WebSocket(wsUrl);
-          ws.onopen = () => {
-              if (isMounted) setWsStatus('OPEN');
-          };
-          ws.onmessage = (e) => {
+          try {
+              const ts = Date.now();
+              const sig = await signRequest(walletKeys.privateKey, "GET", "/trade-api/ws/v2", ts);
               if (!isMounted) return;
-              const d = JSON.parse(e.data);
-              if (d.type === 'ticker' && d.msg) {
-                  setMarkets(curr => curr.map(m => {
-                      if (m.realMarketId === d.msg.ticker) return {
-                          ...m,
-                          bestBid: d.msg.yes_bid,
-                          bestAsk: d.msg.yes_ask,
-                          lastChange: Date.now(),
-                          kalshiLastUpdate: Date.now(),
-                          usingWs: true,
-                          lastWsTimestamp: Date.now()
-                      };
-                      return m;
-                  }));
+
+              const wsUrl = (window.location.protocol === 'https:' ? 'wss://' : 'ws://') + window.location.host + `/kalshi-ws?key=${walletKeys.keyId}&sig=${encodeURIComponent(sig)}&ts=${ts}`;
+
+              ws = new WebSocket(wsUrl);
+
+              ws.onopen = () => {
+                  if (!isMounted) return;
+                  setWsStatus('OPEN');
+                  reconnectAttempts = 0; // Reset on successful connection
+                  console.log('[WS] Connected successfully');
+
+                  // Start heartbeat to keep connection alive
+                  heartbeatInterval = setInterval(() => {
+                      if (ws.readyState === WebSocket.OPEN) {
+                          ws.send(JSON.stringify({ cmd: 'ping' }));
+                      }
+                  }, 30000); // Ping every 30s
+              };
+
+              ws.onmessage = (e) => {
+                  if (!isMounted) return;
+                  const d = JSON.parse(e.data);
+
+                  // Handle ticker updates
+                  if (d.type === 'ticker' && d.msg) {
+                      setMarkets(curr => curr.map(m => {
+                          if (m.realMarketId === d.msg.ticker) return {
+                              ...m,
+                              bestBid: d.msg.yes_bid,
+                              bestAsk: d.msg.yes_ask,
+                              lastChange: Date.now(),
+                              kalshiLastUpdate: Date.now(),
+                              usingWs: true,
+                              lastWsTimestamp: Date.now()
+                          };
+                          return m;
+                      }));
+                  }
+
+                  // Handle subscription confirmations
+                  if (d.type === 'subscribed' || d.sid) {
+                      console.log(`[WS] Subscription confirmed:`, d);
+                  }
+
+                  // Handle pong responses
+                  if (d.type === 'pong') {
+                      // Connection is alive
+                  }
+              };
+
+              ws.onerror = (err) => {
+                  console.error('[WS] Error:', err);
+                  if (isMounted) setWsStatus('ERROR');
+              };
+
+              ws.onclose = () => {
+                  if (!isMounted) return;
+
+                  clearInterval(heartbeatInterval);
+                  setWsStatus('CLOSED');
+                  console.log('[WS] Connection closed');
+
+                  // Automatic reconnection with exponential backoff
+                  if (isMounted && isRunning) {
+                      reconnectAttempts++;
+                      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s
+                      console.log(`[WS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts})...`);
+
+                      reconnectTimeout = setTimeout(() => {
+                          if (isMounted && isRunning) {
+                              connect();
+                          }
+                      }, delay);
+                  }
+              };
+
+              wsRef.current = ws;
+          } catch (e) {
+              console.error('[WS] Connection failed:', e);
+              if (isMounted) setWsStatus('ERROR');
+
+              // Retry connection
+              if (isMounted && isRunning) {
+                  reconnectAttempts++;
+                  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+                  reconnectTimeout = setTimeout(() => {
+                      if (isMounted && isRunning) connect();
+                  }, delay);
               }
-          };
-          ws.onclose = () => {
-             if (isMounted) setWsStatus('CLOSED');
-          };
-          wsRef.current = ws;
+          }
       };
 
       connect();
+
       return () => {
           isMounted = false;
+          clearTimeout(reconnectTimeout);
+          clearInterval(heartbeatInterval);
           if (ws) ws.close();
       };
   }, [isRunning, walletKeys]);
 
   const subscribedTickersRef = useRef(new Set());
+  const prewarmCompleted = useRef(false);
+
+  // OPTIMIZATION: Pre-warm WebSocket subscriptions
+  // Subscribe to high-volume markets when WebSocket connects (before they appear in scanner)
+  // This gives us real-time pricing on first orders instead of using stale REST data
+  useEffect(() => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN || !isRunning) {
+          prewarmCompleted.current = false;
+          return;
+      }
+
+      // Only pre-warm once per connection
+      if (prewarmCompleted.current) return;
+      prewarmCompleted.current = true;
+
+      console.log('[WS] Pre-warming subscriptions to high-volume markets...');
+
+      // Fetch top 20 markets by volume and subscribe
+      fetch('/api/kalshi/markets?limit=20&status=open')
+          .then(res => res.json())
+          .then(data => {
+              const topMarkets = data.markets || [];
+              const tickersToPrewarm = topMarkets
+                  .map(m => m.ticker)
+                  .filter(Boolean)
+                  .filter(t => !subscribedTickersRef.current.has(t));
+
+              if (tickersToPrewarm.length === 0) return;
+
+              console.log(`[WS] Pre-warming ${tickersToPrewarm.length} high-volume markets`);
+
+              tickersToPrewarm.forEach((ticker, i) => {
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                      wsRef.current.send(JSON.stringify({
+                          id: `prewarm_${Date.now()}_${i}`,
+                          cmd: "subscribe",
+                          params: { channels: ["ticker"], market_tickers: [ticker] }
+                      }));
+                      subscribedTickersRef.current.add(ticker);
+                  }
+              });
+
+              console.log(`[WS] Pre-warm complete. Subscribed to ${tickersToPrewarm.length} markets.`);
+          })
+          .catch(err => {
+              console.error('[WS] Pre-warm failed:', err);
+          });
+  }, [wsStatus, isRunning]);
 
   useEffect(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN) {
@@ -2368,62 +2484,108 @@ const KalshiDashboard = () => {
           // Process Settled Positions
           const settledPositions = (settledPos.market_positions && settledPos.market_positions.length > 0 ? settledPos.market_positions : (settledPos.event_positions || settledPos.positions || [])).map(p => ({...p, _forcedStatus: 'settled'}));
 
+          // FIX: Aggregate positions by ticker to show total quantity across multiple fills
+          const positionsByTicker = new Map();
+          [...activePositions, ...settledPositions].forEach(p => {
+              const ticker = p.ticker || p.market_ticker || p.event_ticker;
+              const qty = p.position || p.total_cost_shares || 0;
+              let avg = 0;
+              if (p.avg_price) avg = p.avg_price;
+              else if (p.total_cost && qty) avg = p.total_cost / qty;
+              else if (p.fees_paid && qty) avg = p.fees_paid / Math.abs(qty);
+
+              const settlementStatus = p.settlement_status || p._forcedStatus;
+              const key = `${ticker}-${settlementStatus}`;
+
+              if (positionsByTicker.has(key)) {
+                  // Aggregate with existing position
+                  const existing = positionsByTicker.get(key);
+                  const totalQty = existing.quantity + Math.abs(qty);
+                  const totalCost = existing.cost + Math.abs(p.total_cost || 0);
+                  const totalFees = existing.fees + Math.abs(p.fees_paid || 0);
+                  // Weighted average price
+                  const newAvg = totalCost > 0 ? totalCost / totalQty : existing.avgPrice;
+
+                  positionsByTicker.set(key, {
+                      ...existing,
+                      quantity: totalQty,
+                      avgPrice: newAvg,
+                      cost: totalCost,
+                      fees: totalFees,
+                      realizedPnl: (existing.realizedPnl || 0) + (p.realized_pnl || 0),
+                      _aggregatedCount: (existing._aggregatedCount || 1) + 1
+                  });
+              } else {
+                  // First position for this ticker+status
+                  const uniqueId = settlementStatus === 'settled' ? `${ticker}-settled` : ticker;
+                  positionsByTicker.set(key, {
+                      id: uniqueId,
+                      marketId: ticker,
+                      side: 'Yes',
+                      quantity: Math.abs(qty),
+                      avgPrice: avg,
+                      cost: Math.abs(p.total_cost || 0),
+                      fees: Math.abs(p.fees_paid || 0),
+                      status: 'HELD',
+                      isOrder: false,
+                      settlementStatus: settlementStatus,
+                      realizedPnl: p.realized_pnl,
+                      _aggregatedCount: 1
+                  });
+              }
+          });
+
           const mappedItems = [
               // ORDERS
               ...(orders.orders || []).map(o => ({
-                  id: o.order_id, 
-                  marketId: o.ticker, 
+                  id: o.order_id,
+                  marketId: o.ticker,
                   action: o.action,
-                  side: o.side === 'yes' ? 'Yes' : 'No', 
+                  side: o.side === 'yes' ? 'Yes' : 'No',
                   quantity: o.count || (o.fill_count + o.remaining_count),
-                  filled: o.fill_count, 
-                  price: o.yes_price || o.no_price, 
-                  status: o.status, 
-                  isOrder: true, 
+                  filled: o.fill_count,
+                  price: o.yes_price || o.no_price,
+                  status: o.status,
+                  isOrder: true,
                   created: o.created_time,
-                  expiration: o.expiration_time 
+                  expiration: o.expiration_time
               })),
-              // POSITIONS
-              ...([...activePositions, ...settledPositions]).map(p => {
-                  const ticker = p.ticker || p.market_ticker || p.event_ticker;
-                  const qty = p.position || p.total_cost_shares || 0;
-                  let avg = 0;
-                  if (p.avg_price) avg = p.avg_price;
-                  else if (p.total_cost && qty) avg = p.total_cost / qty;
-                  else if (p.fees_paid && qty) avg = p.fees_paid / Math.abs(qty);
-
-                  const settlementStatus = p.settlement_status || p._forcedStatus;
-                  // Use unique ID for settled vs active to prevent React key collisions
-                  const uniqueId = settlementStatus === 'settled' ? `${ticker}-settled` : ticker;
-
-                  return {
-                      id: uniqueId,
-                      marketId: ticker, 
-                      side: 'Yes', 
-                      quantity: Math.abs(qty), 
-                      avgPrice: avg, 
-                      cost: Math.abs(p.total_cost || 0), 
-                      fees: Math.abs(p.fees_paid || 0),   
-                      status: 'HELD', 
-                      isOrder: false,
-                      settlementStatus: settlementStatus,
-                      realizedPnl: p.realized_pnl
-                  };
-              })
+              // POSITIONS (aggregated by ticker)
+              ...Array.from(positionsByTicker.values())
           ].filter((p, index, self) => {
-             // Deduplicate: If same ID and same Status, keep first.
-             if (!p.isOrder) {
-                 const firstIdx = self.findIndex(x => !x.isOrder && x.id === p.id && x.settlementStatus === p.settlementStatus);
-                 if (firstIdx !== index) return false;
-             }
-
              if (p.isOrder) return true;
              // Allow items with 0 quantity if they have PnL (history)
              if (p.quantity <= 0 && (!p.realizedPnl && !p.settlementStatus)) return false;
+
+             // Log if we aggregated multiple positions (indicates the bug occurred)
+             if (p._aggregatedCount > 1) {
+                 console.warn(`[PORTFOLIO] Aggregated ${p._aggregatedCount} position entries for ${p.marketId} (Total qty: ${p.quantity})`);
+             }
+
              return true;
           });
-          
-          setPositions(mappedItems);
+
+          // OPTIMIZATION: Clean up optimistic positions that now have real data
+          // Keep optimistic positions only if no real position exists for that ticker
+          setPositions(prev => {
+              const realTickers = new Set(mappedItems.filter(p => !p.isOrder).map(p => p.marketId));
+              const optimisticToKeep = prev.filter(p =>
+                  p._optimistic && !realTickers.has(p.marketId)
+              );
+
+              // Remove stale optimistic positions (>10s old without real data)
+              const freshOptimistic = optimisticToKeep.filter(p => {
+                  const age = Date.now() - (p._optimisticTimestamp || 0);
+                  if (age > 10000) {
+                      console.log(`[OPTIMISTIC] Removing stale optimistic position for ${p.marketId} (age: ${age}ms)`);
+                      return false;
+                  }
+                  return true;
+              });
+
+              // Combine real data with fresh optimistic positions
+              return [...mappedItems, ...freshOptimistic];
+          });
       } catch (e) { console.error("Portfolio Error", e); }
   }, [walletKeys]);
 
@@ -2444,6 +2606,7 @@ const KalshiDashboard = () => {
           setIsWalletOpen,
           setActiveAction,
           setTradeHistory,
+          setPositions,
           config,
           trackers: {
               autoBidTracker,

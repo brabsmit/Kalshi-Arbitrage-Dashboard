@@ -5,6 +5,7 @@ import { calculateStrategy, formatDuration } from '../utils/core.js';
 
 // Constants
 const STALE_DATA_THRESHOLD = 30000; // 30 seconds
+const MAX_POSITIONS_PER_TICKER = 1; // Maximum number of position entries allowed per ticker
 
 /**
  * Runs the auto-bid bot logic
@@ -46,12 +47,28 @@ export async function runAutoBid(params) {
         // SCOPE: Only consider markets currently displayed in the scanner to support sport switching without interference.
         const currentMarketIds = new Set(markets.map(m => m.realMarketId));
 
-        const executedHoldings = new Set(positions.filter(p =>
+        // FIX: Track total positions per ticker to prevent accumulating excessive positions
+        // Group positions by ticker and count total entries (not just unique tickers)
+        const positionsPerTicker = new Map();
+        positions.filter(p =>
             !p.isOrder &&
             p.quantity > 0 &&
             p.settlementStatus !== 'settled' &&
             currentMarketIds.has(p.marketId)
-        ).map(p => p.marketId));
+        ).forEach(p => {
+            const count = positionsPerTicker.get(p.marketId) || 0;
+            positionsPerTicker.set(p.marketId, count + 1);
+        });
+
+        const executedHoldings = new Set(positionsPerTicker.keys());
+
+        // DIAGNOSTIC: Check for excessive positions per ticker (bug detection)
+        for (const [ticker, count] of positionsPerTicker.entries()) {
+            if (count > MAX_POSITIONS_PER_TICKER) {
+                console.error(`[AUTO-BID] ALERT: Found ${count} position entries for ${ticker} (limit: ${MAX_POSITIONS_PER_TICKER}). This indicates the bug occurred previously.`);
+                addLog(`⚠️ ALERT: ${ticker} has ${count} positions (exceeds limit)`, 'ERROR');
+            }
+        }
 
         // Filter activeOrders to only those in the current market list
         const activeOrders = positions.filter(p =>
@@ -77,7 +94,7 @@ export async function runAutoBid(params) {
                 console.log(`[AUTO-BID] Max positions reached (${executedHoldings.size}/${config.maxPositions}). Cancelling ${activeBuyOrders.length} active buy orders.`);
                 for (const o of activeBuyOrders) {
                     await orderManager.cancelOrder(o.id, true, true);
-                    await new Promise(r => setTimeout(r, 200));
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms
                 }
                 await refs.fetchPortfolio();
             }
@@ -123,7 +140,16 @@ export async function runAutoBid(params) {
         }
         // ----------------------------------
 
-        for (const m of markets) {
+        // OPTIMIZATION: Priority-Based Order Queue
+        // Sort markets by edge (fairValue - bestBid) to process high-edge opportunities first
+        // This ensures that even if bot is slow, we capture the best opportunities
+        const sortedMarkets = [...markets].sort((a, b) => {
+            const edgeA = (a.fairValue || 0) - (a.bestBid || 0);
+            const edgeB = (b.fairValue || 0) - (b.bestBid || 0);
+            return edgeB - edgeA; // Descending order (highest edge first)
+        });
+
+        for (const m of sortedMarkets) {
             if (!m.isMatchFound) continue;
             if (m.isInverse) continue; // Only place YES bids for simplicity
             if (deselectedMarketIds.has(m.id)) continue;
@@ -170,8 +196,20 @@ export async function runAutoBid(params) {
             }
             // ----------------------------
 
-            // Check for held position
-            if (executedHoldings.has(m.realMarketId)) {
+            // Check for held position - now with per-ticker limit enforcement
+            const tickerPositionCount = positionsPerTicker.get(m.realMarketId) || 0;
+            if (tickerPositionCount > 0) {
+                // We have at least one position on this ticker
+                if (tickerPositionCount >= MAX_POSITIONS_PER_TICKER) {
+                    // Exceeded per-ticker limit - cancel any pending orders
+                    const pendingOrder = activeOrders.find(o => o.marketId === m.realMarketId && o.action === 'buy');
+                    if (pendingOrder) {
+                        console.log(`[AUTO-BID] Per-ticker limit reached for ${m.realMarketId} (${tickerPositionCount} positions). Cancelling pending order.`);
+                        addLog(`Cancelling ${m.realMarketId}: ${tickerPositionCount} positions (limit: ${MAX_POSITIONS_PER_TICKER})`, 'CANCEL');
+                        await orderManager.cancelOrder(pendingOrder.id, true, true);
+                        await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms
+                    }
+                }
                 if (autoBidTracker.current.has(m.realMarketId)) autoBidTracker.current.delete(m.realMarketId);
                 continue;
             }
@@ -191,7 +229,7 @@ export async function runAutoBid(params) {
                     addLog(`Cancelling bid ${m.realMarketId}: ${isFetchStale ? 'Fetch Stale' : 'Data Ancient'}`, 'CANCEL');
                     autoBidTracker.current.add(m.realMarketId);
                     await orderManager.cancelOrder(existingOrder.id, true);
-                    await new Promise(r => setTimeout(r, 200));
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms
                 }
                 continue; // Skip bidding on stale data
             }
@@ -215,7 +253,7 @@ export async function runAutoBid(params) {
                     console.log(`[AUTO-BID] Cancelling stale/bad order ${m.realMarketId} (Bid: ${existingOrder.price}, Max: ${maxWillingToPay})`);
                     autoBidTracker.current.add(m.realMarketId);
                     await orderManager.cancelOrder(existingOrder.id, true);
-                    await new Promise(r => setTimeout(r, 200)); // Delay
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                     continue;
                 }
 
@@ -228,9 +266,9 @@ export async function runAutoBid(params) {
                     // Cancel then Place
                     try {
                         await orderManager.cancelOrder(existingOrder.id, true);
-                        await new Promise(r => setTimeout(r, 200)); // Delay
+                        await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                         await orderManager.executeOrder(m, smartBid, false, null, 'auto');
-                        await new Promise(r => setTimeout(r, 200)); // Delay
+                        await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
                     } catch (e) {
                         console.error("Update failed", e);
                         autoBidTracker.current.delete(m.realMarketId);
@@ -246,8 +284,20 @@ export async function runAutoBid(params) {
             // Check if we already have an active order (should be covered by existingOrder check, but double check)
             if (activeOrderTickers.has(m.realMarketId)) continue;
 
+            // CRITICAL FIX: Check if we're already tracking this market to prevent race conditions
+            if (autoBidTracker.current.has(m.realMarketId)) {
+                console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Already in tracker (preventing race condition)`);
+                continue;
+            }
+
+            // CRITICAL FIX: Double-check we don't already have any positions on this ticker
+            if (positionsPerTicker.has(m.realMarketId)) {
+                console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Already have ${positionsPerTicker.get(m.realMarketId)} position(s)`);
+                continue;
+            }
+
             if (smartBid && smartBid <= maxWillingToPay) {
-                console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢`);
+                console.log(`[AUTO-BID] New Bid ${m.realMarketId} @ ${smartBid}¢ (Positions: ${tickerPositionCount || 0}, Orders: ${activeOrderTickers.has(m.realMarketId) ? 1 : 0})`);
                 effectiveCount++;
 
                 // Update sport counter for diversification tracking
@@ -255,9 +305,17 @@ export async function runAutoBid(params) {
                     positionsPerSport[m.sport] = (positionsPerSport[m.sport] || 0) + 1;
                 }
 
+                // Add to tracker BEFORE placing order to prevent concurrent attempts
                 autoBidTracker.current.add(m.realMarketId);
-                await orderManager.executeOrder(m, smartBid, false, null, 'auto');
-                await new Promise(r => setTimeout(r, 200)); // Delay
+
+                try {
+                    await orderManager.executeOrder(m, smartBid, false, null, 'auto');
+                    await new Promise(r => setTimeout(r, 100)); // OPTIMIZATION: Reduced from 200ms // Delay
+                } catch (e) {
+                    // If order fails, remove from tracker
+                    console.error(`[AUTO-BID] Order failed for ${m.realMarketId}:`, e);
+                    autoBidTracker.current.delete(m.realMarketId);
+                }
             }
         }
     } finally {
