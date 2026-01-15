@@ -2368,58 +2368,84 @@ const KalshiDashboard = () => {
           // Process Settled Positions
           const settledPositions = (settledPos.market_positions && settledPos.market_positions.length > 0 ? settledPos.market_positions : (settledPos.event_positions || settledPos.positions || [])).map(p => ({...p, _forcedStatus: 'settled'}));
 
+          // FIX: Aggregate positions by ticker to show total quantity across multiple fills
+          const positionsByTicker = new Map();
+          [...activePositions, ...settledPositions].forEach(p => {
+              const ticker = p.ticker || p.market_ticker || p.event_ticker;
+              const qty = p.position || p.total_cost_shares || 0;
+              let avg = 0;
+              if (p.avg_price) avg = p.avg_price;
+              else if (p.total_cost && qty) avg = p.total_cost / qty;
+              else if (p.fees_paid && qty) avg = p.fees_paid / Math.abs(qty);
+
+              const settlementStatus = p.settlement_status || p._forcedStatus;
+              const key = `${ticker}-${settlementStatus}`;
+
+              if (positionsByTicker.has(key)) {
+                  // Aggregate with existing position
+                  const existing = positionsByTicker.get(key);
+                  const totalQty = existing.quantity + Math.abs(qty);
+                  const totalCost = existing.cost + Math.abs(p.total_cost || 0);
+                  const totalFees = existing.fees + Math.abs(p.fees_paid || 0);
+                  // Weighted average price
+                  const newAvg = totalCost > 0 ? totalCost / totalQty : existing.avgPrice;
+
+                  positionsByTicker.set(key, {
+                      ...existing,
+                      quantity: totalQty,
+                      avgPrice: newAvg,
+                      cost: totalCost,
+                      fees: totalFees,
+                      realizedPnl: (existing.realizedPnl || 0) + (p.realized_pnl || 0),
+                      _aggregatedCount: (existing._aggregatedCount || 1) + 1
+                  });
+              } else {
+                  // First position for this ticker+status
+                  const uniqueId = settlementStatus === 'settled' ? `${ticker}-settled` : ticker;
+                  positionsByTicker.set(key, {
+                      id: uniqueId,
+                      marketId: ticker,
+                      side: 'Yes',
+                      quantity: Math.abs(qty),
+                      avgPrice: avg,
+                      cost: Math.abs(p.total_cost || 0),
+                      fees: Math.abs(p.fees_paid || 0),
+                      status: 'HELD',
+                      isOrder: false,
+                      settlementStatus: settlementStatus,
+                      realizedPnl: p.realized_pnl,
+                      _aggregatedCount: 1
+                  });
+              }
+          });
+
           const mappedItems = [
               // ORDERS
               ...(orders.orders || []).map(o => ({
-                  id: o.order_id, 
-                  marketId: o.ticker, 
+                  id: o.order_id,
+                  marketId: o.ticker,
                   action: o.action,
-                  side: o.side === 'yes' ? 'Yes' : 'No', 
+                  side: o.side === 'yes' ? 'Yes' : 'No',
                   quantity: o.count || (o.fill_count + o.remaining_count),
-                  filled: o.fill_count, 
-                  price: o.yes_price || o.no_price, 
-                  status: o.status, 
-                  isOrder: true, 
+                  filled: o.fill_count,
+                  price: o.yes_price || o.no_price,
+                  status: o.status,
+                  isOrder: true,
                   created: o.created_time,
-                  expiration: o.expiration_time 
+                  expiration: o.expiration_time
               })),
-              // POSITIONS
-              ...([...activePositions, ...settledPositions]).map(p => {
-                  const ticker = p.ticker || p.market_ticker || p.event_ticker;
-                  const qty = p.position || p.total_cost_shares || 0;
-                  let avg = 0;
-                  if (p.avg_price) avg = p.avg_price;
-                  else if (p.total_cost && qty) avg = p.total_cost / qty;
-                  else if (p.fees_paid && qty) avg = p.fees_paid / Math.abs(qty);
-
-                  const settlementStatus = p.settlement_status || p._forcedStatus;
-                  // Use unique ID for settled vs active to prevent React key collisions
-                  const uniqueId = settlementStatus === 'settled' ? `${ticker}-settled` : ticker;
-
-                  return {
-                      id: uniqueId,
-                      marketId: ticker, 
-                      side: 'Yes', 
-                      quantity: Math.abs(qty), 
-                      avgPrice: avg, 
-                      cost: Math.abs(p.total_cost || 0), 
-                      fees: Math.abs(p.fees_paid || 0),   
-                      status: 'HELD', 
-                      isOrder: false,
-                      settlementStatus: settlementStatus,
-                      realizedPnl: p.realized_pnl
-                  };
-              })
+              // POSITIONS (aggregated by ticker)
+              ...Array.from(positionsByTicker.values())
           ].filter((p, index, self) => {
-             // Deduplicate: If same ID and same Status, keep first.
-             if (!p.isOrder) {
-                 const firstIdx = self.findIndex(x => !x.isOrder && x.id === p.id && x.settlementStatus === p.settlementStatus);
-                 if (firstIdx !== index) return false;
-             }
-
              if (p.isOrder) return true;
              // Allow items with 0 quantity if they have PnL (history)
              if (p.quantity <= 0 && (!p.realizedPnl && !p.settlementStatus)) return false;
+
+             // Log if we aggregated multiple positions (indicates the bug occurred)
+             if (p._aggregatedCount > 1) {
+                 console.warn(`[PORTFOLIO] Aggregated ${p._aggregatedCount} position entries for ${p.marketId} (Total qty: ${p.quantity})`);
+             }
+
              return true;
           });
           
