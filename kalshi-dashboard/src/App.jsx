@@ -2443,18 +2443,19 @@ const KalshiDashboard = () => {
           setErrorMsg,
           setIsWalletOpen,
           setActiveAction,
+          setTradeHistory,
           config,
           trackers: {
               autoBidTracker,
               closingTracker
           }
       });
-  }, [walletKeys, fetchPortfolio, addLog, config.tradeSize, config.isAutoBid, config.isAutoClose]);
+  }, [walletKeys, fetchPortfolio, addLog, setTradeHistory, config.tradeSize, config.isAutoBid, config.isAutoClose]);
 
   // Wrapper functions to maintain compatibility with existing UI code
   const executeOrder = useCallback(async (marketOrTicker, price, isSell, qtyOverride, source = 'manual') => {
       if (!orderManager) return;
-      await orderManager.executeOrder(marketOrTicker, price, isSell, qtyOverride, source, setTradeHistory);
+      await orderManager.executeOrder(marketOrTicker, price, isSell, qtyOverride, source);
   }, [orderManager]);
 
   const cancelOrder = useCallback(async (id, skipConfirm = false, skipRefresh = false) => {
