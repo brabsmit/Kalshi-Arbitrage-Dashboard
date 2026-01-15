@@ -27,3 +27,17 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-24 - The Timer (Time Decay Risk Management)
+
+**Hypothesis:** As an event approaches, volatility increases and the risk of adverse selection (trading against faster informed flow) rises. We should demand a higher margin of safety for late entries.
+
+**Change:**
+- Added time-based margin multiplier:
+  - < 1 hour to start: 1.5x Margin
+  - < 24 hours to start: 1.1x Margin
+  - > 24 hours: 1.0x Margin
+
+**Expected Result:**
+- Reduced fill rate on events about to start (avoiding last-minute volatility).
+- Higher profitability per trade by demanding larger edge during high-risk windows.
