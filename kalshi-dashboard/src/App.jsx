@@ -2285,6 +2285,11 @@ const KalshiDashboard = () => {
                   if (!isMounted) return;
                   const d = JSON.parse(e.data);
 
+                  // Debug: Log all non-ticker messages to understand format
+                  if (d.type !== 'ticker' && d.type !== 'pong') {
+                      console.log('[WS] Message received:', d);
+                  }
+
                   // Handle ticker updates
                   if (d.type === 'ticker' && d.msg) {
                       setMarkets(curr => curr.map(m => {
@@ -2512,50 +2517,20 @@ const KalshiDashboard = () => {
       }
   }, [markets, wsStatus]);
 
-  // ROBUSTNESS FIX: Monitor pending subscriptions and retry failed ones
+  // ROBUSTNESS FIX: Monitor pending subscriptions (retry logic temporarily disabled)
   useEffect(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN || !isRunning) return;
 
       const checkPendingSubscriptions = () => {
           const now = Date.now();
-          const TIMEOUT_MS = 10000; // 10 seconds
-          const MAX_RETRIES = 3;
+          const TIMEOUT_MS = 30000; // 30 seconds - just for logging
 
           pendingSubscriptionsRef.current.forEach((sub, ticker) => {
               const elapsed = now - sub.timestamp;
 
-              // If subscription hasn't been confirmed within timeout, retry
-              if (elapsed > TIMEOUT_MS && sub.retryCount < MAX_RETRIES) {
-                  console.warn(`[WS] ⚠ Subscription timeout for ${ticker} (${elapsed}ms). Retrying... (attempt ${sub.retryCount + 1}/${MAX_RETRIES})`);
-
-                  // Retry subscription
-                  const newSubId = `retry_${Date.now()}_${ticker}`;
-                  if (wsRef.current?.readyState === WebSocket.OPEN) {
-                      wsRef.current.send(JSON.stringify({
-                          id: newSubId,
-                          cmd: "subscribe",
-                          params: { channels: ["ticker"], market_tickers: [ticker] }
-                      }));
-
-                      // Update pending subscription with new attempt
-                      pendingSubscriptionsRef.current.set(ticker, {
-                          id: newSubId,
-                          timestamp: Date.now(),
-                          retryCount: sub.retryCount + 1,
-                          type: sub.type
-                      });
-                  }
-              } else if (sub.retryCount >= MAX_RETRIES && elapsed > TIMEOUT_MS) {
-                  console.error(`[WS] ✗ Subscription failed for ${ticker} after ${MAX_RETRIES} retries. Giving up.`);
-                  pendingSubscriptionsRef.current.delete(ticker);
-
-                  // Mark market as failed subscription
-                  setMarkets(curr => curr.map(m => {
-                      if (m.realMarketId === ticker) {
-                          return { ...m, wsSubscriptionFailed: true };
-                      }
-                      return m;
-                  }));
+              // Just log pending subscriptions, don't retry
+              if (elapsed > TIMEOUT_MS && elapsed < TIMEOUT_MS + 5000) {
+                  console.warn(`[WS] ⚠ Subscription still pending for ${ticker} after ${(elapsed/1000).toFixed(1)}s`);
               }
           });
       };
