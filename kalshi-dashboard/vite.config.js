@@ -6,8 +6,22 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 export default defineConfig({
   plugins: [
     react(),
-    basicSsl()
+    ...(process.env.NODE_ENV === 'development' ? [basicSsl()] : [])
   ],
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    minify: 'esbuild',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          charts: ['recharts'],
+          icons: ['lucide-react']
+        }
+      }
+    }
+  },
   server: {
     // 1. HOST: true exposes the app to your local network (and internet via port forwarding)
     host: true, 

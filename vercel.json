@@ -1,0 +1,40 @@
+{
+  "buildCommand": "cd kalshi-dashboard && npm install && npm run build",
+  "outputDirectory": "kalshi-dashboard/dist",
+  "devCommand": "cd kalshi-dashboard && npm run dev",
+  "installCommand": "cd kalshi-dashboard && npm install",
+  "framework": null,
+  "rewrites": [
+    {
+      "source": "/api/kalshi/:path*",
+      "destination": "https://api.elections.kalshi.com/trade-api/v2/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), microphone=(), geolocation=(), payment=()"
+        }
+      ]
+    }
+  ],
+  "env": {
+    "VITE_ODDS_API_KEY": "@odds_api_key",
+    "VITE_APP_PASSWORD": "@app_password"
+  }
+}
