@@ -2291,12 +2291,6 @@ const KalshiDashboard = () => {
                               if (m.realMarketId === d.msg.ticker) {
                                   foundMarket = true;
 
-                                  // Mark as confirmed subscription if we were tracking it as pending
-                                  if (pendingSubscriptionsRef.current.has(d.msg.ticker)) {
-                                      console.log(`[WS] ✓ Ticker data received for ${d.msg.ticker} - subscription confirmed`);
-                                      pendingSubscriptionsRef.current.delete(d.msg.ticker);
-                                  }
-
                                   return {
                                       ...m,
                                       bestBid: d.msg.yes_bid,
