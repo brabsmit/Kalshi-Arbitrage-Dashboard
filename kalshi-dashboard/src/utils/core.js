@@ -80,7 +80,25 @@ export const calculateStrategy = (market, marginPercent) => {
     // New approach: Use base margin only. Volatility is now tracked for informational purposes
     // but does not affect position sizing or bid prices.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+
+    // Alpha Strategy: The Timer (Time-Decay Margin)
+    // As the event approaches, market efficiency increases (sharper lines).
+    // We increase our margin of safety to avoid being "picked off" by late breaking news or sharp money.
+    // Logic:
+    // - If > 24h: Standard Margin (Market is inefficient)
+    // - If < 24h: 1.1x Margin (Market tightens)
+    // - If < 1h:  1.5x Margin (High risk of adverse selection)
+    let timeMultiplier = 1.0;
+    if (market.commenceTime) {
+        const hoursUntilGame = (new Date(market.commenceTime).getTime() - Date.now()) / (1000 * 60 * 60);
+        if (hoursUntilGame < 1) {
+            timeMultiplier = 1.5;
+        } else if (hoursUntilGame < 24) {
+            timeMultiplier = 1.1;
+        }
+    }
+
+    const effectiveMargin = marginPercent * timeMultiplier;
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
