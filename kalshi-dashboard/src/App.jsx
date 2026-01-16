@@ -2209,7 +2209,15 @@ const KalshiDashboard = () => {
 
                   // Debug: Log market creation with WS flags
                   if (realMatch?.ticker && (isSubscribedToWs || prevMarket?.wsSubscriptionConfirmed)) {
-                      console.log(`[SCANNER] Creating market ${realMatch.ticker}: usingWs=${newMarket.usingWs}, wsSubscriptionConfirmed=${newMarket.wsSubscriptionConfirmed}, prevWasConfirmed=${prevMarket?.wsSubscriptionConfirmed}`);
+                      console.log(`[SCANNER] Creating market ${realMatch.ticker}: usingWs=${newMarket.usingWs}, wsSubscriptionConfirmed=${newMarket.wsSubscriptionConfirmed}, prevWasConfirmed=${prevMarket?.wsSubscriptionConfirmed}, prevUsingWs=${prevMarket?.usingWs}`);
+                  }
+
+                  // Debug: Log if flags are being lost
+                  if (realMatch?.ticker && prevMarket?.wsSubscriptionConfirmed && !newMarket.wsSubscriptionConfirmed) {
+                      console.error(`[SCANNER] ⚠️ LOST wsSubscriptionConfirmed for ${realMatch.ticker}!`);
+                  }
+                  if (realMatch?.ticker && prevMarket?.usingWs && !newMarket.usingWs) {
+                      console.error(`[SCANNER] ⚠️ LOST usingWs for ${realMatch.ticker}!`);
                   }
 
                   if (prevMarket) {
@@ -2223,6 +2231,7 @@ const KalshiDashboard = () => {
                         prevMarket.openInterest === newMarket.openInterest &&
                         prevMarket.isMatchFound === newMarket.isMatchFound &&
                         prevMarket.usingWs === newMarket.usingWs &&
+                        prevMarket.wsSubscriptionConfirmed === newMarket.wsSubscriptionConfirmed &&
                         prevMarket.lastWsTimestamp === newMarket.lastWsTimestamp &&
                         prevMarket.oddsDisplay === newMarket.oddsDisplay &&
                         prevMarket.commenceTime === newMarket.commenceTime &&
