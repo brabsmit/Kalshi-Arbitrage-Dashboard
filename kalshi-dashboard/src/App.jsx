@@ -2268,6 +2268,7 @@ const KalshiDashboard = () => {
                   subscribedTickersRef.current.clear();
                   pendingSubscriptionsRef.current.clear();
                   subscriptionSidsRef.current.clear(); // Clear subscription IDs
+                  requestIdToTickerRef.current.clear(); // Clear request ID mappings
 
                   // Reset pre-warm flag to allow pre-warming on reconnection
                   prewarmCompleted.current = false;
@@ -2316,28 +2317,31 @@ const KalshiDashboard = () => {
                       }));
                   }
 
-                  // Handle subscription confirmations
-                  if (d.type === 'subscribed' && d.msg?.sid) {
+                  // Handle subscription confirmations (type: "ok" with sid)
+                  if (d.type === 'ok' && d.msg?.sid && d.msg?.market_tickers) {
                       console.log(`[WS] ✓ Subscription confirmation received:`, d);
 
-                      // Store the subscription ID (sid) for later unsubscription
-                      if (d.msg.market_ticker && d.msg.sid) {
-                          const ticker = d.msg.market_ticker;
-                          const sid = d.msg.sid;
+                      const sid = d.msg.sid;
+                      const tickers = d.msg.market_tickers;
 
+                      // Store the sid for ALL tickers in this subscription response
+                      tickers.forEach(ticker => {
                           subscriptionSidsRef.current.set(ticker, sid);
                           pendingSubscriptionsRef.current.delete(ticker);
 
-                          console.log(`[WS] ✓ Stored sid ${sid} for ticker ${ticker}`);
+                          console.log(`[WS] ✓ Stored sid ${sid} for ticker ${ticker} (request id: ${d.id})`);
+                      });
 
-                          // Mark market as having confirmed subscription
-                          setMarkets(curr => curr.map(m => {
-                              if (m.realMarketId === ticker) {
-                                  return { ...m, wsSubscriptionConfirmed: true };
-                              }
-                              return m;
-                          }));
-                      }
+                      // Clean up the request ID mapping
+                      requestIdToTickerRef.current.delete(d.id);
+
+                      // Mark markets as having confirmed subscription
+                      setMarkets(curr => curr.map(m => {
+                          if (tickers.includes(m.realMarketId)) {
+                              return { ...m, wsSubscriptionConfirmed: true };
+                          }
+                          return m;
+                      }));
                   }
 
                   // Handle subscription errors
@@ -2408,6 +2412,7 @@ const KalshiDashboard = () => {
   const prewarmCompleted = useRef(false);
   const pendingSubscriptionsRef = useRef(new Map()); // Track pending subscriptions: ticker -> {id, timestamp, retryCount}
   const subscriptionSidsRef = useRef(new Map()); // Track subscription IDs returned by Kalshi: ticker -> sid
+  const requestIdToTickerRef = useRef(new Map()); // Map request ID -> ticker for matching confirmations
 
   // OPTIMIZATION: Pre-warm WebSocket subscriptions
   // Subscribe to high-volume markets when WebSocket connects (before they appear in scanner)
@@ -2447,6 +2452,9 @@ const KalshiDashboard = () => {
                           params: { channels: ["ticker"], market_ticker: ticker }
                       }));
                       subscribedTickersRef.current.add(ticker);
+
+                      // Track request ID -> ticker mapping for confirmation
+                      requestIdToTickerRef.current.set(subId, ticker);
 
                       // Track as pending subscription
                       pendingSubscriptionsRef.current.set(ticker, {
@@ -2524,6 +2532,9 @@ const KalshiDashboard = () => {
                    params: { channels: ["ticker"], market_ticker: ticker }
                }));
                prevTickers.add(ticker);
+
+               // Track request ID -> ticker mapping for confirmation
+               requestIdToTickerRef.current.set(subId, ticker);
 
                // Track as pending subscription
                pendingSubscriptionsRef.current.set(ticker, {
