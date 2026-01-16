@@ -2266,7 +2266,6 @@ const KalshiDashboard = () => {
       let isMounted = true;
       let reconnectAttempts = 0;
       let reconnectTimeout;
-      let heartbeatInterval;
 
       const connect = async () => {
           try {
@@ -2287,13 +2286,6 @@ const KalshiDashboard = () => {
                   // Clear subscription state on reconnect - markets will be re-subscribed automatically
                   subscribedTickersRef.current.clear();
                   console.log('[WS] Cleared subscription state. Markets will re-subscribe on next update.');
-
-                  // Start heartbeat to keep connection alive
-                  heartbeatInterval = setInterval(() => {
-                      if (ws.readyState === WebSocket.OPEN) {
-                          ws.send(JSON.stringify({ cmd: 'ping' }));
-                      }
-                  }, 30000); // Ping every 30s
               };
 
               ws.onmessage = (e) => {
@@ -2301,7 +2293,7 @@ const KalshiDashboard = () => {
                   const d = JSON.parse(e.data);
 
                   // Debug: Log all non-ticker messages to understand format
-                  if (d.type !== 'ticker' && d.type !== 'pong') {
+                  if (d.type !== 'ticker') {
                       console.log('[WS] Message received:', d);
                   }
 
@@ -2351,11 +2343,6 @@ const KalshiDashboard = () => {
                   if (d.type === 'error') {
                       console.error(`[WS] ✗ Error:`, d);
                   }
-
-                  // Handle pong responses
-                  if (d.type === 'pong') {
-                      // Connection is alive
-                  }
               };
 
               ws.onerror = (err) => {
@@ -2366,7 +2353,6 @@ const KalshiDashboard = () => {
               ws.onclose = () => {
                   if (!isMounted) return;
 
-                  clearInterval(heartbeatInterval);
                   setWsStatus('CLOSED');
                   console.log('[WS] Connection closed');
 
@@ -2405,7 +2391,6 @@ const KalshiDashboard = () => {
       return () => {
           isMounted = false;
           clearTimeout(reconnectTimeout);
-          clearInterval(heartbeatInterval);
           if (ws) ws.close();
       };
   }, [isRunning, walletKeys]);
