@@ -2432,11 +2432,11 @@ const KalshiDashboard = () => {
 
               tickersToPrewarm.forEach((ticker, i) => {
                   if (wsRef.current?.readyState === WebSocket.OPEN) {
-                      const subId = `prewarm_${Date.now()}_${i}`;
+                      const subId = 1000 + i; // Numeric ID for pre-warm subscriptions
                       wsRef.current.send(JSON.stringify({
                           id: subId,
                           cmd: "subscribe",
-                          params: { channels: ["ticker"], market_tickers: [ticker] }
+                          params: { channels: ["ticker"], market_ticker: ticker }
                       }));
                       subscribedTickersRef.current.add(ticker);
 
@@ -2480,7 +2480,7 @@ const KalshiDashboard = () => {
                wsRef.current.send(JSON.stringify({
                    id: 2000 + i, // distinct ID range for unsubs
                    cmd: "unsubscribe",
-                   params: { channels: ["ticker"], market_tickers: [ticker] }
+                   params: { channels: ["ticker"], market_ticker: ticker }
                }));
                prevTickers.delete(ticker);
                pendingSubscriptionsRef.current.delete(ticker);
@@ -2502,7 +2502,7 @@ const KalshiDashboard = () => {
                wsRef.current.send(JSON.stringify({
                    id: subId, // distinct ID range for new subs
                    cmd: "subscribe",
-                   params: { channels: ["ticker"], market_tickers: [ticker] }
+                   params: { channels: ["ticker"], market_ticker: ticker }
                }));
                prevTickers.add(ticker);
 
