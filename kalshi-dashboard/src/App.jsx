@@ -1130,12 +1130,16 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                         `).join('')}
                     </tbody>
                 </table>
-                <script>
-                    window.onload = function() { window.print(); }
-                </script>
             </body>
             </html>
         `);
+
+        // Sentinel: Trigger print from parent context to avoid inline script injection (CSP)
+        // Set onload before closing document to ensure we catch the event
+        printWindow.onload = function() {
+            printWindow.print();
+        };
+
         printWindow.document.close();
     };
 
