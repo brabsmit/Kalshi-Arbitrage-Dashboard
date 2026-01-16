@@ -2831,9 +2831,10 @@ const KalshiDashboard = () => {
 
   // Calculate WebSocket statistics for header display
   const wsStats = useMemo(() => {
-      const subscribed = subscribedTickersRef.current.size;
-      const active = markets.filter(m => m.usingWs).length;
-      return { subscribed, confirmed: active, pending: 0, failed: 0 };
+      const subscribed = wsSubscriptionsRef.current.size;
+      const active = markets.filter(m => m.priceSource === 'WS').length;
+      const subscribedButStale = markets.filter(m => m.isWsSubscribed && m.priceSource === 'HTTP').length;
+      return { subscribed, confirmed: active, pending: subscribedButStale, failed: 0 };
   }, [markets]);
 
   return (
