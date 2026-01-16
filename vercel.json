@@ -32,9 +32,5 @@
         }
       ]
     }
-  ],
-  "env": {
-    "VITE_ODDS_API_KEY": "@odds_api_key",
-    "VITE_APP_PASSWORD": "@app_password"
-  }
+  ]
 }
