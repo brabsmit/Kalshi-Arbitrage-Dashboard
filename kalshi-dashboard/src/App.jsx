@@ -2285,13 +2285,14 @@ const KalshiDashboard = () => {
 
                   // Handle ticker updates
                   if (d.type === 'ticker' && d.msg) {
-                      console.log(`[WS] Received ticker data for: ${d.msg.ticker} (${d.msg.yes_bid}/${d.msg.yes_ask})`);
+                      const ticker = d.msg.market_ticker; // Kalshi uses market_ticker, not ticker
+                      console.log(`[WS] Received ticker data for: ${ticker} (${d.msg.yes_bid}/${d.msg.yes_ask})`);
                       let foundMarket = false;
                       setMarkets(curr => {
                           const updated = curr.map(m => {
-                              if (m.realMarketId === d.msg.ticker) {
+                              if (m.realMarketId === ticker) {
                                   foundMarket = true;
-                                  console.log(`[WS] ✓ Matched market ${d.msg.ticker} in state - marking usingWs=true, confirmed=true`);
+                                  console.log(`[WS] ✓ Matched market ${ticker} in state - marking usingWs=true, confirmed=true`);
 
                                   return {
                                       ...m,
@@ -2309,9 +2310,9 @@ const KalshiDashboard = () => {
 
                           if (!foundMarket) {
                               const currentMarketIds = updated.map(m => m.realMarketId).filter(Boolean);
-                              console.warn(`[WS] ⚠ Received ticker data for ${d.msg.ticker} but market not in current list. Current markets:`, currentMarketIds);
+                              console.warn(`[WS] ⚠ Received ticker data for ${ticker} but market not in current list. Current markets:`, currentMarketIds);
                           } else {
-                              console.log(`[WS] ✓ Successfully updated market ${d.msg.ticker} in state`);
+                              console.log(`[WS] ✓ Successfully updated market ${ticker} in state`);
                           }
 
                           return updated;
