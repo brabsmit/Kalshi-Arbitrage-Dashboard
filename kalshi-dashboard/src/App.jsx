@@ -2262,18 +2262,9 @@ const KalshiDashboard = () => {
                   reconnectAttempts = 0; // Reset on successful connection
                   console.log('[WS] Connected successfully');
 
-                  // ROBUSTNESS FIX: Clear subscription state on reconnect
-                  // Server-side subscriptions are lost during disconnect, so we need to re-subscribe
-                  const tickersToResubscribe = Array.from(subscribedTickersRef.current);
+                  // Clear subscription state on reconnect - markets will be re-subscribed automatically
                   subscribedTickersRef.current.clear();
-                  pendingSubscriptionsRef.current.clear();
-                  subscriptionSidsRef.current.clear(); // Clear subscription IDs
-                  requestIdToTickerRef.current.clear(); // Clear request ID mappings
-
-                  // Reset pre-warm flag to allow pre-warming on reconnection
-                  prewarmCompleted.current = false;
-
-                  console.log(`[WS] Cleared subscription state. Will re-subscribe to ${tickersToResubscribe.length} markets.`);
+                  console.log('[WS] Cleared subscription state. Markets will re-subscribe on next update.');
 
                   // Start heartbeat to keep connection alive
                   heartbeatInterval = setInterval(() => {
@@ -2328,65 +2319,15 @@ const KalshiDashboard = () => {
                       });
                   }
 
-                  // Handle subscription confirmations (type: "ok" with market_tickers OR type: "subscribed" with channel)
-                  if ((d.type === 'ok' && d.msg?.sid && d.msg?.market_tickers) ||
-                      (d.type === 'subscribed' && d.msg?.sid)) {
-
-                      const sid = d.msg.sid;
-                      let tickers = [];
-
-                      // "ok" response includes the tickers
-                      if (d.msg.market_tickers) {
-                          tickers = d.msg.market_tickers;
-                          console.log(`[WS] ✓ Subscription confirmation (ok) received for ${tickers.length} markets:`, d);
-                      }
-                      // "subscribed" response - look up tickers from our request mapping
-                      else {
-                          tickers = requestIdToTickerRef.current.get(d.id) || [];
-                          console.log(`[WS] ✓ Subscription confirmation (subscribed) received for request ${d.id}, ${tickers.length} markets`);
-                      }
-
-                      if (tickers.length === 0) {
-                          console.warn(`[WS] ⚠ Subscription confirmed but no tickers found for request id ${d.id}`);
-                          return;
-                      }
-
-                      // Store the sid for ALL tickers in this subscription response
-                      tickers.forEach(ticker => {
-                          subscriptionSidsRef.current.set(ticker, sid);
-                          pendingSubscriptionsRef.current.delete(ticker);
-                      });
-
-                      console.log(`[WS] ✓ Stored sid ${sid} for ${tickers.length} tickers (request id: ${d.id})`);
-
-                      // Clean up the request ID mapping
-                      requestIdToTickerRef.current.delete(d.id);
-
-                      // Mark markets as having confirmed subscription
-                      let confirmedCount = 0;
-                      setMarkets(curr => {
-                          const updated = curr.map(m => {
-                              if (tickers.includes(m.realMarketId)) {
-                                  confirmedCount++;
-                                  return { ...m, wsSubscriptionConfirmed: true };
-                              }
-                              return m;
-                          });
-
-                          if (confirmedCount === 0) {
-                              console.warn(`[WS] ⚠ Subscription confirmed for ${tickers.length} markets but none found in UI state yet. They'll be marked when ticker data arrives.`);
-                          } else {
-                              console.log(`[WS] ✓ Confirmed ${confirmedCount}/${tickers.length} markets in UI state`);
-                          }
-
-                          return updated;
-                      });
+                  // Handle subscription confirmations - just log them, we mark confirmed when data arrives
+                  if (d.type === 'ok' || d.type === 'subscribed') {
+                      const tickerCount = d.msg?.market_tickers?.length || '?';
+                      console.log(`[WS] ✓ Subscription confirmed (${d.type}, id: ${d.id}, tickers: ${tickerCount})`);
                   }
 
                   // Handle subscription errors
-                  if (d.type === 'error' && d.msg) {
-                      console.error(`[WS] ✗ Subscription error:`, d);
-                      // Could implement retry logic here if needed
+                  if (d.type === 'error') {
+                      console.error(`[WS] ✗ Error:`, d);
                   }
 
                   // Handle pong responses
@@ -2447,171 +2388,39 @@ const KalshiDashboard = () => {
       };
   }, [isRunning, walletKeys]);
 
-  const subscribedTickersRef = useRef(new Set());
-  const prewarmCompleted = useRef(false);
-  const pendingSubscriptionsRef = useRef(new Map()); // Track pending subscriptions: ticker -> {id, timestamp, retryCount}
-  const subscriptionSidsRef = useRef(new Map()); // Track subscription IDs returned by Kalshi: ticker -> sid
-  const requestIdToTickerRef = useRef(new Map()); // Map request ID -> ticker for matching confirmations
+  const subscribedTickersRef = useRef(new Set()); // Simple set of subscribed tickers
+  let subscriptionIdCounter = useRef(1000); // Incrementing ID for subscription requests
 
-  // OPTIMIZATION: Pre-warm WebSocket subscriptions
-  // Subscribe to high-volume markets when WebSocket connects (before they appear in scanner)
-  // This gives us real-time pricing on first orders instead of using stale REST data
-  useEffect(() => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN || !isRunning) {
-          prewarmCompleted.current = false;
-          return;
-      }
-
-      // Only pre-warm once per connection
-      if (prewarmCompleted.current) return;
-      prewarmCompleted.current = true;
-
-      console.log('[WS] Pre-warming subscriptions to high-volume markets...');
-
-      // Fetch top 20 markets by volume and subscribe
-      fetch('/api/kalshi/markets?limit=20&status=open')
-          .then(res => res.json())
-          .then(data => {
-              const topMarkets = data.markets || [];
-              const tickersToPrewarm = topMarkets
-                  .map(m => m.ticker)
-                  .filter(Boolean)
-                  .filter(t => !subscribedTickersRef.current.has(t));
-
-              if (tickersToPrewarm.length === 0) return;
-
-              console.log(`[WS] Pre-warming ${tickersToPrewarm.length} high-volume markets`);
-
-              // Send batch subscription for all pre-warm tickers
-              if (wsRef.current?.readyState === WebSocket.OPEN && tickersToPrewarm.length > 0) {
-                  const subId = 1000; // Single ID for batch subscription
-                  wsRef.current.send(JSON.stringify({
-                      id: subId,
-                      cmd: "subscribe",
-                      params: { channels: ["ticker"], market_tickers: tickersToPrewarm }
-                  }));
-
-                  // Track all tickers as subscribed and pending
-                  tickersToPrewarm.forEach(ticker => {
-                      subscribedTickersRef.current.add(ticker);
-
-                      // Track as pending subscription
-                      pendingSubscriptionsRef.current.set(ticker, {
-                          id: subId,
-                          timestamp: Date.now(),
-                          retryCount: 0,
-                          type: 'prewarm'
-                      });
-                  });
-
-                  // Track request ID -> tickers mapping for confirmation
-                  requestIdToTickerRef.current.set(subId, tickersToPrewarm);
-
-                  console.log(`[WS] Pre-warm complete. Sent batch subscription for ${tickersToPrewarm.length} markets.`);
-              }
-          })
-          .catch(err => {
-              console.error('[WS] Pre-warm failed:', err);
-          });
-  }, [wsStatus, isRunning]);
-
-  useEffect(() => {
-      if (wsRef.current?.readyState !== WebSocket.OPEN) {
-          subscribedTickersRef.current.clear();
-          return;
-      }
-
-      // Optimization: Calculate diff using Set math instead of expensive Sort+Join in useMemo.
-      const currentTickers = new Set(markets.map(m => m.realMarketId).filter(Boolean));
-      const prevTickers = subscribedTickersRef.current;
-
-      // Identify added and removed
-      const toAdd = [...currentTickers].filter(x => !prevTickers.has(x));
-      const toRemove = [...prevTickers].filter(x => !currentTickers.has(x));
-
-      // IMPORTANT: Don't process removals if markets list is empty
-      // This prevents pre-warmed subscriptions from being removed before markets appear
-      if (currentTickers.size === 0 && toRemove.length > 0) {
-          console.log(`[WS] Ignoring ${toRemove.length} "removed" markets - scanner hasn't populated yet`);
-          return;
-      }
-
-      // Early exit to prevent unnecessary processing if sets are identical
-      if (toAdd.length === 0 && toRemove.length === 0) return;
-
-      // NOTE: We don't actively unsubscribe from removed markets
-      // They'll just stop receiving updates naturally when not in the scanner
-      // We only subscribe to new markets
-
-      if (toRemove.length > 0) {
-          console.log(`[WS] ${toRemove.length} markets removed from scanner (will stop receiving updates naturally)`);
-
-          // Clean up tracking for removed tickers
-          toRemove.forEach(ticker => {
-              prevTickers.delete(ticker);
-              pendingSubscriptionsRef.current.delete(ticker);
-
-              // Clear WS status from markets being removed
-              setMarkets(curr => curr.map(m => {
-                  if (m.realMarketId === ticker) {
-                      return { ...m, usingWs: false, wsSubscriptionConfirmed: false };
-                  }
-                  return m;
-              }));
-          });
-      }
-
-      if (toAdd.length > 0) {
-          console.log(`[WS] Subscribing to ${toAdd.length} new markets...`);
-
-          // Always create a new subscription for added markets
-          const subId = 3000;
-          wsRef.current.send(JSON.stringify({
-              id: subId,
-              cmd: "subscribe",
-              params: { channels: ["ticker"], market_tickers: toAdd }
-          }));
-
-          // Track request ID -> tickers mapping for confirmation
-          requestIdToTickerRef.current.set(subId, toAdd);
-
-          // Track all tickers as subscribed and pending
-          toAdd.forEach(ticker => {
-              prevTickers.add(ticker);
-
-              // Track as pending subscription
-              pendingSubscriptionsRef.current.set(ticker, {
-                  id: subId,
-                  timestamp: Date.now(),
-                  retryCount: 0,
-                  type: 'dynamic'
-              });
-          });
-      }
-  }, [markets, wsStatus]);
-
-  // ROBUSTNESS FIX: Monitor pending subscriptions (retry logic temporarily disabled)
+  // CLEAN REFACTOR: Simple subscription management
+  // Subscribe to markets as they appear, never unsubscribe (Kalshi handles stale subscriptions)
   useEffect(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN || !isRunning) return;
 
-      const checkPendingSubscriptions = () => {
-          const now = Date.now();
-          const TIMEOUT_MS = 30000; // 30 seconds - just for logging
+      // Get current market tickers
+      const currentTickers = markets.map(m => m.realMarketId).filter(Boolean);
 
-          pendingSubscriptionsRef.current.forEach((sub, ticker) => {
-              const elapsed = now - sub.timestamp;
+      // Find new tickers that need subscription
+      const newTickers = currentTickers.filter(t => !subscribedTickersRef.current.has(t));
 
-              // Just log pending subscriptions, don't retry
-              if (elapsed > TIMEOUT_MS && elapsed < TIMEOUT_MS + 5000) {
-                  console.warn(`[WS] ⚠ Subscription still pending for ${ticker} after ${(elapsed/1000).toFixed(1)}s`);
-              }
-          });
-      };
+      if (newTickers.length === 0) return; // No new markets to subscribe
 
-      // Check every 5 seconds
-      const interval = setInterval(checkPendingSubscriptions, 5000);
-      return () => clearInterval(interval);
-  }, [wsStatus, isRunning]);
+      console.log(`[WS] Subscribing to ${newTickers.length} new markets...`);
+
+      // Send batch subscription
+      const subId = subscriptionIdCounter.current++;
+      wsRef.current.send(JSON.stringify({
+          id: subId,
+          cmd: "subscribe",
+          params: { channels: ["ticker"], market_tickers: newTickers }
+      }));
+
+      // Mark as subscribed (don't wait for confirmation)
+      newTickers.forEach(ticker => subscribedTickersRef.current.add(ticker));
+
+      console.log(`[WS] Sent subscription request for ${newTickers.length} markets (id: ${subId})`);
+  }, [markets, isRunning]);
+
+  // Note: No need to monitor pending subscriptions - we mark markets confirmed when ticker data arrives
 
   const fetchPortfolio = useCallback(async () => {
       if (!walletKeys) return;
@@ -2986,10 +2795,8 @@ const KalshiDashboard = () => {
   // Calculate WebSocket statistics for header display
   const wsStats = useMemo(() => {
       const subscribed = subscribedTickersRef.current.size;
-      const confirmed = markets.filter(m => m.wsSubscriptionConfirmed).length;
-      const pending = pendingSubscriptionsRef.current.size;
-      const failed = markets.filter(m => m.wsSubscriptionFailed).length;
-      return { subscribed, confirmed, pending, failed };
+      const active = markets.filter(m => m.usingWs).length;
+      return { subscribed, confirmed: active, pending: 0, failed: 0 };
   }, [markets]);
 
   return (
