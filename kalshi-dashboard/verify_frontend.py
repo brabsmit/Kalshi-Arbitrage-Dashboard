@@ -21,7 +21,7 @@ def verify_frontend():
 
         print("Navigating to app...")
         # Port changed to 3000 according to logs, and HTTPS is enabled
-        page.goto("https://localhost:3000")
+        page.goto("https://127.0.0.1:3000")
 
         # Wait for app to load
         print("Waiting for app to load...")

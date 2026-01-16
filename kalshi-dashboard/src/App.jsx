@@ -2003,6 +2003,23 @@ const KalshiDashboard = () => {
 
                // ⚡ Bolt Optimization: Pre-calculate uppercase tickers to avoid O(N*M) string allocs in matching loop
                const kalshiMarkets = rawKalshiMarkets.map(m => ({ ...m, _uTicker: m.ticker ? m.ticker.toUpperCase() : '' }));
+
+               // ⚡ Bolt Optimization: Index markets by Date Part for O(1) matching
+               const kalshiMarketsMap = new Map();
+               const dateRegex = /\d{2}[A-Z]{3}\d{2}/;
+
+               for (const m of kalshiMarkets) {
+                   const match = m._uTicker.match(dateRegex);
+                   if (match) {
+                       const dateKey = match[0];
+                       if (!kalshiMarketsMap.has(dateKey)) kalshiMarketsMap.set(dateKey, []);
+                       kalshiMarketsMap.get(dateKey).push(m);
+                   } else {
+                        // Fallback bucket for odd tickers
+                       if (!kalshiMarketsMap.has('NONE')) kalshiMarketsMap.set('NONE', []);
+                       kalshiMarketsMap.get('NONE').push(m);
+                   }
+               }
                
                const used = oddsRes.headers.get('x-requests-used');
                const remaining = oddsRes.headers.get('x-requests-remaining');
@@ -2010,7 +2027,7 @@ const KalshiDashboard = () => {
                const oddsData = await oddsRes.json();
                if (!Array.isArray(oddsData)) throw new Error(oddsData.message || `API Error for ${sportConfig.key}`);
                
-               return { oddsData, kalshiMarkets, seriesTicker, apiUsage: (used && remaining) ? { used: parseInt(used), remaining: parseInt(remaining) } : null };
+               return { oddsData, kalshiMarkets, kalshiMarketsMap, seriesTicker, apiUsage: (used && remaining) ? { used: parseInt(used), remaining: parseInt(remaining) } : null };
           });
 
           const results = await Promise.all(requests);
@@ -2023,13 +2040,14 @@ const KalshiDashboard = () => {
           setLastUpdated(new Date());
 
           // Flatten results
-          const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiMarkets: r.kalshiMarkets, _seriesTicker: r.seriesTicker })));
+          const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiMarkets: r.kalshiMarkets, _kalshiMarketsMap: r.kalshiMarketsMap, _seriesTicker: r.seriesTicker })));
 
           setMarkets(prev => {
               const processingTime = Date.now();
               let hasChanged = false;
               const processed = allOddsData.slice(0, 50).map(game => {
                   const kalshiData = game._kalshiMarkets;
+                  const kalshiMap = game._kalshiMarketsMap;
                   const seriesTicker = game._seriesTicker;
 
                   const bookmakers = game.bookmakers || [];
@@ -2086,7 +2104,7 @@ const KalshiDashboard = () => {
 
                   const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
 
-                  let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                  let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiMap, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
 
                   // --- WEBSOCKET PRIORITY LOGIC ---

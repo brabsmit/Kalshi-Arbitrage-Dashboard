@@ -73,7 +73,27 @@ export const findKalshiMatch = (targetTeam, homeTeam, awayTeam, commenceTime, ka
     // This reduces GC pressure and iterates the list only as far as needed (early exit)
     let exactMatch = null;
 
-    for (const k of kalshiMarkets) {
+    // ⚡ Bolt Optimization: Use O(1) Lookup if Map is provided
+    let candidates = kalshiMarkets;
+    if (kalshiMarkets instanceof Map) {
+        if (datePart && kalshiMarkets.has(datePart)) {
+            candidates = kalshiMarkets.get(datePart);
+        } else if (!datePart) {
+            // If date invalid, must search all buckets
+            candidates = [];
+            for (const bucket of kalshiMarkets.values()) {
+                for (const m of bucket) candidates.push(m);
+            }
+        } else if (kalshiMarkets.has('NONE')) {
+            // Fallback to markets explicitly categorized as having no date
+            candidates = kalshiMarkets.get('NONE');
+        } else {
+            // Valid date but no bucket found -> No match possible
+            candidates = [];
+        }
+    }
+
+    for (const k of candidates) {
         // ⚡ Bolt Optimization: Use pre-calculated uppercase ticker if available
         const ticker = k._uTicker || (k.ticker ? k.ticker.toUpperCase() : '');
 
