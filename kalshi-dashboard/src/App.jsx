@@ -2113,7 +2113,9 @@ const KalshiDashboard = () => {
                   const prevMarket = prev.find(m => m.id === game.id);
 
                   // --- WEBSOCKET PRIORITY LOGIC ---
-                  let isWsActive = false;
+                  // Distinguish between subscription status and data freshness
+                  const isSubscribedToWs = prevMarket?.wsSubscriptionConfirmed || false;
+                  let isWsDataFresh = false;
                   let wsBestBid = 0;
                   let wsBestAsk = 0;
                   let wsLastTimestamp = 0;
@@ -2123,7 +2125,7 @@ const KalshiDashboard = () => {
                       const isFresh = (Date.now() - (prevMarket.lastWsTimestamp || 0)) < 15000; // 15s threshold
 
                       if (isConnected && isFresh) {
-                          isWsActive = true;
+                          isWsDataFresh = true;
                           wsBestBid = prevMarket.bestBid;
                           wsBestAsk = prevMarket.bestAsk;
                           wsLastTimestamp = prevMarket.lastWsTimestamp;
@@ -2131,8 +2133,8 @@ const KalshiDashboard = () => {
                   }
 
                   // --- MATCH PERSISTENCE (Fix for "No Match" with Active WS) ---
-                  if (!realMatch && isWsActive && prevMarket && prevMarket.isMatchFound) {
-                       // If we have an active WS connection, trust the previous match even if REST failed
+                  if (!realMatch && isWsDataFresh && prevMarket && prevMarket.isMatchFound) {
+                       // If we have fresh WS data, trust the previous match even if REST failed
                        realMatch = {
                            ticker: prevMarket.realMarketId,
                            isInverse: prevMarket.isInverse,
@@ -2164,8 +2166,8 @@ const KalshiDashboard = () => {
                   
                   let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
 
-                  // Prioritize WS data if active
-                  if (isWsActive) {
+                  // Prioritize WS data if fresh
+                  if (isWsDataFresh) {
                       bestBid = wsBestBid;
                       bestAsk = wsBestAsk;
                   }
@@ -2186,7 +2188,7 @@ const KalshiDashboard = () => {
                       volume: volume || 0,
                       openInterest: openInterest || 0,
                       lastChange: processingTime,
-                      kalshiLastUpdate: isWsActive ? wsLastTimestamp : processingTime,
+                      kalshiLastUpdate: isWsDataFresh ? wsLastTimestamp : processingTime,
                       oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100),
                       history: history,
@@ -2195,9 +2197,9 @@ const KalshiDashboard = () => {
                       oddsSpread: spread,
                       oddsSources: vigFreeProbs.map(v => v.source),
                       isInverse: realMatch?.isInverse || false,
-                      usingWs: isWsActive,
+                      usingWs: isSubscribedToWs, // Show Zap if subscribed, regardless of data freshness
                       wsSubscriptionConfirmed: prevMarket?.wsSubscriptionConfirmed || false,
-                      lastWsTimestamp: wsLastTimestamp
+                      lastWsTimestamp: isWsDataFresh ? wsLastTimestamp : (prevMarket?.lastWsTimestamp || 0)
                   };
 
                   if (prevMarket) {
