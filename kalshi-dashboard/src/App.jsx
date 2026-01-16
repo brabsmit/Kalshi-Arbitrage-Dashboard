@@ -2328,12 +2328,28 @@ const KalshiDashboard = () => {
                       });
                   }
 
-                  // Handle subscription confirmations (type: "ok" with sid)
-                  if (d.type === 'ok' && d.msg?.sid && d.msg?.market_tickers) {
-                      console.log(`[WS] ✓ Subscription confirmation received for ${d.msg.market_tickers.length} markets:`, d);
+                  // Handle subscription confirmations (type: "ok" with market_tickers OR type: "subscribed" with channel)
+                  if ((d.type === 'ok' && d.msg?.sid && d.msg?.market_tickers) ||
+                      (d.type === 'subscribed' && d.msg?.sid)) {
 
                       const sid = d.msg.sid;
-                      const tickers = d.msg.market_tickers;
+                      let tickers = [];
+
+                      // "ok" response includes the tickers
+                      if (d.msg.market_tickers) {
+                          tickers = d.msg.market_tickers;
+                          console.log(`[WS] ✓ Subscription confirmation (ok) received for ${tickers.length} markets:`, d);
+                      }
+                      // "subscribed" response - look up tickers from our request mapping
+                      else {
+                          tickers = requestIdToTickerRef.current.get(d.id) || [];
+                          console.log(`[WS] ✓ Subscription confirmation (subscribed) received for request ${d.id}, ${tickers.length} markets`);
+                      }
+
+                      if (tickers.length === 0) {
+                          console.warn(`[WS] ⚠ Subscription confirmed but no tickers found for request id ${d.id}`);
+                          return;
+                      }
 
                       // Store the sid for ALL tickers in this subscription response
                       tickers.forEach(ticker => {
@@ -2509,29 +2525,19 @@ const KalshiDashboard = () => {
       // Early exit to prevent unnecessary processing if sets are identical
       if (toAdd.length === 0 && toRemove.length === 0) return;
 
-      // Get the main subscription sid (should be the same for all ticker subscriptions)
-      const mainSid = subscriptionSidsRef.current.values().next().value;
+      // NOTE: update_subscription causes "Unknown command" errors, so we just ignore removals
+      // Markets that are no longer in the scanner will stop receiving updates naturally
+      // We only subscribe to new markets
 
-      if (toRemove.length > 0 && mainSid) {
-          console.log(`[WS] Removing ${toRemove.length} markets from subscription (sid: ${mainSid})...`);
-
-          wsRef.current.send(JSON.stringify({
-              id: 2000,
-              cmd: "update_subscription",
-              params: {
-                  sid: mainSid,
-                  market_tickers: toRemove,
-                  action: "delete_markets"
-              }
-          }));
+      if (toRemove.length > 0) {
+          console.log(`[WS] ${toRemove.length} markets removed from scanner (will stop receiving updates naturally)`);
 
           // Clean up tracking for removed tickers
           toRemove.forEach(ticker => {
               prevTickers.delete(ticker);
               pendingSubscriptionsRef.current.delete(ticker);
-              // Note: We keep the sid in subscriptionSidsRef since it's still valid
 
-              // Clear WS status from markets being unsubscribed
+              // Clear WS status from markets being removed
               setMarkets(curr => curr.map(m => {
                   if (m.realMarketId === ticker) {
                       return { ...m, usingWs: false, wsSubscriptionConfirmed: false };
@@ -2542,29 +2548,18 @@ const KalshiDashboard = () => {
       }
 
       if (toAdd.length > 0) {
-          console.log(`[WS] Adding ${toAdd.length} markets to subscription...`);
+          console.log(`[WS] Subscribing to ${toAdd.length} new markets...`);
 
-          if (mainSid) {
-              // Update existing subscription
-              wsRef.current.send(JSON.stringify({
-                  id: 3000,
-                  cmd: "update_subscription",
-                  params: {
-                      sid: mainSid,
-                      market_tickers: toAdd,
-                      action: "add_markets"
-                  }
-              }));
-          } else {
-              // No existing subscription, create new one
-              const subId = 3000;
-              wsRef.current.send(JSON.stringify({
-                  id: subId,
-                  cmd: "subscribe",
-                  params: { channels: ["ticker"], market_tickers: toAdd }
-              }));
-              requestIdToTickerRef.current.set(subId, toAdd);
-          }
+          // Always create a new subscription for added markets
+          const subId = 3000;
+          wsRef.current.send(JSON.stringify({
+              id: subId,
+              cmd: "subscribe",
+              params: { channels: ["ticker"], market_tickers: toAdd }
+          }));
+
+          // Track request ID -> tickers mapping for confirmation
+          requestIdToTickerRef.current.set(subId, toAdd);
 
           // Track all tickers as subscribed and pending
           toAdd.forEach(ticker => {
@@ -2572,7 +2567,7 @@ const KalshiDashboard = () => {
 
               // Track as pending subscription
               pendingSubscriptionsRef.current.set(ticker, {
-                  id: mainSid || 3000,
+                  id: subId,
                   timestamp: Date.now(),
                   retryCount: 0,
                   type: 'dynamic'
