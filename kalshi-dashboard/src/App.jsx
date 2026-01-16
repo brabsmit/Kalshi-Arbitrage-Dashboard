@@ -2529,11 +2529,18 @@ const KalshiDashboard = () => {
       const toAdd = [...currentTickers].filter(x => !prevTickers.has(x));
       const toRemove = [...prevTickers].filter(x => !currentTickers.has(x));
 
+      // IMPORTANT: Don't process removals if markets list is empty
+      // This prevents pre-warmed subscriptions from being removed before markets appear
+      if (currentTickers.size === 0 && toRemove.length > 0) {
+          console.log(`[WS] Ignoring ${toRemove.length} "removed" markets - scanner hasn't populated yet`);
+          return;
+      }
+
       // Early exit to prevent unnecessary processing if sets are identical
       if (toAdd.length === 0 && toRemove.length === 0) return;
 
-      // NOTE: update_subscription causes "Unknown command" errors, so we just ignore removals
-      // Markets that are no longer in the scanner will stop receiving updates naturally
+      // NOTE: We don't actively unsubscribe from removed markets
+      // They'll just stop receiving updates naturally when not in the scanner
       // We only subscribe to new markets
 
       if (toRemove.length > 0) {
