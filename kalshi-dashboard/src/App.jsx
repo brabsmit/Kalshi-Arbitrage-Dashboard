@@ -2285,11 +2285,13 @@ const KalshiDashboard = () => {
 
                   // Handle ticker updates
                   if (d.type === 'ticker' && d.msg) {
+                      console.log(`[WS] Received ticker data for: ${d.msg.ticker} (${d.msg.yes_bid}/${d.msg.yes_ask})`);
                       let foundMarket = false;
                       setMarkets(curr => {
                           const updated = curr.map(m => {
                               if (m.realMarketId === d.msg.ticker) {
                                   foundMarket = true;
+                                  console.log(`[WS] ✓ Matched market ${d.msg.ticker} in state - marking usingWs=true, confirmed=true`);
 
                                   return {
                                       ...m,
@@ -2306,7 +2308,10 @@ const KalshiDashboard = () => {
                           });
 
                           if (!foundMarket) {
-                              console.warn(`[WS] ⚠ Received ticker data for ${d.msg.ticker} but market not in current list`);
+                              const currentMarketIds = updated.map(m => m.realMarketId).filter(Boolean);
+                              console.warn(`[WS] ⚠ Received ticker data for ${d.msg.ticker} but market not in current list. Current markets:`, currentMarketIds);
+                          } else {
+                              console.log(`[WS] ✓ Successfully updated market ${d.msg.ticker} in state`);
                           }
 
                           return updated;
@@ -2398,7 +2403,7 @@ const KalshiDashboard = () => {
 
       if (newTickers.length === 0) return; // No new markets to subscribe
 
-      console.log(`[WS] Subscribing to ${newTickers.length} new markets...`);
+      console.log(`[WS] Subscribing to ${newTickers.length} new markets:`, newTickers);
 
       // Send batch subscription
       const subId = subscriptionIdCounter.current++;
