@@ -2294,32 +2294,43 @@ const KalshiDashboard = () => {
 
                   // Handle ticker updates
                   if (d.type === 'ticker' && d.msg) {
-                      setMarkets(curr => curr.map(m => {
-                          if (m.realMarketId === d.msg.ticker) {
-                              // Mark as confirmed subscription if we were tracking it as pending
-                              if (pendingSubscriptionsRef.current.has(d.msg.ticker)) {
-                                  console.log(`[WS] ✓ Ticker data received for ${d.msg.ticker} - subscription confirmed`);
-                                  pendingSubscriptionsRef.current.delete(d.msg.ticker);
-                              }
+                      let foundMarket = false;
+                      setMarkets(curr => {
+                          const updated = curr.map(m => {
+                              if (m.realMarketId === d.msg.ticker) {
+                                  foundMarket = true;
 
-                              return {
-                                  ...m,
-                                  bestBid: d.msg.yes_bid,
-                                  bestAsk: d.msg.yes_ask,
-                                  lastChange: Date.now(),
-                                  kalshiLastUpdate: Date.now(),
-                                  usingWs: true,
-                                  wsSubscriptionConfirmed: true,
-                                  lastWsTimestamp: Date.now()
-                              };
+                                  // Mark as confirmed subscription if we were tracking it as pending
+                                  if (pendingSubscriptionsRef.current.has(d.msg.ticker)) {
+                                      console.log(`[WS] ✓ Ticker data received for ${d.msg.ticker} - subscription confirmed`);
+                                      pendingSubscriptionsRef.current.delete(d.msg.ticker);
+                                  }
+
+                                  return {
+                                      ...m,
+                                      bestBid: d.msg.yes_bid,
+                                      bestAsk: d.msg.yes_ask,
+                                      lastChange: Date.now(),
+                                      kalshiLastUpdate: Date.now(),
+                                      usingWs: true,
+                                      wsSubscriptionConfirmed: true,
+                                      lastWsTimestamp: Date.now()
+                                  };
+                              }
+                              return m;
+                          });
+
+                          if (!foundMarket) {
+                              console.warn(`[WS] ⚠ Received ticker data for ${d.msg.ticker} but market not in current list`);
                           }
-                          return m;
-                      }));
+
+                          return updated;
+                      });
                   }
 
                   // Handle subscription confirmations (type: "ok" with sid)
                   if (d.type === 'ok' && d.msg?.sid && d.msg?.market_tickers) {
-                      console.log(`[WS] ✓ Subscription confirmation received:`, d);
+                      console.log(`[WS] ✓ Subscription confirmation received for ${d.msg.market_tickers.length} markets:`, d);
 
                       const sid = d.msg.sid;
                       const tickers = d.msg.market_tickers;
@@ -2328,20 +2339,25 @@ const KalshiDashboard = () => {
                       tickers.forEach(ticker => {
                           subscriptionSidsRef.current.set(ticker, sid);
                           pendingSubscriptionsRef.current.delete(ticker);
-
-                          console.log(`[WS] ✓ Stored sid ${sid} for ticker ${ticker} (request id: ${d.id})`);
                       });
+
+                      console.log(`[WS] ✓ Stored sid ${sid} for ${tickers.length} tickers (request id: ${d.id})`);
 
                       // Clean up the request ID mapping
                       requestIdToTickerRef.current.delete(d.id);
 
                       // Mark markets as having confirmed subscription
+                      let confirmedCount = 0;
                       setMarkets(curr => curr.map(m => {
                           if (tickers.includes(m.realMarketId)) {
+                              confirmedCount++;
+                              console.log(`[WS] ✓ Marking ${m.realMarketId} as wsSubscriptionConfirmed=true`);
                               return { ...m, wsSubscriptionConfirmed: true };
                           }
                           return m;
                       }));
+
+                      console.log(`[WS] ✓ Confirmed ${confirmedCount} markets in UI state`);
                   }
 
                   // Handle subscription errors
