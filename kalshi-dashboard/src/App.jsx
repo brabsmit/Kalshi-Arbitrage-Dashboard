@@ -1414,14 +1414,14 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                 <td className="px-4 py-3 text-center">
                     <div className="font-mono text-slate-500 flex items-center justify-center gap-1">
                         {/* WebSocket Status Indicators */}
-                        {market.usingWs && market.wsSubscriptionConfirmed && (
-                            <Zap size={12} className="text-emerald-500" title="✓ Live WebSocket - Confirmed" />
+                        {market.isWsSubscribed && market.priceSource === 'WS' && (
+                            <Zap size={12} className="text-emerald-500" title="✓ Live WebSocket Data" />
                         )}
-                        {market.usingWs && !market.wsSubscriptionConfirmed && (
-                            <Zap size={12} className="text-amber-500 animate-pulse" title="⏳ WebSocket - Pending Confirmation" />
+                        {market.isWsSubscribed && market.priceSource === 'HTTP' && (
+                            <Zap size={12} className="text-amber-500" title="⏳ WebSocket Subscribed (using HTTP fallback)" />
                         )}
-                        {market.wsSubscriptionFailed && (
-                            <Zap size={12} className="text-red-500" title="✗ WebSocket - Subscription Failed" />
+                        {!market.isWsSubscribed && market.isMatchFound && (
+                            <Zap size={12} className="text-slate-500" title="HTTP Only" />
                         )}
                         {market.bestBid}¢ / {market.bestAsk}¢
                     </div>
@@ -2112,39 +2112,37 @@ const KalshiDashboard = () => {
                   let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
                   const prevMarket = prev.find(m => m.id === game.id);
 
-                  // --- WEBSOCKET PRIORITY LOGIC ---
-                  // Distinguish between subscription status and data freshness
-                  const isSubscribedToWs = prevMarket?.wsSubscriptionConfirmed || false;
-                  let isWsDataFresh = false;
-                  let wsBestBid = 0;
-                  let wsBestAsk = 0;
-                  let wsLastTimestamp = 0;
+                  // --- WEBSOCKET AS SOURCE OF TRUTH ---
+                  // Check if we have fresh WebSocket prices for this market
+                  let bestBid = realMatch?.yes_bid || 0;
+                  let bestAsk = realMatch?.yes_ask || 0;
+                  let kalshiLastUpdate = processingTime;
+                  let priceSource = 'HTTP';
+                  const isSubscribed = wsSubscriptionsRef.current.has(realMatch?.ticker);
 
-                  if (prevMarket && prevMarket.wsSubscriptionConfirmed) {
-                      const isConnected = wsStatus === 'OPEN';
-                      const isFresh = (Date.now() - (prevMarket.lastWsTimestamp || 0)) < 15000; // 15s threshold
+                  if (realMatch?.ticker && wsPricesRef.current.has(realMatch.ticker)) {
+                      const wsPrice = wsPricesRef.current.get(realMatch.ticker);
+                      const age = Date.now() - wsPrice.timestamp;
+                      const isFresh = age < 30000; // 30s freshness threshold
 
-                      if (isConnected && isFresh) {
-                          isWsDataFresh = true;
-                          wsBestBid = prevMarket.bestBid;
-                          wsBestAsk = prevMarket.bestAsk;
-                          wsLastTimestamp = prevMarket.lastWsTimestamp;
+                      if (isFresh && wsStatus === 'OPEN') {
+                          // WebSocket is source of truth
+                          bestBid = wsPrice.bid;
+                          bestAsk = wsPrice.ask;
+                          kalshiLastUpdate = wsPrice.timestamp;
+                          priceSource = 'WS';
                       }
                   }
 
-                  // Debug logging for WS state
-                  if (realMatch?.ticker && isSubscribedToWs) {
-                      console.log(`[SCANNER] ${realMatch.ticker}: isSubscribedToWs=${isSubscribedToWs}, isWsDataFresh=${isWsDataFresh}`);
-                  }
-
                   // --- MATCH PERSISTENCE (Fix for "No Match" with Active WS) ---
-                  if (!realMatch && isWsDataFresh && prevMarket && prevMarket.isMatchFound) {
-                       // If we have fresh WS data, trust the previous match even if REST failed
+                  if (!realMatch && priceSource === 'WS' && prevMarket && prevMarket.isMatchFound) {
+                       // If we have fresh WS data but REST failed, trust the previous match
+                       const wsPrice = wsPricesRef.current.get(prevMarket.realMarketId);
                        realMatch = {
                            ticker: prevMarket.realMarketId,
                            isInverse: prevMarket.isInverse,
-                           yes_bid: prevMarket.bestBid,
-                           yes_ask: prevMarket.bestAsk,
+                           yes_bid: wsPrice.bid,
+                           yes_ask: wsPrice.ask,
                            volume: prevMarket.volume,
                            open_interest: prevMarket.openInterest
                        };
@@ -2168,14 +2166,10 @@ const KalshiDashboard = () => {
 
                   const volatility = calculateVolatility(history);
                   // ---------------------------
-                  
-                  let { yes_bid: bestBid, yes_ask: bestAsk, volume, open_interest: openInterest } = realMatch || {};
 
-                  // Prioritize WS data if fresh
-                  if (isWsDataFresh) {
-                      bestBid = wsBestBid;
-                      bestAsk = wsBestAsk;
-                  }
+                  // Get volume and open interest from realMatch (only available via HTTP)
+                  const volume = realMatch?.volume || 0;
+                  const openInterest = realMatch?.open_interest || 0;
 
                   const newMarket = {
                       id: game.id,
@@ -2190,10 +2184,10 @@ const KalshiDashboard = () => {
                       bestAsk: bestAsk || 0,
                       isMatchFound: !!realMatch,
                       realMarketId: realMatch?.ticker,
-                      volume: volume || 0,
-                      openInterest: openInterest || 0,
+                      volume: volume,
+                      openInterest: openInterest,
                       lastChange: processingTime,
-                      kalshiLastUpdate: isWsDataFresh ? wsLastTimestamp : processingTime,
+                      kalshiLastUpdate: kalshiLastUpdate,
                       oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100),
                       history: history,
@@ -2202,23 +2196,9 @@ const KalshiDashboard = () => {
                       oddsSpread: spread,
                       oddsSources: vigFreeProbs.map(v => v.source),
                       isInverse: realMatch?.isInverse || false,
-                      usingWs: isSubscribedToWs, // Show Zap if subscribed, regardless of data freshness
-                      wsSubscriptionConfirmed: prevMarket?.wsSubscriptionConfirmed || false,
-                      lastWsTimestamp: isWsDataFresh ? wsLastTimestamp : (prevMarket?.lastWsTimestamp || 0)
+                      priceSource: priceSource, // 'WS' or 'HTTP'
+                      isWsSubscribed: isSubscribed // For UI Zap icon
                   };
-
-                  // Debug: Log market creation with WS flags
-                  if (realMatch?.ticker && (isSubscribedToWs || prevMarket?.wsSubscriptionConfirmed)) {
-                      console.log(`[SCANNER] Creating market ${realMatch.ticker}: usingWs=${newMarket.usingWs}, wsSubscriptionConfirmed=${newMarket.wsSubscriptionConfirmed}, prevWasConfirmed=${prevMarket?.wsSubscriptionConfirmed}, prevUsingWs=${prevMarket?.usingWs}`);
-                  }
-
-                  // Debug: Log if flags are being lost
-                  if (realMatch?.ticker && prevMarket?.wsSubscriptionConfirmed && !newMarket.wsSubscriptionConfirmed) {
-                      console.error(`[SCANNER] ⚠️ LOST wsSubscriptionConfirmed for ${realMatch.ticker}!`);
-                  }
-                  if (realMatch?.ticker && prevMarket?.usingWs && !newMarket.usingWs) {
-                      console.error(`[SCANNER] ⚠️ LOST usingWs for ${realMatch.ticker}!`);
-                  }
 
                   if (prevMarket) {
                       const isSame =
@@ -2227,12 +2207,12 @@ const KalshiDashboard = () => {
                         prevMarket.fairValue === newMarket.fairValue &&
                         prevMarket.volatility.toFixed(2) === newMarket.volatility.toFixed(2) &&
                         prevMarket.oddsLastUpdate === newMarket.oddsLastUpdate &&
+                        prevMarket.kalshiLastUpdate === newMarket.kalshiLastUpdate &&
                         prevMarket.volume === newMarket.volume &&
                         prevMarket.openInterest === newMarket.openInterest &&
                         prevMarket.isMatchFound === newMarket.isMatchFound &&
-                        prevMarket.usingWs === newMarket.usingWs &&
-                        prevMarket.wsSubscriptionConfirmed === newMarket.wsSubscriptionConfirmed &&
-                        prevMarket.lastWsTimestamp === newMarket.lastWsTimestamp &&
+                        prevMarket.priceSource === newMarket.priceSource &&
+                        prevMarket.isWsSubscribed === newMarket.isWsSubscribed &&
                         prevMarket.oddsDisplay === newMarket.oddsDisplay &&
                         prevMarket.commenceTime === newMarket.commenceTime &&
                         prevMarket.event === newMarket.event;
@@ -2277,15 +2257,65 @@ const KalshiDashboard = () => {
 
               ws = new WebSocket(wsUrl);
 
-              ws.onopen = () => {
+              ws.onopen = async () => {
                   if (!isMounted) return;
                   setWsStatus('OPEN');
                   reconnectAttempts = 0; // Reset on successful connection
                   console.log('[WS] Connected successfully');
 
-                  // Clear subscription state on reconnect - markets will be re-subscribed automatically
-                  subscribedTickersRef.current.clear();
-                  console.log('[WS] Cleared subscription state. Markets will re-subscribe on next update.');
+                  // Clear subscription state on reconnect
+                  wsSubscriptionsRef.current.clear();
+                  wsPricesRef.current.clear();
+
+                  // BATCH SUBSCRIBE: Get all relevant markets and subscribe in one request
+                  try {
+                      const marketsToSubscribe = new Set();
+
+                      // 1. Subscribe to markets from selected sports
+                      for (const sportKey of config.selectedSports) {
+                          const sport = sportsList.find(s => s.key === sportKey);
+                          if (!sport || !sport.kalshiSeries) continue;
+
+                          const ts = Date.now();
+                          const headers = {
+                              'KALSHI-ACCESS-KEY': walletKeys.keyId,
+                              'KALSHI-ACCESS-SIGNATURE': await signRequest(walletKeys.privateKey, "GET", "/trade-api/v2/markets", ts),
+                              'KALSHI-ACCESS-TIMESTAMP': ts.toString()
+                          };
+
+                          const response = await fetch(
+                              `/api/kalshi/markets?limit=100&status=open&series_ticker=${sport.kalshiSeries}`,
+                              { headers }
+                          );
+
+                          if (response.ok) {
+                              const data = await response.json();
+                              (data.markets || []).forEach(m => {
+                                  if (m.ticker) marketsToSubscribe.add(m.ticker);
+                              });
+                          }
+                      }
+
+                      // 2. Add currently visible markets from scanner
+                      markets.forEach(m => {
+                          if (m.realMarketId) marketsToSubscribe.add(m.realMarketId);
+                      });
+
+                      // Send batch subscription
+                      const tickersArray = Array.from(marketsToSubscribe);
+                      if (tickersArray.length > 0) {
+                          ws.send(JSON.stringify({
+                              id: subscriptionIdCounter.current++,
+                              cmd: "subscribe",
+                              params: { channels: ["ticker"], market_tickers: tickersArray }
+                          }));
+                          console.log(`[WS] 📡 Batch subscribed to ${tickersArray.length} markets`);
+                      } else {
+                          console.log('[WS] No markets to subscribe to');
+                      }
+                  } catch (error) {
+                      console.error('[WS] Failed to fetch markets for batch subscribe:', error);
+                  }
               };
 
               ws.onmessage = (e) => {
@@ -2297,46 +2327,50 @@ const KalshiDashboard = () => {
                       console.log('[WS] Message received:', d);
                   }
 
-                  // Handle ticker updates
+                  // Handle ticker updates - store in dedicated price map
                   if (d.type === 'ticker' && d.msg) {
-                      const ticker = d.msg.market_ticker; // Kalshi uses market_ticker, not ticker
-                      console.log(`[WS] Received ticker data for: ${ticker} (${d.msg.yes_bid}/${d.msg.yes_ask})`);
-                      let foundMarket = false;
-                      setMarkets(curr => {
-                          const updated = curr.map(m => {
-                              if (m.realMarketId === ticker) {
-                                  foundMarket = true;
-                                  console.log(`[WS] ✓ Matched market ${ticker} in state - marking usingWs=true, confirmed=true`);
+                      const ticker = d.msg.market_ticker;
+                      const now = Date.now();
 
-                                  return {
-                                      ...m,
-                                      bestBid: d.msg.yes_bid,
-                                      bestAsk: d.msg.yes_ask,
-                                      lastChange: Date.now(),
-                                      kalshiLastUpdate: Date.now(),
-                                      usingWs: true,
-                                      wsSubscriptionConfirmed: true,
-                                      lastWsTimestamp: Date.now()
-                                  };
-                              }
-                              return m;
-                          });
-
-                          if (!foundMarket) {
-                              const currentMarketIds = updated.map(m => m.realMarketId).filter(Boolean);
-                              console.warn(`[WS] ⚠ Received ticker data for ${ticker} but market not in current list. Current markets:`, currentMarketIds);
-                          } else {
-                              console.log(`[WS] ✓ Successfully updated market ${ticker} in state`);
-                          }
-
-                          return updated;
+                      // Store prices in dedicated map (source of truth)
+                      wsPricesRef.current.set(ticker, {
+                          bid: d.msg.yes_bid,
+                          ask: d.msg.yes_ask,
+                          timestamp: now
                       });
+
+                      // Mark subscription as confirmed if not already
+                      if (!wsSubscriptionsRef.current.has(ticker)) {
+                          wsSubscriptionsRef.current.set(ticker, {
+                              sid: d.sid,
+                              confirmedAt: now,
+                              lastUpdate: now
+                          });
+                      } else {
+                          const sub = wsSubscriptionsRef.current.get(ticker);
+                          sub.lastUpdate = now;
+                      }
+
+                      console.log(`[WS] ✓ Updated prices for ${ticker}: ${d.msg.yes_bid}/${d.msg.yes_ask}`);
                   }
 
-                  // Handle subscription confirmations - just log them, we mark confirmed when data arrives
+                  // Handle subscription confirmations
                   if (d.type === 'ok' || d.type === 'subscribed') {
-                      const tickerCount = d.msg?.market_tickers?.length || '?';
-                      console.log(`[WS] ✓ Subscription confirmed (${d.type}, id: ${d.id}, tickers: ${tickerCount})`);
+                      const tickers = d.msg?.market_tickers || [];
+                      const sid = d.msg?.sid;
+                      const now = Date.now();
+
+                      tickers.forEach(ticker => {
+                          if (!wsSubscriptionsRef.current.has(ticker)) {
+                              wsSubscriptionsRef.current.set(ticker, {
+                                  sid: sid,
+                                  confirmedAt: now,
+                                  lastUpdate: now
+                              });
+                          }
+                      });
+
+                      console.log(`[WS] ✓ Subscription confirmed: ${tickers.length} markets (sid: ${sid})`);
                   }
 
                   // Handle subscription errors
@@ -2395,36 +2429,32 @@ const KalshiDashboard = () => {
       };
   }, [isRunning, walletKeys]);
 
-  const subscribedTickersRef = useRef(new Set()); // Simple set of subscribed tickers
+  // ===== WEBSOCKET SUBSCRIPTION MANAGER =====
+  // Separate subscription state from market objects for cleaner architecture
+  const wsSubscriptionsRef = useRef(new Map()); // ticker -> { sid, confirmedAt, lastUpdate, prices: {bid, ask} }
+  const wsPricesRef = useRef(new Map()); // ticker -> { bid, ask, timestamp }
   let subscriptionIdCounter = useRef(1000); // Incrementing ID for subscription requests
 
-  // CLEAN REFACTOR: Simple subscription management
-  // Subscribe to markets as they appear, never unsubscribe (Kalshi handles stale subscriptions)
+  // Incremental subscription: Add new markets that appear in scanner
+  // (Most markets are already subscribed via batch on connect)
   useEffect(() => {
       if (wsRef.current?.readyState !== WebSocket.OPEN || !isRunning) return;
 
-      // Get current market tickers
-      const currentTickers = markets.map(m => m.realMarketId).filter(Boolean);
+      // Find markets not yet subscribed
+      const newTickers = markets
+          .map(m => m.realMarketId)
+          .filter(ticker => ticker && !wsSubscriptionsRef.current.has(ticker));
 
-      // Find new tickers that need subscription
-      const newTickers = currentTickers.filter(t => !subscribedTickersRef.current.has(t));
+      if (newTickers.length === 0) return;
 
-      if (newTickers.length === 0) return; // No new markets to subscribe
-
-      console.log(`[WS] Subscribing to ${newTickers.length} new markets:`, newTickers);
-
-      // Send batch subscription
-      const subId = subscriptionIdCounter.current++;
+      // Subscribe to new markets
       wsRef.current.send(JSON.stringify({
-          id: subId,
+          id: subscriptionIdCounter.current++,
           cmd: "subscribe",
           params: { channels: ["ticker"], market_tickers: newTickers }
       }));
 
-      // Mark as subscribed (don't wait for confirmation)
-      newTickers.forEach(ticker => subscribedTickersRef.current.add(ticker));
-
-      console.log(`[WS] Sent subscription request for ${newTickers.length} markets (id: ${subId})`);
+      console.log(`[WS] ➕ Incremental subscribe to ${newTickers.length} new markets`);
   }, [markets, isRunning]);
 
   // Note: No need to monitor pending subscriptions - we mark markets confirmed when ticker data arrives
