@@ -73,6 +73,7 @@ Optional:
 
 - [Deployment Guide](./DEPLOYMENT.md) - Complete deployment instructions
 - [Strategy Documentation](./strategy.md) - Arbitrage strategy details
+- Vercel
 
 ## License
 
