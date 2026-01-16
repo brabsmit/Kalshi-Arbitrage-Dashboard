@@ -82,4 +82,47 @@ export default defineConfig({
       }
     },
   },
+  preview: {
+    host: '0.0.0.0',
+    port: process.env.PORT || 3000,
+    strictPort: true,
+    proxy: {
+      '/api/kalshi': {
+        target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL}/trade-api/v2` : 'https://api.elections.kalshi.com/trade-api/v2',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/kalshi/, ''),
+        secure: process.env.KALSHI_API_URL ? !process.env.KALSHI_API_URL.includes('localhost') : true,
+        configure: (proxy, _options) => {
+          const target = process.env.KALSHI_API_URL || 'https://api.elections.kalshi.com';
+          proxy.on('proxyReq', (proxyReq, req, _res) => {
+            proxyReq.setHeader('Origin', target);
+          });
+        },
+      },
+      '/kalshi-ws': {
+        target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL.replace('https', 'wss')}/trade-api/ws/v2` : 'wss://api.elections.kalshi.com/trade-api/ws/v2',
+        ws: true,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/kalshi-ws/, ''),
+        secure: process.env.KALSHI_API_URL ? !process.env.KALSHI_API_URL.includes('localhost') : true,
+        configure: (proxy, _options) => {
+          proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+            const origin = process.env.KALSHI_API_URL || 'https://api.elections.kalshi.com';
+            proxyReq.setHeader('Origin', origin);
+
+            const url = new URL(req.url, 'http://localhost');
+            const key = url.searchParams.get('key');
+            const sig = url.searchParams.get('sig');
+            const ts = url.searchParams.get('ts');
+
+            if (key && sig && ts) {
+              proxyReq.setHeader('KALSHI-ACCESS-KEY', key);
+              proxyReq.setHeader('KALSHI-ACCESS-SIGNATURE', sig);
+              proxyReq.setHeader('KALSHI-ACCESS-TIMESTAMP', ts);
+            }
+          });
+        },
+      }
+    },
+  }
 })
