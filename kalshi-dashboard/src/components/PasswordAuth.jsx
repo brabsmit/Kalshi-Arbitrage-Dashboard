@@ -15,6 +15,14 @@ const PasswordAuth = ({ onAuthenticated }) => {
         // Get password from environment variable
         const correctPassword = import.meta.env.VITE_APP_PASSWORD;
 
+        // Debug: Log if password is undefined (remove in production)
+        if (!correctPassword) {
+            console.error('VITE_APP_PASSWORD is not set!');
+            setError('Configuration error: Password not set. Check Railway environment variables.');
+            setIsLoading(false);
+            return;
+        }
+
         // Simple check - in production, you might want to hash this
         setTimeout(() => {
             if (password === correctPassword) {

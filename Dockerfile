@@ -14,6 +14,14 @@ RUN npm install
 # Copy application code
 COPY kalshi-dashboard ./
 
+# Accept build arguments for environment variables
+ARG VITE_APP_PASSWORD
+ARG VITE_ODDS_API_KEY
+
+# Set as environment variables for build
+ENV VITE_APP_PASSWORD=$VITE_APP_PASSWORD
+ENV VITE_ODDS_API_KEY=$VITE_ODDS_API_KEY
+
 # Build the application
 RUN npm run build
 
