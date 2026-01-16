@@ -2174,11 +2174,11 @@ const KalshiDashboard = () => {
                       id: game.id,
                       event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
                       commenceTime: game.commence_time,
-                      americanOdds: targetOutcome.price, 
-                      sportsbookOdds: targetOutcome.price, 
-                      opposingOdds: opposingOutcome ? opposingOutcome.price : null, 
-                      oddsDisplay: oddsDisplay, 
-                      vigFreeProb: vigFreeProb * 100, 
+                      americanOdds: targetOutcome.price,
+                      sportsbookOdds: targetOutcome.price,
+                      opposingOdds: opposingOutcome ? opposingOutcome.price : null,
+                      oddsDisplay: oddsDisplay,
+                      vigFreeProb: vigFreeProb * 100,
                       bestBid: bestBid || 0,
                       bestAsk: bestAsk || 0,
                       isMatchFound: !!realMatch,
@@ -2188,7 +2188,7 @@ const KalshiDashboard = () => {
                       lastChange: processingTime,
                       kalshiLastUpdate: isWsActive ? wsLastTimestamp : processingTime,
                       oddsLastUpdate: maxLastUpdate,
-                      fairValue: Math.floor(vigFreeProb * 100), 
+                      fairValue: Math.floor(vigFreeProb * 100),
                       history: history,
                       volatility: volatility,
                       bookmakerCount: vigFreeProbs.length,
@@ -2196,6 +2196,7 @@ const KalshiDashboard = () => {
                       oddsSources: vigFreeProbs.map(v => v.source),
                       isInverse: realMatch?.isInverse || false,
                       usingWs: isWsActive,
+                      wsSubscriptionConfirmed: prevMarket?.wsSubscriptionConfirmed || false,
                       lastWsTimestamp: wsLastTimestamp
                   };
 
