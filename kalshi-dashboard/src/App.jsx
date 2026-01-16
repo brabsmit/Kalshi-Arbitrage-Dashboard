@@ -2267,6 +2267,7 @@ const KalshiDashboard = () => {
                   const tickersToResubscribe = Array.from(subscribedTickersRef.current);
                   subscribedTickersRef.current.clear();
                   pendingSubscriptionsRef.current.clear();
+                  subscriptionSidsRef.current.clear(); // Clear subscription IDs
 
                   // Reset pre-warm flag to allow pre-warming on reconnection
                   prewarmCompleted.current = false;
@@ -2317,15 +2318,21 @@ const KalshiDashboard = () => {
 
                   // Handle subscription confirmations
                   if (d.type === 'subscribed' && d.msg?.sid) {
-                      // Extract ticker from subscription ID (sid)
-                      // The sid format may vary, so we'll also rely on ticker data reception
                       console.log(`[WS] ✓ Subscription confirmation received:`, d);
 
-                      // Mark market as having confirmed subscription
-                      if (d.msg.market_ticker) {
+                      // Store the subscription ID (sid) for later unsubscription
+                      if (d.msg.market_ticker && d.msg.sid) {
+                          const ticker = d.msg.market_ticker;
+                          const sid = d.msg.sid;
+
+                          subscriptionSidsRef.current.set(ticker, sid);
+                          pendingSubscriptionsRef.current.delete(ticker);
+
+                          console.log(`[WS] ✓ Stored sid ${sid} for ticker ${ticker}`);
+
+                          // Mark market as having confirmed subscription
                           setMarkets(curr => curr.map(m => {
-                              if (m.realMarketId === d.msg.market_ticker) {
-                                  pendingSubscriptionsRef.current.delete(m.realMarketId);
+                              if (m.realMarketId === ticker) {
                                   return { ...m, wsSubscriptionConfirmed: true };
                               }
                               return m;
@@ -2400,6 +2407,7 @@ const KalshiDashboard = () => {
   const subscribedTickersRef = useRef(new Set());
   const prewarmCompleted = useRef(false);
   const pendingSubscriptionsRef = useRef(new Map()); // Track pending subscriptions: ticker -> {id, timestamp, retryCount}
+  const subscriptionSidsRef = useRef(new Map()); // Track subscription IDs returned by Kalshi: ticker -> sid
 
   // OPTIMIZATION: Pre-warm WebSocket subscriptions
   // Subscribe to high-volume markets when WebSocket connects (before they appear in scanner)
@@ -2477,11 +2485,22 @@ const KalshiDashboard = () => {
       if (toRemove.length > 0) {
           console.log(`[WS] Unsubscribing from ${toRemove.length} markets...`);
           toRemove.forEach((ticker, i) => {
-               wsRef.current.send(JSON.stringify({
-                   id: 2000 + i, // distinct ID range for unsubs
-                   cmd: "unsubscribe",
-                   params: { channels: ["ticker"], market_ticker: ticker }
-               }));
+               const sid = subscriptionSidsRef.current.get(ticker);
+
+               if (sid) {
+                   wsRef.current.send(JSON.stringify({
+                       id: 2000 + i, // distinct ID range for unsubs
+                       cmd: "unsubscribe",
+                       params: { sids: [sid] }
+                   }));
+
+                   // Clean up tracking refs
+                   subscriptionSidsRef.current.delete(ticker);
+                   console.log(`[WS] Unsubscribed from ${ticker} using sid ${sid}`);
+               } else {
+                   console.warn(`[WS] No sid found for ${ticker}, cannot unsubscribe`);
+               }
+
                prevTickers.delete(ticker);
                pendingSubscriptionsRef.current.delete(ticker);
 
