@@ -2443,18 +2443,18 @@ const KalshiDashboard = () => {
 
               console.log(`[WS] Pre-warming ${tickersToPrewarm.length} high-volume markets`);
 
-              tickersToPrewarm.forEach((ticker, i) => {
-                  if (wsRef.current?.readyState === WebSocket.OPEN) {
-                      const subId = 1000 + i; // Numeric ID for pre-warm subscriptions
-                      wsRef.current.send(JSON.stringify({
-                          id: subId,
-                          cmd: "subscribe",
-                          params: { channels: ["ticker"], market_ticker: ticker }
-                      }));
-                      subscribedTickersRef.current.add(ticker);
+              // Send batch subscription for all pre-warm tickers
+              if (wsRef.current?.readyState === WebSocket.OPEN && tickersToPrewarm.length > 0) {
+                  const subId = 1000; // Single ID for batch subscription
+                  wsRef.current.send(JSON.stringify({
+                      id: subId,
+                      cmd: "subscribe",
+                      params: { channels: ["ticker"], market_tickers: tickersToPrewarm }
+                  }));
 
-                      // Track request ID -> ticker mapping for confirmation
-                      requestIdToTickerRef.current.set(subId, ticker);
+                  // Track all tickers as subscribed and pending
+                  tickersToPrewarm.forEach(ticker => {
+                      subscribedTickersRef.current.add(ticker);
 
                       // Track as pending subscription
                       pendingSubscriptionsRef.current.set(ticker, {
@@ -2463,10 +2463,13 @@ const KalshiDashboard = () => {
                           retryCount: 0,
                           type: 'prewarm'
                       });
-                  }
-              });
+                  });
 
-              console.log(`[WS] Pre-warm complete. Subscribed to ${tickersToPrewarm.length} markets.`);
+                  // Track request ID -> tickers mapping for confirmation
+                  requestIdToTickerRef.current.set(subId, tickersToPrewarm);
+
+                  console.log(`[WS] Pre-warm complete. Sent batch subscription for ${tickersToPrewarm.length} markets.`);
+              }
           })
           .catch(err => {
               console.error('[WS] Pre-warm failed:', err);
@@ -2490,59 +2493,74 @@ const KalshiDashboard = () => {
       // Early exit to prevent unnecessary processing if sets are identical
       if (toAdd.length === 0 && toRemove.length === 0) return;
 
-      if (toRemove.length > 0) {
-          console.log(`[WS] Unsubscribing from ${toRemove.length} markets...`);
-          toRemove.forEach((ticker, i) => {
-               const sid = subscriptionSidsRef.current.get(ticker);
+      // Get the main subscription sid (should be the same for all ticker subscriptions)
+      const mainSid = subscriptionSidsRef.current.values().next().value;
 
-               if (sid) {
-                   wsRef.current.send(JSON.stringify({
-                       id: 2000 + i, // distinct ID range for unsubs
-                       cmd: "unsubscribe",
-                       params: { sids: [sid] }
-                   }));
+      if (toRemove.length > 0 && mainSid) {
+          console.log(`[WS] Removing ${toRemove.length} markets from subscription (sid: ${mainSid})...`);
 
-                   // Clean up tracking refs
-                   subscriptionSidsRef.current.delete(ticker);
-                   console.log(`[WS] Unsubscribed from ${ticker} using sid ${sid}`);
-               } else {
-                   console.warn(`[WS] No sid found for ${ticker}, cannot unsubscribe`);
-               }
+          wsRef.current.send(JSON.stringify({
+              id: 2000,
+              cmd: "update_subscription",
+              params: {
+                  sid: mainSid,
+                  market_tickers: toRemove,
+                  action: "delete_markets"
+              }
+          }));
 
-               prevTickers.delete(ticker);
-               pendingSubscriptionsRef.current.delete(ticker);
+          // Clean up tracking for removed tickers
+          toRemove.forEach(ticker => {
+              prevTickers.delete(ticker);
+              pendingSubscriptionsRef.current.delete(ticker);
+              // Note: We keep the sid in subscriptionSidsRef since it's still valid
 
-               // Clear WS status from markets being unsubscribed
-               setMarkets(curr => curr.map(m => {
-                   if (m.realMarketId === ticker) {
-                       return { ...m, usingWs: false, wsSubscriptionConfirmed: false };
-                   }
-                   return m;
-               }));
+              // Clear WS status from markets being unsubscribed
+              setMarkets(curr => curr.map(m => {
+                  if (m.realMarketId === ticker) {
+                      return { ...m, usingWs: false, wsSubscriptionConfirmed: false };
+                  }
+                  return m;
+              }));
           });
       }
 
       if (toAdd.length > 0) {
-          console.log(`[WS] Subscribing to ${toAdd.length} markets...`);
-          toAdd.forEach((ticker, i) => {
-               const subId = 3000 + i;
-               wsRef.current.send(JSON.stringify({
-                   id: subId, // distinct ID range for new subs
-                   cmd: "subscribe",
-                   params: { channels: ["ticker"], market_ticker: ticker }
-               }));
-               prevTickers.add(ticker);
+          console.log(`[WS] Adding ${toAdd.length} markets to subscription...`);
 
-               // Track request ID -> ticker mapping for confirmation
-               requestIdToTickerRef.current.set(subId, ticker);
+          if (mainSid) {
+              // Update existing subscription
+              wsRef.current.send(JSON.stringify({
+                  id: 3000,
+                  cmd: "update_subscription",
+                  params: {
+                      sid: mainSid,
+                      market_tickers: toAdd,
+                      action: "add_markets"
+                  }
+              }));
+          } else {
+              // No existing subscription, create new one
+              const subId = 3000;
+              wsRef.current.send(JSON.stringify({
+                  id: subId,
+                  cmd: "subscribe",
+                  params: { channels: ["ticker"], market_tickers: toAdd }
+              }));
+              requestIdToTickerRef.current.set(subId, toAdd);
+          }
 
-               // Track as pending subscription
-               pendingSubscriptionsRef.current.set(ticker, {
-                   id: subId,
-                   timestamp: Date.now(),
-                   retryCount: 0,
-                   type: 'dynamic'
-               });
+          // Track all tickers as subscribed and pending
+          toAdd.forEach(ticker => {
+              prevTickers.add(ticker);
+
+              // Track as pending subscription
+              pendingSubscriptionsRef.current.set(ticker, {
+                  id: mainSid || 3000,
+                  timestamp: Date.now(),
+                  retryCount: 0,
+                  type: 'dynamic'
+              });
           });
       }
   }, [markets, wsStatus]);
