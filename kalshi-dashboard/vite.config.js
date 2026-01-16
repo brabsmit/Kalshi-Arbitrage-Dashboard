@@ -86,6 +86,11 @@ export default defineConfig({
     host: '0.0.0.0',
     port: process.env.PORT || 3000,
     strictPort: true,
+    allowedHosts: [
+      '.railway.app',
+      '.up.railway.app',
+      'bryan-desktop.ddns.net'
+    ],
     proxy: {
       '/api/kalshi': {
         target: process.env.KALSHI_API_URL ? `${process.env.KALSHI_API_URL}/trade-api/v2` : 'https://api.elections.kalshi.com/trade-api/v2',
