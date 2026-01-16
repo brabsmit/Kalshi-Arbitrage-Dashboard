@@ -710,13 +710,26 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => (
+const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
+    const wsTooltip = wsStats ? `Subscribed: ${wsStats.subscribed} | Confirmed: ${wsStats.confirmed} | Pending: ${wsStats.pending} | Failed: ${wsStats.failed}` : '';
+
+    return (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
             <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot</h1>
             <div className="flex items-center gap-2 mt-1">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 ${wsStatus === 'OPEN' ? 'bg-green-100 text-green-700 border-green-200' : 'bg-slate-100 text-slate-500 border-slate-200'}`}>
-                    {wsStatus === 'OPEN' ? <Wifi size={10}/> : <WifiOff size={10}/>} {wsStatus === 'OPEN' ? 'WS LIVE' : 'WS OFF'}
+                <span
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
+                        wsStatus === 'OPEN' ? 'bg-green-100 text-green-700 border-green-200' :
+                        wsStatus === 'ERROR' ? 'bg-red-100 text-red-700 border-red-200' :
+                        'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}
+                    title={wsTooltip}
+                >
+                    {wsStatus === 'OPEN' ? <Wifi size={10}/> : <WifiOff size={10}/>}
+                    {wsStatus === 'OPEN' ? `WS LIVE ${wsStats ? `(${wsStats.subscribed})` : ''}` :
+                     wsStatus === 'ERROR' ? 'WS ERROR' :
+                     'WS OFF'}
                 </span>
                 {lastUpdated && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500"><Clock size={10} /> {lastUpdated.toLocaleTimeString()}</span>}
                 {apiUsage && (
@@ -768,7 +781,8 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </button>
         </div>
     </header>
-);
+    );
+};
 
 const ConnectModal = ({ isOpen, onClose, onConnect }) => {
     const backdropProps = useModalClose(isOpen, onClose);
@@ -1399,7 +1413,16 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                 </td>
                 <td className="px-4 py-3 text-center">
                     <div className="font-mono text-slate-500 flex items-center justify-center gap-1">
-                        {market.usingWs && <Zap size={12} className="text-amber-500" title="Live WebSocket Data" />}
+                        {/* WebSocket Status Indicators */}
+                        {market.usingWs && market.wsSubscriptionConfirmed && (
+                            <Zap size={12} className="text-emerald-500" title="✓ Live WebSocket - Confirmed" />
+                        )}
+                        {market.usingWs && !market.wsSubscriptionConfirmed && (
+                            <Zap size={12} className="text-amber-500 animate-pulse" title="⏳ WebSocket - Pending Confirmation" />
+                        )}
+                        {market.wsSubscriptionFailed && (
+                            <Zap size={12} className="text-red-500" title="✗ WebSocket - Subscription Failed" />
+                        )}
                         {market.bestBid}¢ / {market.bestAsk}¢
                     </div>
                     <LatencyDisplay timestamp={market.kalshiLastUpdate} />
@@ -2239,6 +2262,17 @@ const KalshiDashboard = () => {
                   reconnectAttempts = 0; // Reset on successful connection
                   console.log('[WS] Connected successfully');
 
+                  // ROBUSTNESS FIX: Clear subscription state on reconnect
+                  // Server-side subscriptions are lost during disconnect, so we need to re-subscribe
+                  const tickersToResubscribe = Array.from(subscribedTickersRef.current);
+                  subscribedTickersRef.current.clear();
+                  pendingSubscriptionsRef.current.clear();
+
+                  // Reset pre-warm flag to allow pre-warming on reconnection
+                  prewarmCompleted.current = false;
+
+                  console.log(`[WS] Cleared subscription state. Will re-subscribe to ${tickersToResubscribe.length} markets.`);
+
                   // Start heartbeat to keep connection alive
                   heartbeatInterval = setInterval(() => {
                       if (ws.readyState === WebSocket.OPEN) {
@@ -2254,22 +2288,50 @@ const KalshiDashboard = () => {
                   // Handle ticker updates
                   if (d.type === 'ticker' && d.msg) {
                       setMarkets(curr => curr.map(m => {
-                          if (m.realMarketId === d.msg.ticker) return {
-                              ...m,
-                              bestBid: d.msg.yes_bid,
-                              bestAsk: d.msg.yes_ask,
-                              lastChange: Date.now(),
-                              kalshiLastUpdate: Date.now(),
-                              usingWs: true,
-                              lastWsTimestamp: Date.now()
-                          };
+                          if (m.realMarketId === d.msg.ticker) {
+                              // Mark as confirmed subscription if we were tracking it as pending
+                              if (pendingSubscriptionsRef.current.has(d.msg.ticker)) {
+                                  console.log(`[WS] ✓ Ticker data received for ${d.msg.ticker} - subscription confirmed`);
+                                  pendingSubscriptionsRef.current.delete(d.msg.ticker);
+                              }
+
+                              return {
+                                  ...m,
+                                  bestBid: d.msg.yes_bid,
+                                  bestAsk: d.msg.yes_ask,
+                                  lastChange: Date.now(),
+                                  kalshiLastUpdate: Date.now(),
+                                  usingWs: true,
+                                  wsSubscriptionConfirmed: true,
+                                  lastWsTimestamp: Date.now()
+                              };
+                          }
                           return m;
                       }));
                   }
 
                   // Handle subscription confirmations
-                  if (d.type === 'subscribed' || d.sid) {
-                      console.log(`[WS] Subscription confirmed:`, d);
+                  if (d.type === 'subscribed' && d.msg?.sid) {
+                      // Extract ticker from subscription ID (sid)
+                      // The sid format may vary, so we'll also rely on ticker data reception
+                      console.log(`[WS] ✓ Subscription confirmation received:`, d);
+
+                      // Mark market as having confirmed subscription
+                      if (d.msg.market_ticker) {
+                          setMarkets(curr => curr.map(m => {
+                              if (m.realMarketId === d.msg.market_ticker) {
+                                  pendingSubscriptionsRef.current.delete(m.realMarketId);
+                                  return { ...m, wsSubscriptionConfirmed: true };
+                              }
+                              return m;
+                          }));
+                      }
+                  }
+
+                  // Handle subscription errors
+                  if (d.type === 'error' && d.msg) {
+                      console.error(`[WS] ✗ Subscription error:`, d);
+                      // Could implement retry logic here if needed
                   }
 
                   // Handle pong responses
@@ -2332,6 +2394,7 @@ const KalshiDashboard = () => {
 
   const subscribedTickersRef = useRef(new Set());
   const prewarmCompleted = useRef(false);
+  const pendingSubscriptionsRef = useRef(new Map()); // Track pending subscriptions: ticker -> {id, timestamp, retryCount}
 
   // OPTIMIZATION: Pre-warm WebSocket subscriptions
   // Subscribe to high-volume markets when WebSocket connects (before they appear in scanner)
@@ -2364,12 +2427,21 @@ const KalshiDashboard = () => {
 
               tickersToPrewarm.forEach((ticker, i) => {
                   if (wsRef.current?.readyState === WebSocket.OPEN) {
+                      const subId = `prewarm_${Date.now()}_${i}`;
                       wsRef.current.send(JSON.stringify({
-                          id: `prewarm_${Date.now()}_${i}`,
+                          id: subId,
                           cmd: "subscribe",
                           params: { channels: ["ticker"], market_tickers: [ticker] }
                       }));
                       subscribedTickersRef.current.add(ticker);
+
+                      // Track as pending subscription
+                      pendingSubscriptionsRef.current.set(ticker, {
+                          id: subId,
+                          timestamp: Date.now(),
+                          retryCount: 0,
+                          type: 'prewarm'
+                      });
                   }
               });
 
@@ -2406,21 +2478,92 @@ const KalshiDashboard = () => {
                    params: { channels: ["ticker"], market_tickers: [ticker] }
                }));
                prevTickers.delete(ticker);
+               pendingSubscriptionsRef.current.delete(ticker);
+
+               // Clear WS status from markets being unsubscribed
+               setMarkets(curr => curr.map(m => {
+                   if (m.realMarketId === ticker) {
+                       return { ...m, usingWs: false, wsSubscriptionConfirmed: false };
+                   }
+                   return m;
+               }));
           });
       }
 
       if (toAdd.length > 0) {
           console.log(`[WS] Subscribing to ${toAdd.length} markets...`);
           toAdd.forEach((ticker, i) => {
+               const subId = 3000 + i;
                wsRef.current.send(JSON.stringify({
-                   id: 3000 + i, // distinct ID range for new subs
+                   id: subId, // distinct ID range for new subs
                    cmd: "subscribe",
                    params: { channels: ["ticker"], market_tickers: [ticker] }
                }));
                prevTickers.add(ticker);
+
+               // Track as pending subscription
+               pendingSubscriptionsRef.current.set(ticker, {
+                   id: subId,
+                   timestamp: Date.now(),
+                   retryCount: 0,
+                   type: 'dynamic'
+               });
           });
       }
   }, [markets, wsStatus]);
+
+  // ROBUSTNESS FIX: Monitor pending subscriptions and retry failed ones
+  useEffect(() => {
+      if (wsRef.current?.readyState !== WebSocket.OPEN || !isRunning) return;
+
+      const checkPendingSubscriptions = () => {
+          const now = Date.now();
+          const TIMEOUT_MS = 10000; // 10 seconds
+          const MAX_RETRIES = 3;
+
+          pendingSubscriptionsRef.current.forEach((sub, ticker) => {
+              const elapsed = now - sub.timestamp;
+
+              // If subscription hasn't been confirmed within timeout, retry
+              if (elapsed > TIMEOUT_MS && sub.retryCount < MAX_RETRIES) {
+                  console.warn(`[WS] ⚠ Subscription timeout for ${ticker} (${elapsed}ms). Retrying... (attempt ${sub.retryCount + 1}/${MAX_RETRIES})`);
+
+                  // Retry subscription
+                  const newSubId = `retry_${Date.now()}_${ticker}`;
+                  if (wsRef.current?.readyState === WebSocket.OPEN) {
+                      wsRef.current.send(JSON.stringify({
+                          id: newSubId,
+                          cmd: "subscribe",
+                          params: { channels: ["ticker"], market_tickers: [ticker] }
+                      }));
+
+                      // Update pending subscription with new attempt
+                      pendingSubscriptionsRef.current.set(ticker, {
+                          id: newSubId,
+                          timestamp: Date.now(),
+                          retryCount: sub.retryCount + 1,
+                          type: sub.type
+                      });
+                  }
+              } else if (sub.retryCount >= MAX_RETRIES && elapsed > TIMEOUT_MS) {
+                  console.error(`[WS] ✗ Subscription failed for ${ticker} after ${MAX_RETRIES} retries. Giving up.`);
+                  pendingSubscriptionsRef.current.delete(ticker);
+
+                  // Mark market as failed subscription
+                  setMarkets(curr => curr.map(m => {
+                      if (m.realMarketId === ticker) {
+                          return { ...m, wsSubscriptionFailed: true };
+                      }
+                      return m;
+                  }));
+              }
+          });
+      };
+
+      // Check every 5 seconds
+      const interval = setInterval(checkPendingSubscriptions, 5000);
+      return () => clearInterval(interval);
+  }, [wsStatus, isRunning]);
 
   const fetchPortfolio = useCallback(async () => {
       if (!walletKeys) return;
@@ -2792,11 +2935,20 @@ const KalshiDashboard = () => {
       return false;
   }), [positions, activeTab, tradeHistory]);
 
+  // Calculate WebSocket statistics for header display
+  const wsStats = useMemo(() => {
+      const subscribed = subscribedTickersRef.current.size;
+      const confirmed = markets.filter(m => m.wsSubscriptionConfirmed).length;
+      const pending = pendingSubscriptionsRef.current.size;
+      const failed = markets.filter(m => m.wsSubscriptionFailed).length;
+      return { subscribed, confirmed, pending, failed };
+  }, [markets]);
+
   return (
     <TimeProvider>
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
@@ -2847,7 +2999,21 @@ const KalshiDashboard = () => {
                             <SortableHeader label="Event" sortKey="event" currentSort={sortConfig} onSort={handleSort} />
                             <SortableHeader label="Implied Fair Value" sortKey="fairValue" currentSort={sortConfig} onSort={handleSort} align="center" />
                             <SortableHeader label="Vol" sortKey="volatility" currentSort={sortConfig} onSort={handleSort} align="center" />
-                            <SortableHeader label="Bid / Ask" sortKey="bestBid" currentSort={sortConfig} onSort={handleSort} align="center" />
+                            <th className="p-0 bg-slate-50 border-b border-slate-200 select-none font-medium text-slate-500">
+                                <button
+                                    onClick={() => handleSort('bestBid')}
+                                    className="w-full h-full px-4 py-3 flex items-center gap-1 justify-center hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 outline-none transition-colors group cursor-help"
+                                    title="🟢 Green Zap = Live confirmed | 🟡 Pulsing = Pending | 🔴 Red = Failed"
+                                >
+                                    <span className="text-center flex items-center gap-1.5">
+                                        Bid / Ask
+                                        <Zap size={10} className="text-slate-400 opacity-50" />
+                                    </span>
+                                    <span className={`text-slate-400 ${sortConfig.key === 'bestBid' ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
+                                        {sortConfig.key === 'bestBid' && sortConfig.direction === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}
+                                    </span>
+                                </button>
+                            </th>
                             <SortableHeader label="Max Limit" sortKey="maxWillingToPay" currentSort={sortConfig} onSort={handleSort} align="right" />
                             <SortableHeader label="Smart Bid" sortKey="smartBid" currentSort={sortConfig} onSort={handleSort} align="right" />
                             <th className="px-4 py-3 text-center">Action</th>
