@@ -2364,16 +2364,23 @@ const KalshiDashboard = () => {
 
                       // Mark markets as having confirmed subscription
                       let confirmedCount = 0;
-                      setMarkets(curr => curr.map(m => {
-                          if (tickers.includes(m.realMarketId)) {
-                              confirmedCount++;
-                              console.log(`[WS] ✓ Marking ${m.realMarketId} as wsSubscriptionConfirmed=true`);
-                              return { ...m, wsSubscriptionConfirmed: true };
-                          }
-                          return m;
-                      }));
+                      setMarkets(curr => {
+                          const updated = curr.map(m => {
+                              if (tickers.includes(m.realMarketId)) {
+                                  confirmedCount++;
+                                  return { ...m, wsSubscriptionConfirmed: true };
+                              }
+                              return m;
+                          });
 
-                      console.log(`[WS] ✓ Confirmed ${confirmedCount} markets in UI state`);
+                          if (confirmedCount === 0) {
+                              console.warn(`[WS] ⚠ Subscription confirmed for ${tickers.length} markets but none found in UI state yet. They'll be marked when ticker data arrives.`);
+                          } else {
+                              console.log(`[WS] ✓ Confirmed ${confirmedCount}/${tickers.length} markets in UI state`);
+                          }
+
+                          return updated;
+                      });
                   }
 
                   // Handle subscription errors
