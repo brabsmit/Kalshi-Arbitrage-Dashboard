@@ -2120,7 +2120,7 @@ const KalshiDashboard = () => {
                   let wsBestAsk = 0;
                   let wsLastTimestamp = 0;
 
-                  if (prevMarket && prevMarket.usingWs) {
+                  if (prevMarket && prevMarket.wsSubscriptionConfirmed) {
                       const isConnected = wsStatus === 'OPEN';
                       const isFresh = (Date.now() - (prevMarket.lastWsTimestamp || 0)) < 15000; // 15s threshold
 
@@ -2130,6 +2130,11 @@ const KalshiDashboard = () => {
                           wsBestAsk = prevMarket.bestAsk;
                           wsLastTimestamp = prevMarket.lastWsTimestamp;
                       }
+                  }
+
+                  // Debug logging for WS state
+                  if (realMatch?.ticker && isSubscribedToWs) {
+                      console.log(`[SCANNER] ${realMatch.ticker}: isSubscribedToWs=${isSubscribedToWs}, isWsDataFresh=${isWsDataFresh}`);
                   }
 
                   // --- MATCH PERSISTENCE (Fix for "No Match" with Active WS) ---
@@ -2201,6 +2206,11 @@ const KalshiDashboard = () => {
                       wsSubscriptionConfirmed: prevMarket?.wsSubscriptionConfirmed || false,
                       lastWsTimestamp: isWsDataFresh ? wsLastTimestamp : (prevMarket?.lastWsTimestamp || 0)
                   };
+
+                  // Debug: Log market creation with WS flags
+                  if (realMatch?.ticker && (isSubscribedToWs || prevMarket?.wsSubscriptionConfirmed)) {
+                      console.log(`[SCANNER] Creating market ${realMatch.ticker}: usingWs=${newMarket.usingWs}, wsSubscriptionConfirmed=${newMarket.wsSubscriptionConfirmed}, prevWasConfirmed=${prevMarket?.wsSubscriptionConfirmed}`);
+                  }
 
                   if (prevMarket) {
                       const isSame =
