@@ -2752,7 +2752,7 @@ const KalshiDashboard = () => {
                   const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
 
                   // NEW: Use index-based O(1) lookup instead of O(N*M) search
-                  let realMatch = findMatchInIndex(kalshiIndex, targetOutcome.name, game.home_team, game.away_team, game.commence_time);
+                  let realMatch = findMatchInIndex(kalshiIndex, sportConfig.key, targetOutcome.name, game.home_team, game.away_team, game.commence_time);
                   const prevMarket = prev.find(m => m.id === game.id);
 
                   // --- WEBSOCKET AS SOURCE OF TRUTH ---

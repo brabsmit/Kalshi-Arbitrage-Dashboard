@@ -164,11 +164,11 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
  * Finds matching Kalshi market for an Odds API game
  * Returns matched market with isInverse flag if needed
  */
-export const findMatchInIndex = (index, targetTeam, homeTeam, awayTeam, gameDate) => {
+export const findMatchInIndex = (index, sport, targetTeam, homeTeam, awayTeam, gameDate) => {
     if (!index || !targetTeam || !homeTeam || !awayTeam) return null;
 
-    // Generate key for this game
-    const key = generateMarketKey('GENERIC', homeTeam, awayTeam, gameDate);
+    // Generate key for this game using the actual sport key
+    const key = generateMarketKey(sport, homeTeam, awayTeam, gameDate);
     if (!key) return null;
 
     // Look up in index
