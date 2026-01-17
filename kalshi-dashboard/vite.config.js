@@ -37,7 +37,7 @@ export default defineConfig({
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.the-odds-api.com wss: ws:; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self';",
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.the-odds-api.com wss: ws:; img-src 'self' data:; font-src 'self' data:; object-src 'none'; base-uri 'self';",
     },
     proxy: {
       '/api/kalshi': {

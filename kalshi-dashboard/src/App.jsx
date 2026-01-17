@@ -1095,6 +1095,10 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
     const printReport = () => {
         const data = generateSessionData();
         const printWindow = window.open('', '_blank');
+
+        // Sentinel: Assign onload handler from parent context to avoid inline script (CSP violation)
+        printWindow.onload = function() { printWindow.print(); };
+
         printWindow.document.write(`
             <html>
             <head>
@@ -1144,9 +1148,6 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
                         `).join('')}
                     </tbody>
                 </table>
-                <script>
-                    window.onload = function() { window.print(); }
-                </script>
             </body>
             </html>
         `);
