@@ -196,14 +196,16 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
         const entry = index.get(key);
 
         // Determine if this market is betting on away or home team
-        // We'll use team name matching to determine which side
-        const awayNorm = normalizeTeamName(away);
-        const homeNorm = normalizeTeamName(home);
-        const winnerNorm = normalizeTeamName(winnerCode);
+        // Strategy: Check if the ticker's winner code (last part) is contained in the team name
+        // Example: ticker "KXNBAGAME-26JAN19INDPHI-IND" → winnerCode="IND", away="Indiana", home="Philadelphia"
+        // "Indiana".toUpperCase() contains "IND" → this is betting on away team
+        const awayUpper = away.toUpperCase();
+        const homeUpper = home.toUpperCase();
+        const winnerUpper = winnerCode.toUpperCase();
 
         // Check which team the market is betting on
-        const isAwayMarket = ticker.includes(awayNorm) && winnerNorm && (winnerNorm === awayNorm || away.toUpperCase().includes(winnerNorm));
-        const isHomeMarket = ticker.includes(homeNorm) && winnerNorm && (winnerNorm === homeNorm || home.toUpperCase().includes(winnerNorm));
+        const isAwayMarket = awayUpper.includes(winnerUpper) || awayUpper.startsWith(winnerUpper);
+        const isHomeMarket = homeUpper.includes(winnerUpper) || homeUpper.startsWith(winnerUpper);
 
         if (isAwayMarket) {
             entry.away = marketData;
