@@ -589,12 +589,12 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="flex justify-between items-center p-4 border-b border-slate-100">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-shrink-0">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
                     <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
-                <div className="p-6 space-y-6">
+                <div className="p-6 space-y-6 overflow-y-auto flex-1">
                     <RangeSetting
                         id={bidMarginId}
                         label="Auto-Bid Margin"
@@ -784,7 +784,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                         </div>
                     </div>
                 </div>
-                <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
+                <div className="p-4 bg-slate-50 border-t border-slate-100 text-right flex-shrink-0">
                     <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800">Done</button>
                 </div>
             </div>
