@@ -1,7 +1,8 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2 } from 'lucide-react';
-import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
+import { SPORT_MAPPING } from './utils/kalshiMatching';
+import { buildKalshiIndex, findMatchInIndex, logIndexStats } from './utils/marketIndexing';
 import {
     americanToProbability,
     calculateVolatility,
@@ -2664,16 +2665,17 @@ const KalshiDashboard = () => {
                   fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
                ]);
 
-               // ⚡ Bolt Optimization: Pre-calculate uppercase tickers to avoid O(N*M) string allocs in matching loop
-               const kalshiMarkets = rawKalshiMarkets.map(m => ({ ...m, _uTicker: m.ticker ? m.ticker.toUpperCase() : '' }));
-               
+               // NEW: Build index for O(1) lookup instead of O(N*M) matching
+               const kalshiIndex = buildKalshiIndex(rawKalshiMarkets, sportConfig.key);
+               logIndexStats(kalshiIndex);
+
                const used = oddsRes.headers.get('x-requests-used');
                const remaining = oddsRes.headers.get('x-requests-remaining');
 
                const oddsData = await oddsRes.json();
                if (!Array.isArray(oddsData)) throw new Error(oddsData.message || `API Error for ${sportConfig.key}`);
-               
-               return { oddsData, kalshiMarkets, seriesTicker, apiUsage: (used && remaining) ? { used: parseInt(used), remaining: parseInt(remaining) } : null };
+
+               return { oddsData, kalshiIndex, sportConfig, apiUsage: (used && remaining) ? { used: parseInt(used), remaining: parseInt(remaining) } : null };
           });
 
           const results = await Promise.all(requests);
@@ -2685,15 +2687,15 @@ const KalshiDashboard = () => {
           lastFetchTimeRef.current = Date.now();
           setLastUpdated(new Date());
 
-          // Flatten results
-          const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiMarkets: r.kalshiMarkets, _seriesTicker: r.seriesTicker })));
+          // Flatten results with new index
+          const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiIndex: r.kalshiIndex, _sportConfig: r.sportConfig })));
 
           setMarkets(prev => {
               const processingTime = Date.now();
               let hasChanged = false;
               const processed = allOddsData.slice(0, 50).map(game => {
-                  const kalshiData = game._kalshiMarkets;
-                  const seriesTicker = game._seriesTicker;
+                  const kalshiIndex = game._kalshiIndex;
+                  const sportConfig = game._sportConfig;
 
                   const bookmakers = game.bookmakers || [];
                   if (bookmakers.length === 0) return null;
@@ -2749,7 +2751,8 @@ const KalshiDashboard = () => {
 
                   const vigFreeProb = vigFreeProbs.reduce((a, b) => a + b.prob, 0) / vigFreeProbs.length;
 
-                  let realMatch = findKalshiMatch(targetOutcome.name, game.home_team, game.away_team, game.commence_time, kalshiData, seriesTicker);
+                  // NEW: Use index-based O(1) lookup instead of O(N*M) search
+                  let realMatch = findMatchInIndex(kalshiIndex, targetOutcome.name, game.home_team, game.away_team, game.commence_time);
                   const prevMarket = prev.find(m => m.id === game.id);
 
                   // --- WEBSOCKET AS SOURCE OF TRUTH ---
@@ -2814,6 +2817,7 @@ const KalshiDashboard = () => {
                   const newMarket = {
                       id: game.id,
                       event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
+                      sport: sportConfig?.title || 'Unknown', // NEW: Add sport name for display
                       commenceTime: game.commence_time,
                       americanOdds: targetOutcome.price,
                       sportsbookOdds: targetOutcome.price,
