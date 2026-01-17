@@ -162,6 +162,7 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
         // DEBUG: Log first 3 keys with their source data
         if (indexed < 3) {
             console.log(`[INDEX] Key ${indexed + 1}:`, key);
+            console.log(`  Title: "${market.title}"`);
             console.log(`  Teams: "${away}" at "${home}"`);
             console.log(`  Timestamp: ${gameDate}`);
             console.log(`  Ticker: ${market.ticker}`);
@@ -201,16 +202,23 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
         const winnerNorm = normalizeTeamName(winnerCode);
 
         // Check which team the market is betting on
-        if (ticker.includes(awayNorm) && winnerNorm && (winnerNorm === awayNorm || away.toUpperCase().includes(winnerNorm))) {
+        const isAwayMarket = ticker.includes(awayNorm) && winnerNorm && (winnerNorm === awayNorm || away.toUpperCase().includes(winnerNorm));
+        const isHomeMarket = ticker.includes(homeNorm) && winnerNorm && (winnerNorm === homeNorm || home.toUpperCase().includes(winnerNorm));
+
+        if (isAwayMarket) {
             entry.away = marketData;
-        } else if (ticker.includes(homeNorm) && winnerNorm && (winnerNorm === homeNorm || home.toUpperCase().includes(winnerNorm))) {
+            if (indexed < 3) console.log(`  → Assigned to AWAY (${away})`);
+        } else if (isHomeMarket) {
             entry.home = marketData;
+            if (indexed < 3) console.log(`  → Assigned to HOME (${home})`);
         } else {
             // Fallback: assume first market is away, second is home
             if (!entry.away) {
                 entry.away = marketData;
+                if (indexed < 3) console.log(`  → Assigned to AWAY (fallback, ${away})`);
             } else {
                 entry.home = marketData;
+                if (indexed < 3) console.log(`  → Assigned to HOME (fallback, ${home})`);
             }
         }
 
