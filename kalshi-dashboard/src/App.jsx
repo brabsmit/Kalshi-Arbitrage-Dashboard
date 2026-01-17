@@ -2665,6 +2665,15 @@ const KalshiDashboard = () => {
                   fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
                ]);
 
+               // DEBUG: Log sample Kalshi markets to verify dates
+               if (rawKalshiMarkets.length > 0) {
+                   console.log('[DEBUG] Sample Kalshi markets:', rawKalshiMarkets.slice(0, 2).map(m => ({
+                       title: m.title,
+                       event_start_time: m.event_start_time,
+                       close_time: m.close_time
+                   })));
+               }
+
                // NEW: Build index for O(1) lookup instead of O(N*M) matching
                const kalshiIndex = buildKalshiIndex(rawKalshiMarkets, sportConfig.key);
                logIndexStats(kalshiIndex);
