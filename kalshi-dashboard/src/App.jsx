@@ -2462,12 +2462,17 @@ const KalshiDashboard = () => {
   const fetchPortfolio = useCallback(async () => {
       if (!walletKeys) return;
       try {
-          const ts = Date.now();
-          const getHeaders = async (path) => ({
-              'KALSHI-ACCESS-KEY': walletKeys.keyId, 
-              'KALSHI-ACCESS-SIGNATURE': await signRequest(walletKeys.privateKey, "GET", path, ts),
-              'KALSHI-ACCESS-TIMESTAMP': ts.toString() 
-          });
+          // FIX: Each request needs its own fresh timestamp to avoid "header_timestamp_expired" errors
+          // Previously, all 4 requests shared one timestamp, causing race conditions when
+          // signature generation took too long or network delays occurred
+          const getHeaders = async (path) => {
+              const ts = Date.now(); // Fresh timestamp for each request
+              return {
+                  'KALSHI-ACCESS-KEY': walletKeys.keyId,
+                  'KALSHI-ACCESS-SIGNATURE': await signRequest(walletKeys.privateKey, "GET", path, ts),
+                  'KALSHI-ACCESS-TIMESTAMP': ts.toString()
+              };
+          };
 
           const [hBal, hOrders, hPos, hSettled] = await Promise.all([
               getHeaders('/trade-api/v2/portfolio/balance'),
