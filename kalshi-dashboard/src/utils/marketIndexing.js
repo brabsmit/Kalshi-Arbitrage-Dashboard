@@ -33,19 +33,21 @@ export const generateMarketKey = (sport, team1, team2, gameDate) => {
 
     const sortedTeams = [normalized1, normalized2].sort();
 
-    // Normalize date to YYYY-MM-DD
+    // Normalize date to YYYY-MM-DD using LOCAL timezone (matches old matching system)
     let dateStr = '';
     try {
         // If gameDate is already a YYYY-MM-DD string, use it directly
         if (typeof gameDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(gameDate)) {
             dateStr = gameDate;
         } else {
-            // For timestamps, convert to US Eastern Time (ET) to match Kalshi's canonical timezone
+            // For timestamps, extract date components in LOCAL timezone (not UTC)
+            // This matches the old system which used .getFullYear(), .getMonth(), .getDate()
             const date = new Date(gameDate);
             if (!isNaN(date.getTime())) {
-                // Convert to ET (UTC-5 in winter, UTC-4 in summer)
-                // Using toLocaleDateString with America/New_York timezone
-                dateStr = date.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // en-CA gives YYYY-MM-DD format
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                dateStr = `${year}-${month}-${day}`;
             }
         }
     } catch (e) {
@@ -131,19 +133,14 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
             continue;
         }
 
-        // Extract game date from event_ticker (most reliable source)
-        // event_ticker format: "KXNBAGAME-26JAN19LACWAS" contains the canonical game date
-        let gameDate = parseDateFromEventTicker(market.event_ticker);
-
-        // Fallback to timestamp fields if ticker parsing fails
-        if (!gameDate) {
-            const timestamp = market.expected_expiration_time || market.event_start_time || market.close_time;
-            if (!timestamp) {
-                console.warn('[INDEX] Missing date for market:', market.ticker);
-                continue;
-            }
-            gameDate = timestamp;
+        // Extract game date from timestamp (expected_expiration_time is most accurate)
+        // NOTE: event_ticker date is unreliable (shows original schedule, not actual game date)
+        const timestamp = market.expected_expiration_time || market.event_start_time || market.close_time;
+        if (!timestamp) {
+            console.warn('[INDEX] Missing date for market:', market.ticker);
+            continue;
         }
+        const gameDate = timestamp;
 
         // Generate market key (teams sorted alphabetically)
         const key = generateMarketKey(sport, away, home, gameDate);
