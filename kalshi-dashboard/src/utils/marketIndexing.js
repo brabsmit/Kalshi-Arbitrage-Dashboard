@@ -91,6 +91,10 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
 
         if (!away || !home) {
             parseFailures++;
+            // DEBUG: Log first parse failure to see title format
+            if (parseFailures === 1) {
+                console.warn('[INDEX] First parse failure - Title:', market.title);
+            }
             continue;
         }
 
@@ -104,6 +108,11 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
         // Generate market key (teams sorted alphabetically)
         const key = generateMarketKey(sport, away, home, gameDate);
         if (!key) continue;
+
+        // DEBUG: Log first few keys to verify format
+        if (indexed < 3) {
+            console.log('[INDEX] Sample key:', key, '| Teams:', away, 'vs', home);
+        }
 
         // Determine which side this market represents
         // Kalshi ticker format: SERIES-DATEAWAY/HOME-WINNER
@@ -169,11 +178,21 @@ export const findMatchInIndex = (index, sport, targetTeam, homeTeam, awayTeam, g
 
     // Generate key for this game using the actual sport key
     const key = generateMarketKey(sport, homeTeam, awayTeam, gameDate);
-    if (!key) return null;
+    if (!key) {
+        console.warn('[MATCH] Failed to generate key:', { sport, homeTeam, awayTeam, gameDate });
+        return null;
+    }
 
     // Look up in index
     const entry = index.get(key);
-    if (!entry) return null;
+    if (!entry) {
+        console.warn('[MATCH] No match found for key:', key);
+        console.warn('[MATCH] Lookup params:', { sport, targetTeam, homeTeam, awayTeam, gameDate: new Date(gameDate).toISOString() });
+        console.warn('[MATCH] Sample index keys:', Array.from(index.keys()).slice(0, 3));
+        return null;
+    }
+
+    console.log('[MATCH] Found match for key:', key);
 
     // Determine which side the target team is on
     const targetNorm = normalizeTeamName(targetTeam);
