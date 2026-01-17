@@ -5,7 +5,7 @@ import { calculateStrategy, formatDuration } from '../utils/core.js';
 
 // Constants
 const STALE_DATA_THRESHOLD = 30000; // 30 seconds
-const MAX_POSITIONS_PER_TICKER = 1; // Maximum number of position entries allowed per ticker
+const MAX_POSITIONS_PER_TICKER = 3; // AGGRESSIVE: Increased from 1 to allow scaling into winners
 
 /**
  * Runs the auto-bid bot logic

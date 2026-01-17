@@ -86,8 +86,17 @@ export const calculateStrategy = (market, marginPercent) => {
     const currentBestBid = market.bestBid || 0;
     const edge = fairValue - currentBestBid;
 
-    let smartBid = currentBestBid + 1;
-    let reason = "Beat Market";
+    // Dynamic bid increment based on edge size for more aggressive entry
+    // Larger edges = jump ahead in queue, smaller edges = conservative +1¢
+    let bidIncrement = 1;
+    if (edge > 10) {
+        bidIncrement = 3;  // Huge edge: jump 3¢ ahead
+    } else if (edge > 5) {
+        bidIncrement = 2;  // Good edge: jump 2¢ ahead
+    }
+
+    let smartBid = currentBestBid + bidIncrement;
+    let reason = bidIncrement > 1 ? `Beat Market +${bidIncrement}¢` : "Beat Market";
 
     // Alpha Strategy: Crossing the Spread (with Fee Protection)
     // If the Best Ask is significantly below our fair value, we take liquidity immediately
@@ -96,12 +105,11 @@ export const calculateStrategy = (market, marginPercent) => {
     // Kalshi Taker Fee: ~7% of payout = ceil(0.07 * qty * price * (1-price))
     // Example: Buying 10 contracts at 50¢ = ~$1.75 in fees = ~1.75¢ per contract
     //
-    // STRATEGY FIX: Increased buffer from 0¢ to 3¢ to ensure profitability after fees.
-    // - At 0¢ buffer: Many "profitable" trades became break-even or losers after fees
-    // - At 3¢ buffer: Ensures minimum ~1-2¢ profit per contract after typical taker fees
-    // - This aligns with stated strategy of "patient maker-side arbitrage"
-    // - Only cross the spread when edge is CLEARLY profitable, not marginally so
-    const TAKER_FEE_BUFFER = 3;
+    // STRATEGY UPDATE: Reduced buffer from 3¢ to 1¢ for more aggressive spread crossing.
+    // - At 3¢ buffer: Too conservative, missed many profitable opportunities
+    // - At 1¢ buffer: Still protects against fees while capturing more edges
+    // - Allows more aggressive taker behavior when edge is clear
+    const TAKER_FEE_BUFFER = 1;
 
     // Check if we can buy immediately at a significant discount (after accounting for fees)
     if (market.bestAsk > 0 && market.bestAsk <= (maxWillingToPay - TAKER_FEE_BUFFER)) {

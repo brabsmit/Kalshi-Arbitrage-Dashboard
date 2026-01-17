@@ -1850,10 +1850,10 @@ const KalshiDashboard = () => {
           autoCloseMarginPercent: 15,
           minFairValue: 20,
           tradeSize: 10,
-          maxPositions: 5,
-          maxPositionsPerSport: 3, // Risk Management: Limit per sport for diversification
+          maxPositions: 15, // AGGRESSIVE: Increased from 5 to capture more opportunities
+          maxPositionsPerSport: 5, // AGGRESSIVE: Increased from 3 for better opportunity capture
           enableSportDiversification: true, // Risk Management: Enable sport-level position limits
-          minLiquidity: 50, // Risk Management: Minimum total volume (contracts traded)
+          minLiquidity: 25, // AGGRESSIVE: Reduced from 50 to access smaller markets with good edges
           maxBidAskSpread: 5, // Risk Management: Maximum spread in cents (5¢ = 5%)
           enableLiquidityChecks: true, // Risk Management: Enable liquidity filtering
           isAutoBid: false,
