@@ -2,32 +2,81 @@
 // Normalized market key system for reliable Kalshi ↔ Odds API matching
 
 /**
- * Normalizes a team name for consistent matching
- * - Strips team suffixes (Mavericks, Jazz, etc.) to match Kalshi's city-only format
- * - Removes special characters and spaces
- * - Converts to uppercase
- * - Handles common abbreviations
+ * Normalizes a team name for consistent matching across all sports
+ * Strategy: Extract the FIRST significant word (usually city/state/university name)
+ * This works because Kalshi typically uses first word, while Odds API includes full names
+ *
+ * Examples:
+ * - "Dallas Mavericks" → "DALLAS"
+ * - "Los Angeles Lakers" → "LOSANGELES"
+ * - "Texas A&M Aggies" → "TEXASAM"
+ * - "North Carolina Tar Heels" → "NORTHCAROLINA"
+ * - "New York Giants" → "NEWYORK"
  */
 const normalizeTeamName = (teamName) => {
     if (!teamName) return '';
 
-    let normalized = teamName.toUpperCase();
+    let normalized = teamName.toUpperCase().trim();
 
-    // Strip common team suffixes that Odds API includes but Kalshi doesn't
-    // NBA teams
-    normalized = normalized.replace(/\s+(MAVERICKS|JAZZ|HAWKS|CELTICS|PISTONS|PACERS)$/, '');
-    normalized = normalized.replace(/\s+(76ERS|SIXERS|HEAT|THUNDER|WARRIORS|SUNS|LAKERS)$/, '');
-    normalized = normalized.replace(/\s+(CLIPPERS|TRAIL\s*BLAZERS|BLAZERS|KINGS|SPURS|GRIZZLIES)$/, '');
-    normalized = normalized.replace(/\s+(PELICANS|ROCKETS|TIMBERWOLVES|NUGGETS|BUCKS|BULLS)$/, '');
-    normalized = normalized.replace(/\s+(CAVALIERS|CAVS|RAPTORS|NETS|KNICKS|WIZARDS|HORNETS|MAGIC)$/, '');
-
-    // Remove remaining spaces and special chars
+    // Handle special cases first
     normalized = normalized
-        .replace(/\s+/g, '')           // Remove all spaces
-        .replace(/[^A-Z0-9]/g, '')     // Remove special chars
-        .replace(/SAINT/g, 'ST')       // St. Louis → STLOUIS
-        .replace(/&/g, 'AND')          // Texas A&M → TEXASAM
-        .substring(0, 15);             // Limit length
+        .replace(/SAINT/g, 'ST')              // St. Louis → ST LOUIS
+        .replace(/&/g, 'AND')                 // Texas A&M → TEXAS AANDM
+        .replace(/\./g, '')                   // St. → ST
+        .replace(/\s+/g, ' ');                // Normalize whitespace
+
+    // Strategy: Take all words BEFORE a known mascot/suffix
+    // This captures multi-word locations like "Los Angeles", "North Carolina", "Oklahoma City"
+    const commonSuffixes = [
+        // Pro sports mascots
+        'MAVERICKS', 'JAZZ', 'HAWKS', 'CELTICS', 'PISTONS', 'PACERS', 'HEAT', 'THUNDER',
+        'WARRIORS', 'SUNS', 'LAKERS', 'CLIPPERS', 'BLAZERS', 'KINGS', 'SPURS', 'GRIZZLIES',
+        'PELICANS', 'ROCKETS', 'TIMBERWOLVES', 'NUGGETS', 'BUCKS', 'BULLS', 'CAVALIERS',
+        'RAPTORS', 'NETS', 'KNICKS', 'WIZARDS', 'HORNETS', 'MAGIC', 'TRAIL BLAZERS',
+        // NFL
+        'PACKERS', 'BEARS', 'LIONS', 'VIKINGS', 'COWBOYS', 'GIANTS', 'EAGLES', 'COMMANDERS',
+        'REDSKINS', 'BUCCANEERS', 'SAINTS', 'FALCONS', 'PANTHERS', 'RAMS', 'SEAHAWKS',
+        '49ERS', 'NINERS', 'CARDINALS', 'RAVENS', 'BENGALS', 'BROWNS', 'STEELERS',
+        'TEXANS', 'COLTS', 'JAGUARS', 'TITANS', 'BRONCOS', 'CHIEFS', 'RAIDERS', 'CHARGERS',
+        'BILLS', 'DOLPHINS', 'PATRIOTS', 'JETS',
+        // NHL
+        'BRUINS', 'SABRES', 'RED WINGS', 'BLACKHAWKS', 'AVALANCHE', 'BLUE JACKETS',
+        'WILD', 'PREDATORS', 'BLUES', 'JETS', 'FLAMES', 'OILERS', 'CANUCKS',
+        'DUCKS', 'COYOTES', 'GOLDEN KNIGHTS', 'KRAKEN', 'SHARKS', 'HURRICANES',
+        'PANTHERS', 'LIGHTNING', 'CAPITALS', 'FLYERS', 'PENGUINS', 'RANGERS', 'ISLANDERS',
+        'DEVILS', 'MAPLE LEAFS', 'SENATORS', 'CANADIENS',
+        // MLB
+        'RED SOX', 'YANKEES', 'ORIOLES', 'RAYS', 'WHITE SOX', 'INDIANS', 'GUARDIANS',
+        'TIGERS', 'ROYALS', 'TWINS', 'ASTROS', 'ANGELS', 'ATHLETICS', 'MARINERS',
+        'RANGERS', 'BRAVES', 'MARLINS', 'METS', 'PHILLIES', 'NATIONALS', 'CUBS',
+        'REDS', 'BREWERS', 'PIRATES', 'CARDINALS', 'DIAMONDBACKS', 'ROCKIES', 'DODGERS',
+        'PADRES', 'GIANTS',
+        // College generic terms
+        'AGGIES', 'WILDCATS', 'BULLDOGS', 'TIGERS', 'CRIMSON TIDE', 'VOLUNTEERS',
+        'GATORS', 'GAMECOCKS', 'RAZORBACKS', 'LONGHORNS', 'SOONERS', 'JAYHAWKS',
+        'CYCLONES', 'MOUNTAINEERS', 'HUSKIES', 'DUCKS', 'TROJANS', 'BRUINS',
+        'CARDINAL', 'SUN DEVILS', 'GOLDEN BEARS', 'BEAVERS', 'COUGARS', 'UTES',
+        'BUFFALOES', 'CORNHUSKERS', 'BADGERS', 'HAWKEYES', 'SPARTANS', 'WOLVERINES',
+        'BUCKEYES', 'NITTANY LIONS', 'TERRAPINS', 'SCARLET KNIGHTS', 'HOOSIERS',
+        'FIGHTING IRISH', 'BLUE DEVILS', 'TAR HEELS', 'ORANGE', 'EAGLES', 'DEMON DEACONS',
+        'CAVALIERS', 'YELLOW JACKETS', 'SEMINOLES', 'HURRICANES', 'ORANGEMEN',
+        '76ERS', 'SIXERS', 'CAVS'  // Common abbreviations
+    ];
+
+    // Find the first matching suffix and take everything before it
+    for (const suffix of commonSuffixes) {
+        const regex = new RegExp(`\\s+${suffix}$`);
+        if (regex.test(normalized)) {
+            normalized = normalized.replace(regex, '');
+            break;
+        }
+    }
+
+    // Remove all remaining spaces and special chars
+    normalized = normalized
+        .replace(/\s+/g, '')
+        .replace(/[^A-Z0-9]/g, '')
+        .substring(0, 20);  // Increased limit for longer location names
 
     return normalized;
 };
