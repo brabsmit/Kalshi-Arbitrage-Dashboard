@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2 } from 'lucide-react';
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
@@ -753,6 +753,33 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-blue-600"
                             >
                                 {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Data Management Section */}
+                    <div className="border-t border-slate-200 pt-6">
+                        <h4 className="text-xs font-bold text-slate-600 uppercase mb-4 flex items-center gap-2">
+                            <Trash2 size={14} />
+                            Data Management
+                        </h4>
+
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => {
+                                    if (confirm('Clear all trade history and session data? This cannot be undone.')) {
+                                        localStorage.removeItem('kalshi_trade_history');
+                                        localStorage.removeItem('kalshi_session_history');
+                                        window.location.reload();
+                                    }
+                                }}
+                                className="w-full flex items-center justify-between p-3 bg-rose-50 border border-rose-200 rounded-lg hover:bg-rose-100 transition-colors group"
+                            >
+                                <div className="text-left">
+                                    <div className="text-sm font-medium text-rose-800">Clear All History</div>
+                                    <div className="text-xs text-rose-600 mt-0.5">Remove all trade history and saved sessions</div>
+                                </div>
+                                <Trash2 size={18} className="text-rose-600 group-hover:text-rose-700"/>
                             </button>
                         </div>
                     </div>
