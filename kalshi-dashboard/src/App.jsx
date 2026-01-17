@@ -306,6 +306,98 @@ const CancellationModal = ({ isOpen, progress }) => {
     );
 };
 
+// Performance Alerts Component
+const PerformanceAlerts = ({ positions, tradeHistory, sessionStart }) => {
+    const alerts = useMemo(() => {
+        const warnings = [];
+        const sessionMetrics = calculateSessionMetrics(positions, tradeHistory);
+
+        // Alert: Negative P&L with significant sample
+        if (sessionMetrics.settledTrades >= 5 && sessionMetrics.totalRealizedPnL < -500) {
+            warnings.push({
+                level: 'error',
+                icon: '⛔',
+                message: `Session is down ${formatMoney(sessionMetrics.totalRealizedPnL)}. Consider reviewing strategy settings.`
+            });
+        }
+
+        // Alert: Low win rate
+        if (sessionMetrics.settledTrades >= 10 && sessionMetrics.winRate < 40) {
+            warnings.push({
+                level: 'warning',
+                icon: '⚠️',
+                message: `Win rate is ${sessionMetrics.winRate.toFixed(0)}% (target: 50%+). Check margin settings.`
+            });
+        }
+
+        // Alert: Large drawdown
+        if (sessionMetrics.maxDrawdown < -1000) {
+            warnings.push({
+                level: 'error',
+                icon: '📉',
+                message: `Max drawdown: ${formatMoney(sessionMetrics.maxDrawdown)}. Consider reducing position size.`
+            });
+        }
+
+        // Alert: Poor Sharpe ratio with enough trades
+        if (sessionMetrics.settledTrades >= 15 && sessionMetrics.sharpeRatio < 0.5) {
+            warnings.push({
+                level: 'warning',
+                icon: '📊',
+                message: `Sharpe ratio is ${sessionMetrics.sharpeRatio.toFixed(2)} (target: 1.0+). Risk-adjusted returns are low.`
+            });
+        }
+
+        // Info: Great session
+        if (sessionMetrics.settledTrades >= 5 && sessionMetrics.totalRealizedPnL > 500 && sessionMetrics.winRate > 60) {
+            warnings.push({
+                level: 'success',
+                icon: '🎉',
+                message: `Strong session! +${formatMoney(sessionMetrics.totalRealizedPnL)} with ${sessionMetrics.winRate.toFixed(0)}% win rate.`
+            });
+        }
+
+        // Info: Long running session
+        if (sessionStart && (Date.now() - sessionStart) > 3 * 60 * 60 * 1000) { // 3 hours
+            warnings.push({
+                level: 'info',
+                icon: '⏰',
+                message: `Session has been running for ${formatDuration(Date.now() - sessionStart)}. Consider saving progress.`
+            });
+        }
+
+        return warnings;
+    }, [positions, tradeHistory, sessionStart]);
+
+    if (alerts.length === 0) return null;
+
+    return (
+        <div className="mb-6 space-y-2">
+            {alerts.map((alert, i) => (
+                <div
+                    key={i}
+                    className={`p-3 rounded-lg border flex items-start gap-3 ${
+                        alert.level === 'error' ? 'bg-rose-50 border-rose-200' :
+                        alert.level === 'warning' ? 'bg-amber-50 border-amber-200' :
+                        alert.level === 'success' ? 'bg-emerald-50 border-emerald-200' :
+                        'bg-blue-50 border-blue-200'
+                    }`}
+                >
+                    <span className="text-lg">{alert.icon}</span>
+                    <p className={`text-sm font-medium ${
+                        alert.level === 'error' ? 'text-rose-800' :
+                        alert.level === 'warning' ? 'text-amber-800' :
+                        alert.level === 'success' ? 'text-emerald-800' :
+                        'text-blue-800'
+                    }`}>
+                        {alert.message}
+                    </p>
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
     const now = React.useContext(TimeContext);
 
@@ -770,7 +862,13 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                 <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
             </div>
             <button
-                onClick={() => setIsRunning(!isRunning)}
+                onClick={() => {
+                    if (isRunning) {
+                        // Stopping the bot - save current session
+                        saveCurrentSession();
+                    }
+                    setIsRunning(!isRunning);
+                }}
                 disabled={isScheduled}
                 className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium text-white transition-all shadow-sm active:scale-95 ${
                     isScheduled
@@ -1025,7 +1123,7 @@ const escapeCSV = (str) => {
     return safe;
 };
 
-const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionStart }) => {
+const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionStart, sessionHistory = [] }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const [activeTab, setActiveTab] = useState('summary');
 
@@ -1039,9 +1137,14 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
         return Object.entries(tradeHistory).map(([ticker, data]) => {
             const position = positions.find(p => p.marketId === ticker && !p.isOrder);
             const entryTimestamp = data.orderPlacedAt;
-            const exitTimestamp = position?.settled || position?.created;
+
+            // Use exit tracking data if available, otherwise fallback to position data
+            const exitTimestamp = data.exitTimestamp || position?.settled || position?.created;
+            const exitPrice = data.exitPrice || (position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null);
+            const exitFairValue = data.exitFairValue;
+            const exitMethod = data.exitMethod || 'unknown';
+
             const entryPrice = data.bidPrice;
-            const exitPrice = position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null;
             const holdDuration = entryTimestamp && exitTimestamp ? exitTimestamp - entryTimestamp : null;
 
             return {
@@ -1050,23 +1153,25 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                 ticker,
                 event: data.event,
                 side: position?.side || 'Yes',
-                quantity: position?.quantity || 0,
+                quantity: data.quantity || position?.quantity || 0,
 
                 // Pricing
                 entryPrice,
                 fairValueAtEntry: data.fairValue,
                 entryEdge: data.fairValue - entryPrice,
                 exitPrice,
-                exitEdge: exitPrice && data.fairValue ? exitPrice - data.fairValue : null,
+                exitFairValue,
+                exitEdge: exitPrice && exitFairValue ? exitPrice - exitFairValue : null,
 
                 // P&L
-                pnl: position?.realizedPnl || 0,
-                fees: position?.fees || 0,
-                netPnl: (position?.realizedPnl || 0) - (position?.fees || 0),
+                pnl: data.realizedPnl || position?.realizedPnl || 0,
+                fees: data.totalFees || position?.fees || 0,
+                netPnl: (data.realizedPnl || position?.realizedPnl || 0) - (data.totalFees || position?.fees || 0),
 
                 // Status
                 status: position ? (position.settlementStatus || position.status) : 'Unknown',
                 exitTimestamp,
+                exitMethod,
                 holdDuration,
 
                 // Market data
@@ -1086,8 +1191,8 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
         const headers = [
             "Entry Timestamp", "Exit Timestamp", "Hold Duration (ms)",
             "Ticker", "Event", "Side", "Quantity",
-            "Entry Price", "Fair Value", "Entry Edge",
-            "Exit Price", "Exit Edge",
+            "Entry Price", "Fair Value @ Entry", "Entry Edge",
+            "Exit Price", "Fair Value @ Exit", "Exit Edge", "Exit Method",
             "Realized P&L", "Fees", "Net P&L",
             "Status",
             "Sportsbook Odds", "Bookmakers", "Odds Spread", "Vig-Free Prob", "Data Latency (ms)"
@@ -1105,7 +1210,9 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
             d.fairValueAtEntry,
             d.entryEdge.toFixed(2),
             d.exitPrice || '',
+            d.exitFairValue || '',
             d.exitEdge !== null ? d.exitEdge.toFixed(2) : '',
+            escapeCSV(d.exitMethod),
             (d.pnl / 100).toFixed(2),
             (d.fees / 100).toFixed(2),
             (d.netPnl / 100).toFixed(2),
@@ -1281,7 +1388,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
 
                 {/* Tabs */}
                 <div className="flex border-b border-slate-200 px-6">
-                    {['summary', 'performance', 'risk', 'export'].map(tab => (
+                    {['summary', 'performance', 'risk', 'history', 'export'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
@@ -1339,6 +1446,88 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                 <MetricCard label="Largest Win" value={formatMoney(sessionMetrics.largestWin)} />
                                 <MetricCard label="Largest Loss" value={formatMoney(sessionMetrics.largestLoss)} />
                             </div>
+
+                            {/* Simple P&L Chart */}
+                            <div className="mt-6">
+                                <h4 className="font-bold text-slate-800 mb-3">Trade-by-Trade P&L</h4>
+                                <div className="bg-slate-50 p-4 rounded-lg font-mono text-sm">
+                                    {(() => {
+                                        const trades = generateSessionData().filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
+                                        if (trades.length === 0) return <div className="text-slate-500 text-center">No settled trades yet</div>;
+
+                                        const maxPnl = Math.max(...trades.map(t => Math.abs(t.netPnl)));
+                                        const chartWidth = 50;
+
+                                        return (
+                                            <div className="space-y-1">
+                                                {trades.map((trade, i) => {
+                                                    const barLength = Math.max(1, Math.floor((Math.abs(trade.netPnl) / maxPnl) * chartWidth));
+                                                    const isProfit = trade.netPnl >= 0;
+                                                    const bar = isProfit ? '█'.repeat(barLength) : '█'.repeat(barLength);
+
+                                                    return (
+                                                        <div key={i} className="flex items-center gap-2">
+                                                            <span className="text-xs text-slate-500 w-12">{trade.ticker.split('-').pop().slice(0, 5)}</span>
+                                                            <span className={`${isProfit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                                {isProfit ? bar : bar}
+                                                            </span>
+                                                            <span className={`text-xs font-bold ${isProfit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                                {formatMoney(trade.netPnl)}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+
+                                {/* Cumulative P&L Line */}
+                                <div className="mt-4">
+                                    <h4 className="font-bold text-slate-800 mb-3">Cumulative P&L</h4>
+                                    <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs">
+                                        {(() => {
+                                            const trades = generateSessionData().filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
+                                            if (trades.length === 0) return <div className="text-slate-500 text-center">No settled trades yet</div>;
+
+                                            let cumulative = 0;
+                                            const points = trades.map(t => {
+                                                cumulative += t.netPnl;
+                                                return cumulative;
+                                            });
+
+                                            const maxCum = Math.max(...points, 0);
+                                            const minCum = Math.min(...points, 0);
+                                            const range = maxCum - minCum || 1;
+                                            const chartHeight = 15;
+
+                                            // Create ASCII chart
+                                            const chart = Array(chartHeight).fill(null).map(() => Array(trades.length).fill(' '));
+
+                                            points.forEach((point, i) => {
+                                                const normalizedHeight = Math.floor(((point - minCum) / range) * (chartHeight - 1));
+                                                chart[chartHeight - 1 - normalizedHeight][i] = '●';
+                                            });
+
+                                            return (
+                                                <div className="space-y-0">
+                                                    <div className="text-emerald-600 text-right mb-1">+{formatMoney(maxCum)}</div>
+                                                    {chart.map((row, i) => (
+                                                        <div key={i} className="leading-none">
+                                                            {row.map((char, j) => (
+                                                                <span key={j} className={char === '●' ? 'text-blue-600' : 'text-slate-300'}>
+                                                                    {char === '●' ? '●' : '·'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    ))}
+                                                    <div className="text-rose-600 text-right mt-1">{formatMoney(minCum)}</div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
@@ -1351,6 +1540,67 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                 <MetricCard label="Volatility" value={formatMoney(sessionMetrics.volatility)} />
                                 <MetricCard label="Current Exposure" value={formatMoney(sessionMetrics.currentExposure)} />
                             </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'history' && (
+                        <div className="space-y-3">
+                            <p className="text-sm text-slate-600 mb-4">
+                                View and compare past trading sessions to track long-term performance.
+                            </p>
+
+                            {sessionHistory.length === 0 ? (
+                                <div className="text-center py-12 text-slate-500">
+                                    <p className="mb-2">No saved sessions yet.</p>
+                                    <p className="text-sm">Sessions are automatically saved when you stop the bot.</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {sessionHistory.map(session => (
+                                        <div key={session.sessionId} className="border border-slate-200 rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                                            <div className="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <div className="font-bold text-slate-800">
+                                                        {new Date(session.startTime).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </div>
+                                                    <div className="text-sm text-slate-500">
+                                                        {new Date(session.startTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })} - {new Date(session.endTime).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                                                    </div>
+                                                    <div className="text-xs text-slate-400 mt-1">
+                                                        Duration: {formatHoldDuration(session.duration)}
+                                                    </div>
+                                                </div>
+                                                <div className={`text-xl font-bold ${session.metrics.totalRealizedPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                    {formatMoney(session.metrics.totalRealizedPnL)}
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-4 gap-3 text-sm">
+                                                <div>
+                                                    <div className="text-xs text-slate-500">Trades</div>
+                                                    <div className="font-bold text-slate-700">{session.metrics.totalTrades}</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-slate-500">Win Rate</div>
+                                                    <div className="font-bold text-slate-700">{session.metrics.winRate.toFixed(0)}%</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-slate-500">ROI</div>
+                                                    <div className="font-bold text-slate-700">{session.metrics.roi.toFixed(1)}%</div>
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs text-slate-500">Sharpe</div>
+                                                    <div className="font-bold text-slate-700">{session.metrics.sharpeRatio.toFixed(2)}</div>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">
+                                                Config: {session.config.marginPercent}% margin | {session.config.maxPositions} max positions | ${(session.config.tradeSize / 100).toFixed(0)} per trade
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -2289,6 +2539,38 @@ const KalshiDashboard = () => {
   const [tradeHistory, setTradeHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_trade_history') || '{}'));
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
 
+  // Session History: Track multiple trading sessions over time
+  const [sessionHistory, setSessionHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_session_history') || '[]'));
+  useEffect(() => localStorage.setItem('kalshi_session_history', JSON.stringify(sessionHistory)), [sessionHistory]);
+
+  // Function to save current session to history
+  const saveCurrentSession = useCallback(() => {
+      const sessionData = generateSessionData();
+      const sessionMetrics = calculateSessionMetrics(positions, tradeHistory);
+
+      const sessionRecord = {
+          sessionId: Date.now(),
+          startTime: sessionStart,
+          endTime: Date.now(),
+          duration: Date.now() - sessionStart,
+          metrics: sessionMetrics,
+          trades: sessionData,
+          config: {
+              marginPercent: config.marginPercent,
+              autoCloseMarginPercent: config.autoCloseMarginPercent,
+              maxPositions: config.maxPositions,
+              tradeSize: config.tradeSize,
+              isAutoBid: config.isAutoBid,
+              isAutoClose: config.isAutoClose
+          }
+      };
+
+      setSessionHistory(prev => [sessionRecord, ...prev].slice(0, 50)); // Keep last 50 sessions
+      console.log(`[SESSION] Saved session ${sessionRecord.sessionId} with ${sessionData.length} trades`);
+
+      return sessionRecord;
+  }, [sessionStart, positions, tradeHistory, config]);
+
   useEffect(() => {
       // Security: Migrate sensitive keys to sessionStorage to prevent persistence
       let k = sessionStorage.getItem('kalshi_keys');
@@ -2839,6 +3121,36 @@ const KalshiDashboard = () => {
                  const filledAmount = o.fill_count - prev.filled;
                  const price = o.yes_price || o.no_price;
                  addLog(`Filled ${filledAmount}x ${o.ticker} @ ${price}¢`, 'FILL');
+
+                 // EXIT TRACKING: If this is a sell order that just filled, update trade history
+                 if (o.action === 'sell' && o.status === 'executed') {
+                     setTradeHistory(prev => {
+                         const historyEntry = prev[o.ticker];
+
+                         // Only update if we have a history entry and it doesn't have exit data yet
+                         if (historyEntry && !historyEntry.exitTimestamp) {
+                             // Try to get current fair value from markets
+                             const currentMarket = markets.find(m => m.realMarketId === o.ticker);
+                             const exitFairValue = currentMarket?.fairValue || null;
+
+                             console.log(`[EXIT TRACKING] Sell order filled for ${o.ticker}: Exit @ ${price}¢`);
+
+                             return {
+                                 ...prev,
+                                 [o.ticker]: {
+                                     ...historyEntry,
+                                     exitTimestamp: Date.now(),
+                                     exitPrice: price,
+                                     exitFairValue: exitFairValue,
+                                     exitMethod: historyEntry.source === 'auto' ? 'auto-close' : 'manual',
+                                     quantity: o.fill_count
+                                 }
+                             };
+                         }
+
+                         return prev;
+                     });
+                 }
               } else if (!prev && o.fill_count > 0) {
                  // New order already partially filled, only log if not first fetch
                  if (!isFirstFetchRef.current) {
@@ -2939,6 +3251,57 @@ const KalshiDashboard = () => {
              }
 
              return true;
+          });
+
+          // EXIT TRACKING: Detect newly settled positions and update trade history with exit data
+          const settledTickers = new Set(
+              mappedItems
+                  .filter(p => !p.isOrder && p.settlementStatus === 'settled')
+                  .map(p => p.marketId)
+          );
+
+          setTradeHistory(prev => {
+              const updated = { ...prev };
+              let hasUpdates = false;
+
+              settledTickers.forEach(ticker => {
+                  const historyEntry = updated[ticker];
+
+                  // Only update if we have a history entry and it doesn't have exit data yet
+                  if (historyEntry && !historyEntry.exitTimestamp) {
+                      const settledPosition = mappedItems.find(
+                          p => !p.isOrder && p.marketId === ticker && p.settlementStatus === 'settled'
+                      );
+
+                      if (settledPosition) {
+                          // Calculate exit price from payout and quantity
+                          // Payout is in cents, so exitPrice = (payout / quantity)
+                          const exitPrice = settledPosition.payout && settledPosition.quantity > 0
+                              ? Math.floor(settledPosition.payout / settledPosition.quantity)
+                              : null;
+
+                          // Try to get current fair value from markets
+                          const currentMarket = markets.find(m => m.realMarketId === ticker);
+                          const exitFairValue = currentMarket?.fairValue || null;
+
+                          updated[ticker] = {
+                              ...historyEntry,
+                              exitTimestamp: settledPosition.settled || Date.now(),
+                              exitPrice: exitPrice,
+                              exitFairValue: exitFairValue,
+                              exitMethod: 'settlement', // Can be 'settlement', 'auto-close', or 'manual'
+                              realizedPnl: settledPosition.realizedPnl,
+                              totalFees: settledPosition.fees,
+                              quantity: settledPosition.quantity
+                          };
+
+                          hasUpdates = true;
+                          console.log(`[EXIT TRACKING] Updated trade history for ${ticker}: Exit @ ${exitPrice}¢, P&L: ${settledPosition.realizedPnl}¢`);
+                      }
+                  }
+              });
+
+              return hasUpdates ? updated : prev;
           });
 
           // OPTIMIZATION: Clean up optimistic positions that now have real data
@@ -3184,10 +3547,12 @@ const KalshiDashboard = () => {
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
+      <PerformanceAlerts positions={positions} tradeHistory={tradeHistory} sessionStart={sessionStart} />
+
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
-      <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} />
+      <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} sessionHistory={sessionHistory} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} />
       
