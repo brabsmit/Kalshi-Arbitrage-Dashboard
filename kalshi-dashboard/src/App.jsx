@@ -2662,7 +2662,7 @@ const KalshiDashboard = () => {
                const seriesTicker = sportConfig.kalshiSeries || '';
                const [oddsRes, rawKalshiMarkets] = await Promise.all([
                   fetch(`https://api.the-odds-api.com/v4/sports/${sportConfig.key}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
-                  fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
+                  fetch(`/api/kalshi/markets?limit=300&status=active${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
                ]);
 
                // DEBUG: Log all time-related fields for first market
