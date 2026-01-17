@@ -204,7 +204,15 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
         indexed++;
     }
 
+    // Extract unique dates from index to see what dates Kalshi has markets for
+    const uniqueDates = new Set();
+    for (const key of index.keys()) {
+        const datePart = key.split(':')[1]; // Extract YYYY-MM-DD from key
+        uniqueDates.add(datePart);
+    }
+
     console.log(`[INDEX] Indexed ${indexed} Kalshi markets (${parseFailures} parse failures) for ${sport}`);
+    console.log(`[INDEX] Unique dates in index:`, Array.from(uniqueDates).sort());
 
     return index;
 };
