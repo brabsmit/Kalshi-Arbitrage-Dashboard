@@ -305,9 +305,26 @@ const CancellationModal = ({ isOpen, progress }) => {
     );
 };
 
-const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
+const SessionTimer = ({ sessionStart, isRunning }) => {
     const now = React.useContext(TimeContext);
+    const elapsed = sessionStart ? now - sessionStart : 0;
 
+    return (
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                <Clock size={12} /> Session Time
+            </div>
+            <div className="text-2xl font-bold text-slate-800 mt-1 font-mono">
+                {sessionStart ? formatDuration(elapsed || (Date.now() - sessionStart)) : '0s'}
+            </div>
+            <div className="text-xs text-slate-400 mt-1">
+                {isRunning ? 'Bot is running' : 'Bot is paused'}
+            </div>
+        </div>
+    );
+};
+
+const StatsBanner = React.memo(({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
     // Optimization: Memoize expensive stats calculations to prevent re-computation on every timer tick
     const stats = useMemo(() => {
         let exposure = 0;
@@ -367,8 +384,6 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
 
         return { exposure, totalRealizedPnl, totalPotentialReturn, winRate, tStat, isSignificant, historyCount };
     }, [positions, tradeHistory]);
-
-    const elapsed = sessionStart ? now - sessionStart : 0;
 
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
@@ -433,20 +448,10 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                 </div>
             </div>
 
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Clock size={12} /> Session Time
-                </div>
-                <div className="text-2xl font-bold text-slate-800 mt-1 font-mono">
-                    {sessionStart ? formatDuration(elapsed || (Date.now() - sessionStart)) : '0s'}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                    {isRunning ? 'Bot is running' : 'Bot is paused'}
-                </div>
-            </div>
+             <SessionTimer sessionStart={sessionStart} isRunning={isRunning} />
         </div>
     );
-};
+});
 
 const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorClass, accentClass, helpText }) => {
     return (
