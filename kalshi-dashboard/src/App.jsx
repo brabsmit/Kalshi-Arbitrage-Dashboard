@@ -20,7 +20,8 @@ import {
     calculateEdge,
     calculateDistanceFromMarket,
     calculateTargetPnL,
-    formatPercentReturn
+    formatPercentReturn,
+    calculateSessionMetrics
 } from './utils/core';
 import { createOrderManager } from './bot/orderManager';
 import { runAutoBid } from './bot/autoBid';
@@ -1024,55 +1025,106 @@ const escapeCSV = (str) => {
     return safe;
 };
 
-const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
+const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionStart }) => {
     const backdropProps = useModalClose(isOpen, onClose);
+    const [activeTab, setActiveTab] = useState('summary');
+
     if (!isOpen) return null;
+
+    // Calculate comprehensive session metrics
+    const sessionMetrics = useMemo(() => calculateSessionMetrics(positions, tradeHistory), [positions, tradeHistory]);
+    const sessionDuration = sessionStart ? Date.now() - sessionStart : 0;
 
     const generateSessionData = () => {
         return Object.entries(tradeHistory).map(([ticker, data]) => {
-            const position = positions.find(p => p.marketId === ticker);
+            const position = positions.find(p => p.marketId === ticker && !p.isOrder);
+            const entryTimestamp = data.orderPlacedAt;
+            const exitTimestamp = position?.settled || position?.created;
+            const entryPrice = data.bidPrice;
+            const exitPrice = position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null;
+            const holdDuration = entryTimestamp && exitTimestamp ? exitTimestamp - entryTimestamp : null;
+
             return {
-                timestamp: data.orderPlacedAt,
-                ticker: ticker,
+                // Entry data
+                entryTimestamp,
+                ticker,
                 event: data.event,
-                action: 'BID',
-                odds: data.sportsbookOdds,
-                fairValue: data.fairValue,
-                bidPrice: data.bidPrice,
-                edge: data.fairValue - data.bidPrice,
-                status: position ? (position.settlementStatus || position.status) : 'Closed/Unknown',
-                pnl: position ? (position.realizedPnl || 0) : 0,
-                outcome: position ? position.side : 'Yes',
-                latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null,
+                side: position?.side || 'Yes',
+                quantity: position?.quantity || 0,
+
+                // Pricing
+                entryPrice,
+                fairValueAtEntry: data.fairValue,
+                entryEdge: data.fairValue - entryPrice,
+                exitPrice,
+                exitEdge: exitPrice && data.fairValue ? exitPrice - data.fairValue : null,
+
+                // P&L
+                pnl: position?.realizedPnl || 0,
+                fees: position?.fees || 0,
+                netPnl: (position?.realizedPnl || 0) - (position?.fees || 0),
+
+                // Status
+                status: position ? (position.settlementStatus || position.status) : 'Unknown',
+                exitTimestamp,
+                holdDuration,
+
+                // Market data
+                sportsbookOdds: data.sportsbookOdds,
+                vigFreeProb: data.vigFreeProb || 0,
                 bookmakerCount: Number(data.bookmakerCount || 0),
                 oddsSpread: data.oddsSpread || 0,
-                vigFreeProb: data.vigFreeProb || 0
+                latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null
             };
-        }).sort((a, b) => b.timestamp - a.timestamp);
+        }).sort((a, b) => b.entryTimestamp - a.entryTimestamp);
     };
 
     const downloadCSV = () => {
         const data = generateSessionData();
-        const headers = ["Timestamp", "Ticker", "Event", "Action", "Sportsbook Odds", "Fair Value", "Bid Price", "Edge", "Status", "PnL", "Outcome", "Data Latency (ms)", "Bookmakers", "Odds Spread", "Vig-Free Prob"];
+
+        // Enhanced headers with all missing data
+        const headers = [
+            "Entry Timestamp", "Exit Timestamp", "Hold Duration (ms)",
+            "Ticker", "Event", "Side", "Quantity",
+            "Entry Price", "Fair Value", "Entry Edge",
+            "Exit Price", "Exit Edge",
+            "Realized P&L", "Fees", "Net P&L",
+            "Status",
+            "Sportsbook Odds", "Bookmakers", "Odds Spread", "Vig-Free Prob", "Data Latency (ms)"
+        ];
+
         const rows = data.map(d => [
-            new Date(d.timestamp).toISOString(),
+            d.entryTimestamp ? new Date(d.entryTimestamp).toISOString() : '',
+            d.exitTimestamp ? new Date(d.exitTimestamp).toISOString() : '',
+            d.holdDuration || '',
             escapeCSV(d.ticker),
             escapeCSV(d.event),
-            escapeCSV(d.action),
-            escapeCSV(d.odds),
-            escapeCSV(d.fairValue),
-            escapeCSV(d.bidPrice),
-            escapeCSV(d.edge),
+            escapeCSV(d.side),
+            d.quantity,
+            d.entryPrice,
+            d.fairValueAtEntry,
+            d.entryEdge.toFixed(2),
+            d.exitPrice || '',
+            d.exitEdge !== null ? d.exitEdge.toFixed(2) : '',
+            (d.pnl / 100).toFixed(2),
+            (d.fees / 100).toFixed(2),
+            (d.netPnl / 100).toFixed(2),
             escapeCSV(d.status),
-            d.pnl,
-            escapeCSV(d.outcome),
-            d.latency !== null ? d.latency : '',
-            escapeCSV(d.bookmakerCount),
+            escapeCSV(d.sportsbookOdds),
+            d.bookmakerCount,
             Number(d.oddsSpread).toFixed(3),
-            Number(d.vigFreeProb).toFixed(2)
+            Number(d.vigFreeProb).toFixed(2),
+            d.latency !== null ? d.latency : ''
         ]);
 
+        // Add session summary as first row
+        const summary = [
+            `Session Summary: ${sessionMetrics.totalTrades} trades | ${sessionMetrics.settledTrades} settled | Win Rate: ${sessionMetrics.winRate.toFixed(1)}% | Total P&L: $${(sessionMetrics.totalRealizedPnL / 100).toFixed(2)} | ROI: ${sessionMetrics.roi.toFixed(1)}% | Sharpe: ${sessionMetrics.sharpeRatio.toFixed(2)}`
+        ];
+
         const csvContent = [
+            summary.join(""),
+            "",  // Blank line
             headers.join(","),
             ...rows.map(r => r.join(","))
         ].join("\n");
@@ -1163,31 +1215,177 @@ const DataExportModal = ({ isOpen, onClose, tradeHistory, positions }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in duration-200">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                        <FileText size={20} className="text-blue-600"/> Session Reports
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
+                {/* Header */}
+                <div className="flex justify-between items-center p-6 border-b border-slate-200">
+                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
+                        <Trophy size={24} className="text-emerald-600"/> Session Report
                     </h3>
-                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <button aria-label="Close" onClick={onClose}>
+                        <X size={24} className="text-slate-400 hover:text-slate-600" />
+                    </button>
                 </div>
-                <div className="space-y-3">
-                    <button onClick={downloadCSV} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
-                        <span className="font-medium text-slate-700 group-hover:text-blue-700">Download CSV (Excel)</span>
-                        <ArrowDown size={18} className="text-slate-400 group-hover:text-blue-600"/>
-                    </button>
-                    <button onClick={downloadJSON} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
-                        <span className="font-medium text-slate-700 group-hover:text-blue-700">Download JSON</span>
-                        <Hash size={18} className="text-slate-400 group-hover:text-blue-600"/>
-                    </button>
-                     <button onClick={printReport} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
-                        <span className="font-medium text-slate-700 group-hover:text-blue-700">Print / Save PDF</span>
-                        <FileText size={18} className="text-slate-400 group-hover:text-blue-600"/>
-                    </button>
+
+                {/* Executive Summary */}
+                <div className="p-6 bg-gradient-to-br from-emerald-50 to-blue-50 border-b border-slate-200">
+                    <div className="text-sm text-slate-600 mb-3">
+                        Session: {sessionStart ? new Date(sessionStart).toLocaleString() : 'N/A'} • Duration: {formatHoldDuration(sessionDuration)}
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 font-bold uppercase">Net P&L</div>
+                            <div className={`text-2xl font-bold ${sessionMetrics.netPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                {sessionMetrics.netPnL >= 0 ? '+' : ''}{formatMoney(sessionMetrics.netPnL)}
+                            </div>
+                            <div className="text-xs text-slate-500">ROI: {sessionMetrics.roi >= 0 ? '+' : ''}{sessionMetrics.roi.toFixed(1)}%</div>
+                        </div>
+
+                        <div className="bg-white/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 font-bold uppercase">Trades</div>
+                            <div className="text-2xl font-bold text-slate-800">{sessionMetrics.totalTrades}</div>
+                            <div className="text-xs text-slate-500">{sessionMetrics.settledTrades} settled, {sessionMetrics.pendingTrades} pending</div>
+                        </div>
+
+                        <div className="bg-white/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 font-bold uppercase">Win Rate</div>
+                            <div className="text-2xl font-bold text-emerald-600">{sessionMetrics.winRate.toFixed(0)}%</div>
+                            <div className="text-xs text-slate-500">{sessionMetrics.wins}W-{sessionMetrics.losses}L-{sessionMetrics.breakevens}BE</div>
+                        </div>
+
+                        <div className="bg-white/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 font-bold uppercase">Sharpe</div>
+                            <div className={`text-2xl font-bold ${sessionMetrics.sharpeRatio > 2 ? 'text-emerald-600' : 'text-slate-600'}`}>
+                                {sessionMetrics.sharpeRatio.toFixed(2)}
+                            </div>
+                            <div className="text-xs text-slate-500">Avg Hold: {formatHoldDuration(sessionMetrics.avgHoldTime)}</div>
+                        </div>
+                    </div>
+
+                    {/* Best/Worst Trades */}
+                    <div className="mt-4 grid grid-cols-2 gap-4">
+                        <div className="text-sm">
+                            <span className="text-slate-600">🏆 Best: </span>
+                            <span className="font-bold text-emerald-600">
+                                {sessionMetrics.bestTrade ? `${sessionMetrics.bestTrade.marketId.split('-').pop()} → ${formatMoney(sessionMetrics.largestWin)}` : 'N/A'}
+                            </span>
+                        </div>
+                        <div className="text-sm">
+                            <span className="text-slate-600">📉 Worst: </span>
+                            <span className="font-bold text-rose-600">
+                                {sessionMetrics.worstTrade ? `${sessionMetrics.worstTrade.marketId.split('-').pop()} → ${formatMoney(sessionMetrics.largestLoss)}` : 'N/A'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex border-b border-slate-200 px-6">
+                    {['summary', 'performance', 'risk', 'export'].map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-4 py-3 font-medium text-sm capitalize transition-colors ${
+                                activeTab === tab
+                                    ? 'text-blue-600 border-b-2 border-blue-600'
+                                    : 'text-slate-500 hover:text-slate-700'
+                            }`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Tab Content */}
+                <div className="flex-1 overflow-y-auto p-6">
+                    {activeTab === 'summary' && (
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-slate-800">Key Metrics</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <MetricCard label="Total Trades" value={sessionMetrics.totalTrades} />
+                                <MetricCard label="Settled Trades" value={sessionMetrics.settledTrades} />
+                                <MetricCard label="Pending Trades" value={sessionMetrics.pendingTrades} />
+                                <MetricCard label="Avg Entry Edge" value={`${sessionMetrics.avgEntryEdge.toFixed(1)}¢`} />
+                                <MetricCard label="Avg Exit Edge" value={sessionMetrics.avgExitEdge ? `${sessionMetrics.avgExitEdge.toFixed(1)}¢` : 'N/A'} />
+                                <MetricCard label="Edge Capture" value={sessionMetrics.edgeCaptureRate ? `${sessionMetrics.edgeCaptureRate.toFixed(0)}%` : 'N/A'} />
+                                <MetricCard label="Total Fees" value={formatMoney(sessionMetrics.totalFees)} />
+                                <MetricCard label="Gross Profit" value={formatMoney(sessionMetrics.grossProfit)} />
+                                <MetricCard label="Gross Loss" value={formatMoney(sessionMetrics.grossLoss)} />
+                                <MetricCard label="Unique Markets" value={sessionMetrics.uniqueMarkets} />
+                                <MetricCard label="Min Hold Time" value={formatHoldDuration(sessionMetrics.minHoldTime)} />
+                                <MetricCard label="Max Hold Time" value={formatHoldDuration(sessionMetrics.maxHoldTime)} />
+                            </div>
+
+                            <h4 className="font-bold text-slate-800 mt-6">Sport Breakdown</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {Object.entries(sessionMetrics.sportBreakdown).map(([sport, count]) => (
+                                    <div key={sport} className="bg-slate-50 p-3 rounded-lg">
+                                        <div className="text-sm text-slate-600">{sport}</div>
+                                        <div className="text-xl font-bold text-slate-800">{count}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'performance' && (
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-slate-800">Performance Analysis</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <MetricCard label="Win Rate" value={`${sessionMetrics.winRate.toFixed(1)}%`} />
+                                <MetricCard label="Profit Factor" value={(sessionMetrics.grossProfit / Math.max(sessionMetrics.grossLoss, 1)).toFixed(2)} />
+                                <MetricCard label="Avg Win" value={sessionMetrics.wins > 0 ? formatMoney(sessionMetrics.grossProfit / sessionMetrics.wins) : '$0.00'} />
+                                <MetricCard label="Avg Loss" value={sessionMetrics.losses > 0 ? formatMoney(sessionMetrics.grossLoss / sessionMetrics.losses) : '$0.00'} />
+                                <MetricCard label="Largest Win" value={formatMoney(sessionMetrics.largestWin)} />
+                                <MetricCard label="Largest Loss" value={formatMoney(sessionMetrics.largestLoss)} />
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'risk' && (
+                        <div className="space-y-4">
+                            <h4 className="font-bold text-slate-800">Risk Metrics</h4>
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                <MetricCard label="Sharpe Ratio" value={sessionMetrics.sharpeRatio.toFixed(2)} />
+                                <MetricCard label="Max Drawdown" value={formatMoney(sessionMetrics.maxDrawdown)} />
+                                <MetricCard label="Volatility" value={formatMoney(sessionMetrics.volatility)} />
+                                <MetricCard label="Current Exposure" value={formatMoney(sessionMetrics.currentExposure)} />
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'export' && (
+                        <div className="space-y-3">
+                            <p className="text-sm text-slate-600 mb-4">
+                                Export your complete session data with all entry/exit information, P&L, fees, and hold times.
+                            </p>
+                            <button onClick={downloadCSV} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                                <span className="font-medium text-slate-700 group-hover:text-blue-700">Download Enhanced CSV (Excel)</span>
+                                <ArrowDown size={18} className="text-slate-400 group-hover:text-blue-600"/>
+                            </button>
+                            <button onClick={downloadJSON} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                                <span className="font-medium text-slate-700 group-hover:text-blue-700">Download Complete JSON</span>
+                                <Hash size={18} className="text-slate-400 group-hover:text-blue-600"/>
+                            </button>
+                            <button onClick={printReport} className="w-full flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-lg hover:bg-blue-50 hover:border-blue-200 transition-all group">
+                                <span className="font-medium text-slate-700 group-hover:text-blue-700">Print / Save PDF</span>
+                                <FileText size={18} className="text-slate-400 group-hover:text-blue-600"/>
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
     );
 };
+
+// Helper component for metric cards
+const MetricCard = ({ label, value }) => (
+    <div className="bg-slate-50 p-3 rounded-lg">
+        <div className="text-xs text-slate-500 font-medium">{label}</div>
+        <div className="text-lg font-bold text-slate-800 mt-1">{value}</div>
+    </div>
+);
 
 const PositionDetailsModal = ({ position, market, onClose }) => {
     const backdropProps = useModalClose(!!position, onClose);
@@ -2989,7 +3187,7 @@ const KalshiDashboard = () => {
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
-      <DataExportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} />
+      <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} />
       

@@ -202,6 +202,237 @@ export const formatPercentReturn = (pnl, cost) => {
 };
 
 // ==========================================
+// SESSION ANALYTICS
+// ==========================================
+
+export const calculateSessionMetrics = (positions, tradeHistory) => {
+    const metrics = {
+        // Basic counts
+        totalTrades: 0,
+        settledTrades: 0,
+        pendingTrades: 0,
+        cancelledOrders: 0,
+
+        // P&L metrics
+        totalRealizedPnL: 0,
+        totalUnrealizedPnL: 0,
+        grossProfit: 0,
+        grossLoss: 0,
+        totalFees: 0,
+        netPnL: 0,
+
+        // Win/Loss tracking
+        wins: 0,
+        losses: 0,
+        breakevens: 0,
+        winRate: 0,
+
+        // Best/Worst trades
+        bestTrade: null,
+        worstTrade: null,
+        largestWin: 0,
+        largestLoss: 0,
+
+        // Edge analysis
+        totalEntryEdge: 0,
+        avgEntryEdge: 0,
+        totalExitEdge: 0,
+        avgExitEdge: 0,
+        edgeCaptureRate: 0,
+
+        // Hold time analysis
+        totalHoldTime: 0,
+        avgHoldTime: 0,
+        minHoldTime: Infinity,
+        maxHoldTime: 0,
+
+        // Exposure metrics
+        maxExposure: 0,
+        avgExposure: 0,
+        currentExposure: 0,
+
+        // Risk metrics
+        sharpeRatio: 0,
+        maxDrawdown: 0,
+        volatility: 0,
+
+        // Market metrics
+        uniqueMarkets: 0,
+        sportBreakdown: {},
+
+        // Execution metrics
+        fillRate: 0,
+        spreadCrossRate: 0,
+        avgQueueTime: 0
+    };
+
+    const settledPositions = [];
+    const activePositions = [];
+    const pnlArray = [];
+    const holdTimes = [];
+    const entryEdges = [];
+    const exitEdges = [];
+    const markets = new Set();
+    const sports = {};
+
+    // Process all positions
+    for (const p of positions) {
+        const historyEntry = tradeHistory[p.marketId];
+
+        if (!p.isOrder && historyEntry && historyEntry.source === 'auto') {
+            metrics.totalTrades++;
+            markets.add(p.marketId);
+
+            // Sport breakdown
+            const sport = historyEntry.event?.split(' ')[0] || 'Unknown';
+            sports[sport] = (sports[sport] || 0) + 1;
+
+            // Entry edge
+            if (historyEntry.fairValue && p.avgPrice) {
+                const entryEdge = historyEntry.fairValue - p.avgPrice;
+                entryEdges.push(entryEdge);
+                metrics.totalEntryEdge += entryEdge;
+            }
+
+            if (p.settlementStatus === 'settled' || p.realizedPnl !== undefined) {
+                // Settled trade
+                metrics.settledTrades++;
+                const pnl = p.realizedPnl || 0;
+                pnlArray.push(pnl);
+                metrics.totalRealizedPnL += pnl;
+
+                if (pnl > 0) {
+                    metrics.wins++;
+                    metrics.grossProfit += pnl;
+                    if (pnl > metrics.largestWin) {
+                        metrics.largestWin = pnl;
+                        metrics.bestTrade = p;
+                    }
+                } else if (pnl < 0) {
+                    metrics.losses++;
+                    metrics.grossLoss += Math.abs(pnl);
+                    if (pnl < metrics.largestLoss) {
+                        metrics.largestLoss = pnl;
+                        metrics.worstTrade = p;
+                    }
+                } else {
+                    metrics.breakevens++;
+                }
+
+                // Hold time
+                if (historyEntry.orderPlacedAt && p.settled) {
+                    const holdTime = p.settled - historyEntry.orderPlacedAt;
+                    holdTimes.push(holdTime);
+                    metrics.totalHoldTime += holdTime;
+                    metrics.minHoldTime = Math.min(metrics.minHoldTime, holdTime);
+                    metrics.maxHoldTime = Math.max(metrics.maxHoldTime, holdTime);
+                }
+
+                // Exit edge (if we have exit price)
+                if (p.payout && p.quantity) {
+                    const exitPrice = Math.floor(p.payout / p.quantity);
+                    const exitFV = historyEntry.fairValue; // Approximate, should track actual FV at exit
+                    if (exitFV) {
+                        const exitEdge = exitPrice - exitFV;
+                        exitEdges.push(exitEdge);
+                        metrics.totalExitEdge += exitEdge;
+                    }
+                }
+
+                // Fees
+                if (p.fees) {
+                    metrics.totalFees += p.fees;
+                }
+
+                settledPositions.push(p);
+            } else {
+                // Active/pending trade
+                metrics.pendingTrades++;
+                activePositions.push(p);
+
+                // Current exposure
+                if (p.cost) {
+                    metrics.currentExposure += p.cost;
+                }
+            }
+        }
+    }
+
+    // Calculate averages
+    if (metrics.totalTrades > 0) {
+        metrics.avgEntryEdge = metrics.totalEntryEdge / entryEdges.length || 0;
+    }
+
+    if (exitEdges.length > 0) {
+        metrics.avgExitEdge = metrics.totalExitEdge / exitEdges.length;
+    }
+
+    if (holdTimes.length > 0) {
+        metrics.avgHoldTime = metrics.totalHoldTime / holdTimes.length;
+    }
+
+    if (metrics.minHoldTime === Infinity) {
+        metrics.minHoldTime = 0;
+    }
+
+    // Win rate
+    if (metrics.settledTrades > 0) {
+        metrics.winRate = (metrics.wins / metrics.settledTrades) * 100;
+    }
+
+    // Edge capture rate
+    if (metrics.avgEntryEdge > 0) {
+        const avgRealizedEdge = metrics.settledTrades > 0 ? (metrics.totalRealizedPnL / metrics.settledTrades) / 10 : 0; // Convert cents to cents per contract
+        metrics.edgeCaptureRate = (avgRealizedEdge / metrics.avgEntryEdge) * 100;
+    }
+
+    // Net P&L
+    metrics.netPnL = metrics.totalRealizedPnL - metrics.totalFees;
+
+    // Sharpe Ratio (annualized, assuming independent trades)
+    if (pnlArray.length >= 2) {
+        const mean = metrics.totalRealizedPnL / pnlArray.length;
+        const variance = pnlArray.reduce((sum, pnl) => sum + Math.pow(pnl - mean, 2), 0) / (pnlArray.length - 1);
+        const stdDev = Math.sqrt(variance);
+        metrics.volatility = stdDev;
+
+        if (stdDev > 0) {
+            // Sharpe = (mean return) / (std dev of returns)
+            // Annualize assuming ~100 trades per year for sports betting
+            const tradesPerYear = 100;
+            metrics.sharpeRatio = (mean / stdDev) * Math.sqrt(tradesPerYear);
+        }
+    }
+
+    // Max drawdown (simplified - track worst cumulative loss)
+    let cumulativePnL = 0;
+    let peak = 0;
+    let maxDD = 0;
+
+    for (const pnl of pnlArray) {
+        cumulativePnL += pnl;
+        if (cumulativePnL > peak) {
+            peak = cumulativePnL;
+        }
+        const drawdown = peak - cumulativePnL;
+        if (drawdown > maxDD) {
+            maxDD = drawdown;
+        }
+    }
+    metrics.maxDrawdown = maxDD;
+
+    // Unique markets and sports
+    metrics.uniqueMarkets = markets.size;
+    metrics.sportBreakdown = sports;
+
+    // ROI
+    const totalCost = settledPositions.reduce((sum, p) => sum + (p.cost || 0), 0);
+    metrics.roi = totalCost > 0 ? (metrics.totalRealizedPnL / totalCost) * 100 : 0;
+
+    return metrics;
+};
+
+// ==========================================
 // CRYPTO
 // ==========================================
 
