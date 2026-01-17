@@ -54,6 +54,35 @@ export const generateMarketKey = (sport, team1, team2, gameDate) => {
 };
 
 /**
+ * Parses date from Kalshi event ticker
+ * Format: "KXNBAGAME-26JAN19LACWAS" -> "2026-01-19"
+ * Returns: ISO date string or null if parsing fails
+ */
+export const parseDateFromEventTicker = (eventTicker) => {
+    if (!eventTicker) return null;
+
+    // Match pattern: SERIES-YYMMMDDTEAMS
+    // Example: KXNBAGAME-26JAN19LACWAS
+    const match = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})/);
+    if (!match) return null;
+
+    const [, year, monthStr, day] = match;
+    const monthMap = {
+        'JAN': '01', 'FEB': '02', 'MAR': '03', 'APR': '04',
+        'MAY': '05', 'JUN': '06', 'JUL': '07', 'AUG': '08',
+        'SEP': '09', 'OCT': '10', 'NOV': '11', 'DEC': '12'
+    };
+
+    const month = monthMap[monthStr];
+    if (!month) return null;
+
+    // Convert 2-digit year to 4-digit (assume 20xx)
+    const fullYear = `20${year}`;
+
+    return `${fullYear}-${month}-${day.padStart(2, '0')}`;
+};
+
+/**
  * Parses Kalshi market title to extract teams
  * Format: "Team1 at Team2 Winner?" or "Team1 vs Team2 Winner?"
  * Returns: [awayTeam, homeTeam] or [null, null] if parsing fails
@@ -94,11 +123,18 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
             continue;
         }
 
-        // Extract game date - use expected_expiration_time (actual game time) not close_time (settlement deadline)
-        const gameDate = market.expected_expiration_time || market.event_start_time || market.close_time;
+        // Extract game date from event_ticker (most reliable source)
+        // event_ticker format: "KXNBAGAME-26JAN19LACWAS" contains the canonical game date
+        let gameDate = parseDateFromEventTicker(market.event_ticker);
+
+        // Fallback to timestamp fields if ticker parsing fails
         if (!gameDate) {
-            console.warn('[INDEX] Missing date for market:', market.ticker);
-            continue;
+            const timestamp = market.expected_expiration_time || market.event_start_time || market.close_time;
+            if (!timestamp) {
+                console.warn('[INDEX] Missing date for market:', market.ticker);
+                continue;
+            }
+            gameDate = timestamp;
         }
 
         // Generate market key (teams sorted alphabetically)
@@ -107,7 +143,9 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
 
         // DEBUG: Log first key to verify date is correct
         if (indexed === 0) {
-            console.log('[INDEX] First key:', key, '| Date:', new Date(gameDate).toISOString());
+            console.log('[INDEX] First key:', key);
+            console.log('[INDEX] Event ticker:', market.event_ticker, '| Parsed date:', gameDate);
+            console.log('[INDEX] expected_expiration_time:', market.expected_expiration_time);
         }
 
         // Determine which side this market represents
