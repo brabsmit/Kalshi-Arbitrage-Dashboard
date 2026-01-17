@@ -2662,24 +2662,8 @@ const KalshiDashboard = () => {
                const seriesTicker = sportConfig.kalshiSeries || '';
                const [oddsRes, rawKalshiMarkets] = await Promise.all([
                   fetch(`https://api.the-odds-api.com/v4/sports/${sportConfig.key}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
-                  // Temporarily remove series_ticker filter to see all markets
-                  fetch(`/api/kalshi/markets?limit=300`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
+                  fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
                ]);
-
-               // DEBUG: Log all time-related fields for first market
-               if (rawKalshiMarkets.length > 0) {
-                   const m = rawKalshiMarkets[0];
-                   console.log('[DEBUG] All fields for first market:', {
-                       ticker: m.ticker,
-                       event_ticker: m.event_ticker,
-                       title: m.title,
-                       open_time: m.open_time,
-                       close_time: m.close_time,
-                       expiration_time: m.expiration_time,
-                       expected_expiration_time: m.expected_expiration_time,
-                       latest_expiration_time: m.latest_expiration_time
-                   });
-               }
 
                // NEW: Build index for O(1) lookup instead of O(N*M) matching
                const kalshiIndex = buildKalshiIndex(rawKalshiMarkets, sportConfig.key);
