@@ -36,9 +36,17 @@ export const generateMarketKey = (sport, team1, team2, gameDate) => {
     // Normalize date to YYYY-MM-DD
     let dateStr = '';
     try {
-        const date = new Date(gameDate);
-        if (!isNaN(date.getTime())) {
-            dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+        // If gameDate is already a YYYY-MM-DD string, use it directly
+        if (typeof gameDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(gameDate)) {
+            dateStr = gameDate;
+        } else {
+            // For timestamps, convert to US Eastern Time (ET) to match Kalshi's canonical timezone
+            const date = new Date(gameDate);
+            if (!isNaN(date.getTime())) {
+                // Convert to ET (UTC-5 in winter, UTC-4 in summer)
+                // Using toLocaleDateString with America/New_York timezone
+                dateStr = date.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // en-CA gives YYYY-MM-DD format
+            }
         }
     } catch (e) {
         console.warn('[INDEX] Invalid date:', gameDate);
