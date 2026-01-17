@@ -2665,13 +2665,16 @@ const KalshiDashboard = () => {
                   fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
                ]);
 
-               // DEBUG: Log sample Kalshi markets to verify dates
+               // DEBUG: Log full Kalshi market object to see all available fields
                if (rawKalshiMarkets.length > 0) {
-                   console.log('[DEBUG] Sample Kalshi markets:', rawKalshiMarkets.slice(0, 2).map(m => ({
-                       title: m.title,
-                       event_start_time: m.event_start_time,
-                       close_time: m.close_time
-                   })));
+                   console.log('[DEBUG] Full Kalshi market object:', rawKalshiMarkets[0]);
+                   console.log('[DEBUG] All date-related fields:', {
+                       event_start_time: rawKalshiMarkets[0].event_start_time,
+                       close_time: rawKalshiMarkets[0].close_time,
+                       expiration_time: rawKalshiMarkets[0].expiration_time,
+                       open_time: rawKalshiMarkets[0].open_time,
+                       subtitle: rawKalshiMarkets[0].subtitle
+                   });
                }
 
                // NEW: Build index for O(1) lookup instead of O(N*M) matching
