@@ -12,7 +12,15 @@ import {
     formatGameTime,
     calculateStrategy,
     calculateKalshiFees,
-    signRequest
+    signRequest,
+    calculateUnrealizedPnL,
+    calculateBreakEvenPrice,
+    calculateHoldDuration,
+    formatHoldDuration,
+    calculateEdge,
+    calculateDistanceFromMarket,
+    calculateTargetPnL,
+    formatPercentReturn
 } from './utils/core';
 import { createOrderManager } from './bot/orderManager';
 import { runAutoBid } from './bot/autoBid';
@@ -1483,7 +1491,16 @@ const arePortfolioPropsEqual = (prev, next) => {
     return true;
 };
 
-const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, currentFV, onCancel, onAnalysis }) => {
+const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, currentFV, onCancel, onAnalysis, exitOrder }) => {
+    // Calculate metrics for positions
+    const entryPrice = item.avgPrice || 0;
+    const unrealizedPnL = activeTab === 'positions' ? calculateUnrealizedPnL(item.quantity, entryPrice, currentPrice) : 0;
+    const unrealizedPnLPercent = item.cost > 0 ? (unrealizedPnL / item.cost) * 100 : 0;
+    const entryEdge = historyEntry ? calculateEdge(historyEntry.fairValue, entryPrice) : null;
+    const currentEdge = activeTab === 'positions' && currentFV ? calculateEdge(currentFV, currentPrice) : null;
+    const holdDuration = historyEntry?.orderPlacedAt ? calculateHoldDuration(historyEntry.orderPlacedAt) : null;
+    const source = historyEntry?.source;
+
     return (
         <tr className="hover:bg-slate-50 group">
             <td className="px-4 py-3">
@@ -1491,6 +1508,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                     <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
                     <span className="text-slate-400">for</span>
                     <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
+                    {source === 'auto' && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-100 text-indigo-700 rounded uppercase">AUTO</span>}
                 </div>
             </td>
 
@@ -1499,44 +1517,140 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                     <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
                         {item.quantity}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-600">
-                        {formatMoney(item.quantity * currentPrice)}
+                    <td className="px-4 py-3 text-center font-mono text-slate-600">
+                        {entryPrice}¢
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-500">
-                        {historyEntry ? `${historyEntry.fairValue}¢` : '-'}
+                    <td className="px-4 py-3 text-center font-mono text-slate-600">
+                        {currentPrice}¢
                     </td>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
-                        {currentFV}¢
+                    <td className="px-4 py-3 text-right font-mono">
+                        <div className={`font-bold ${unrealizedPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            {unrealizedPnL >= 0 ? '+' : ''}{formatMoney(unrealizedPnL)}
+                        </div>
+                        <div className={`text-[10px] ${unrealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {unrealizedPnLPercent >= 0 ? '+' : ''}{unrealizedPnLPercent.toFixed(1)}%
+                        </div>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                        <div className={`font-mono text-sm ${entryEdge !== null && entryEdge >= 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                            {entryEdge !== null ? `${entryEdge >= 0 ? '+' : ''}${entryEdge}¢` : '-'}
+                        </div>
+                        <div className={`font-mono text-sm ${currentEdge !== null && currentEdge >= 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                            {currentEdge !== null ? `${currentEdge >= 0 ? '+' : ''}${currentEdge}¢` : '-'}
+                        </div>
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                        {holdDuration ? formatHoldDuration(holdDuration) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                        {exitOrder ? (
+                            <div className="text-xs">
+                                <div className="font-mono text-emerald-600 font-bold">{exitOrder.price}¢</div>
+                                <div className="text-[10px] text-slate-400">
+                                    {exitOrder.filled > 0 ? `${exitOrder.filled}/${item.quantity}` : 'Resting'}
+                                </div>
+                            </div>
+                        ) : (
+                            <span className="text-slate-300">-</span>
+                        )}
                     </td>
                 </>
             )}
 
             {activeTab === 'resting' && (
                 <>
+                    <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded ${item.action === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                            {item.action?.toUpperCase() || 'BUY'}
+                        </span>
+                    </td>
                     <td className="px-4 py-3 text-center font-mono">
                         <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono">{item.price}¢</td>
-                    <td className="px-4 py-3 text-right font-mono text-slate-600">
-                        {formatMoney(item.price * (item.quantity - item.filled))}
+                    <td className="px-4 py-3 text-center font-mono">{item.price}¢</td>
+                    <td className="px-4 py-3 text-center font-mono text-slate-600">
+                        {currentFV ? `${currentFV}¢` : '-'}
                     </td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        <div>{formatOrderDate(item.created)}</div>
-                        <div className="text-[10px] text-slate-400">{item.expiration ? formatOrderDate(item.expiration) : 'GTC'}</div>
+                    <td className="px-4 py-3 text-center text-xs font-mono">
+                        {(() => {
+                            const isBuy = item.action === 'buy';
+                            const market = currentPrice ? { bestBid: currentPrice, bestAsk: currentPrice } : null;
+                            if (!market) return <span className="text-slate-400">-</span>;
+                            const distance = calculateDistanceFromMarket(item.price, market.bestBid, market.bestAsk, isBuy);
+                            return (
+                                <span className={distance < 0 ? 'text-rose-500' : distance > 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                                    {distance > 0 ? '+' : ''}{distance}¢
+                                </span>
+                            );
+                        })()}
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">
+                        {item.created ? formatHoldDuration(Date.now() - item.created) : '-'}
                     </td>
                 </>
             )}
 
             {activeTab === 'history' && (
                 <>
-                    <td className="px-4 py-3 text-center font-mono text-slate-500">
-                        {historyEntry ? `${historyEntry.fairValue}¢` : '-'}
+                    <td className="px-4 py-3 text-center">
+                        <div className="font-mono text-sm text-slate-600">{entryPrice}¢</div>
+                        <div className="font-mono text-[10px] text-slate-400">
+                            {historyEntry ? `(${historyEntry.fairValue}¢ FV)` : ''}
+                        </div>
                     </td>
-                    <td className="px-4 py-3 text-right font-mono font-bold text-emerald-600">
-                        {item.payout ? formatMoney(item.payout) : '-'}
+                    <td className="px-4 py-3 text-center">
+                        {(() => {
+                            const exitPrice = item.payout ? Math.floor(item.payout / item.quantity) : null;
+                            return exitPrice !== null ? (
+                                <>
+                                    <div className="font-mono text-sm text-slate-600">{exitPrice}¢</div>
+                                    <div className="font-mono text-[10px] text-slate-400">
+                                        {item.payout ? formatMoney(item.payout) : ''}
+                                    </div>
+                                </>
+                            ) : '-';
+                        })()}
                     </td>
-                    <td className="px-4 py-3 text-right text-xs text-slate-500">
-                        {formatOrderDate(item.created)}
+                    <td className="px-4 py-3 text-right">
+                        {item.realizedPnl !== undefined ? (
+                            <>
+                                <div className={`font-mono font-bold ${item.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    {item.realizedPnl >= 0 ? '+' : ''}{formatMoney(item.realizedPnl)}
+                                </div>
+                                <div className={`text-[10px] font-mono ${item.realizedPnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                    {formatPercentReturn(item.realizedPnl, item.cost)}
+                                </div>
+                            </>
+                        ) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                        {(() => {
+                            const exitPrice = item.payout ? Math.floor(item.payout / item.quantity) : null;
+                            const edgeCaptured = exitPrice && entryPrice ? exitPrice - entryPrice : null;
+                            const fvEdge = historyEntry ? historyEntry.fairValue - entryPrice : null;
+                            return (
+                                <>
+                                    <div className={`font-mono text-sm ${edgeCaptured && edgeCaptured > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                        {edgeCaptured !== null ? `${edgeCaptured >= 0 ? '+' : ''}${edgeCaptured}¢` : '-'}
+                                    </div>
+                                    {fvEdge !== null && (
+                                        <div className="text-[10px] text-slate-400">
+                                            / {fvEdge >= 0 ? '+' : ''}{fvEdge}¢ FV
+                                        </div>
+                                    )}
+                                </>
+                            );
+                        })()}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                        {historyEntry?.orderPlacedAt && item.settled ?
+                            formatHoldDuration(item.settled - historyEntry.orderPlacedAt) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                        {item.fees ? formatMoney(item.fees) : '-'}
+                    </td>
+                    <td className="px-4 py-3 text-center text-xs text-slate-500">
+                        {item.settled ? formatOrderDate(item.settled) : formatOrderDate(item.created)}
                     </td>
                 </>
             )}
@@ -1572,6 +1686,16 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
         });
         return map;
     }, [markets]);
+
+    // Create a map of exit orders by marketId for positions tab
+    const exitOrderMap = useMemo(() => {
+        const map = new Map();
+        const sellOrders = positions.filter(p => p.isOrder && p.action === 'sell');
+        for (const order of sellOrders) {
+            map.set(order.marketId, order);
+        }
+        return map;
+    }, [positions]);
 
     const getGameName = (ticker) => {
         const liveMarket = marketMap.get(ticker);
@@ -1647,27 +1771,35 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                         {activeTab === 'positions' && (
                             <>
                                 <SortableHeader label="Qty" sortKey="quantity" currentSort={sortConfig} onSort={onSort} align="center" />
-                                <SortableHeader label="Mkt Price" sortKey="price" currentSort={sortConfig} onSort={onSort} align="right" />
-                                <SortableHeader label="Mkt Value" sortKey="mktValue" currentSort={sortConfig} onSort={onSort} align="right" />
-                                <SortableHeader label="FV @ Buy" sortKey="fvBuy" currentSort={sortConfig} onSort={onSort} align="center" />
-                                <SortableHeader label="FV Now" sortKey="fvNow" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Entry" sortKey="avgPrice" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Current" sortKey="price" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="P&L" sortKey="pnl" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Edge (Entry/Now)" sortKey="edge" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Hold" sortKey="hold" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Exit Order" sortKey="exitOrder" currentSort={sortConfig} onSort={onSort} align="center" />
                             </>
                         )}
 
                         {activeTab === 'resting' && (
                             <>
+                                <SortableHeader label="Type" sortKey="action" currentSort={sortConfig} onSort={onSort} align="center" />
                                 <SortableHeader label="Filled / Qty" sortKey="filled" currentSort={sortConfig} onSort={onSort} align="center" />
-                                <SortableHeader label="Limit" sortKey="price" currentSort={sortConfig} onSort={onSort} align="right" />
-                                <SortableHeader label="Cash" sortKey="cash" currentSort={sortConfig} onSort={onSort} align="right" />
-                                <SortableHeader label="Placed / Exp" sortKey="created" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Limit" sortKey="price" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="FV Now" sortKey="fv" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Dist" sortKey="distance" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="In Queue" sortKey="created" currentSort={sortConfig} onSort={onSort} align="center" />
                             </>
                         )}
 
                         {activeTab === 'history' && (
                             <>
-                                <SortableHeader label="FV @ Buy" sortKey="fvBuy" currentSort={sortConfig} onSort={onSort} align="center" />
-                                <SortableHeader label="Payout" sortKey="payout" currentSort={sortConfig} onSort={onSort} align="right" />
-                                <SortableHeader label="Settled" sortKey="created" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Entry" sortKey="avgPrice" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Exit" sortKey="exitPrice" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="P&L" sortKey="pnl" currentSort={sortConfig} onSort={onSort} align="right" />
+                                <SortableHeader label="Edge" sortKey="edge" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Duration" sortKey="duration" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Fees" sortKey="fees" currentSort={sortConfig} onSort={onSort} align="center" />
+                                <SortableHeader label="Settled" sortKey="created" currentSort={sortConfig} onSort={onSort} align="center" />
                             </>
                         )}
                         <th className="px-4 py-3 text-center">Action</th>
@@ -1678,7 +1810,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                     <React.Fragment key={gameName}>
                         <tbody className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                                <td colSpan={activeTab === 'history' ? 5 : 6} className="px-4 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
+                                <td colSpan={activeTab === 'positions' ? 9 : activeTab === 'resting' ? 8 : 9} className="px-4 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
                                     {gameName}
                                 </td>
                             </tr>
@@ -1690,8 +1822,9 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                                     item={item}
                                     activeTab={activeTab}
                                     historyEntry={tradeHistory[item.marketId]}
-                                    currentPrice={activeTab === 'positions' ? getCurrentPrice(item.marketId) : 0}
-                                    currentFV={activeTab === 'positions' ? getCurrentFV(item.marketId) : 0}
+                                    currentPrice={getCurrentPrice(item.marketId)}
+                                    currentFV={getCurrentFV(item.marketId)}
+                                    exitOrder={exitOrderMap.get(item.marketId)}
                                     onCancel={onCancel}
                                     onAnalysis={onAnalysis}
                                 />
@@ -2572,6 +2705,9 @@ const KalshiDashboard = () => {
                       isOrder: false,
                       settlementStatus: settlementStatus,
                       realizedPnl: p.realized_pnl,
+                      payout: p.payout,
+                      created: p.created_time || p.trade_time,
+                      settled: p.settlement_time,
                       _aggregatedCount: 1
                   });
               }

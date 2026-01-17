@@ -136,6 +136,72 @@ export const calculateKalshiFees = (priceCents, quantity) => {
 };
 
 // ==========================================
+// PORTFOLIO CALCULATIONS
+// ==========================================
+
+export const calculateUnrealizedPnL = (quantity, entryPrice, currentPrice) => {
+    // Returns P&L in cents
+    return quantity * (currentPrice - entryPrice);
+};
+
+export const calculateBreakEvenPrice = (entryPrice, quantity, feesPaid) => {
+    // Calculate price needed to break even after fees
+    // feesPaid is entry fees, we need to account for estimated exit fees too
+    const estimatedExitFee = calculateKalshiFees(entryPrice, quantity);
+    const totalFees = feesPaid + estimatedExitFee;
+    const breakEven = Math.ceil(entryPrice + (totalFees / quantity));
+    return Math.min(breakEven, 99); // Cap at Kalshi max
+};
+
+export const calculateHoldDuration = (entryTimestamp) => {
+    if (!entryTimestamp) return null;
+    return Date.now() - entryTimestamp;
+};
+
+export const formatHoldDuration = (ms) => {
+    if (!ms || ms < 0) return '-';
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+
+    if (days > 0) return `${days}d ${hours % 24}h`;
+    if (hours > 0) return `${hours}h ${minutes % 60}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
+    return `${seconds}s`;
+};
+
+export const calculateEdge = (fairValue, price) => {
+    // Positive edge = buying below FV or selling above FV
+    return fairValue - price;
+};
+
+export const calculateDistanceFromMarket = (orderPrice, bestBid, bestAsk, isBuy) => {
+    // For buy orders: distance from best ask (negative = below market)
+    // For sell orders: distance from best bid (positive = above market)
+    if (isBuy) {
+        return orderPrice - (bestAsk || orderPrice);
+    } else {
+        return orderPrice - (bestBid || orderPrice);
+    }
+};
+
+export const calculateTargetPnL = (position, exitPrice) => {
+    // Calculate expected P&L if exit order fills
+    const { quantity, avgPrice, fees } = position;
+    const revenue = quantity * exitPrice;
+    const cost = quantity * avgPrice;
+    const exitFees = calculateKalshiFees(exitPrice, quantity);
+    return revenue - cost - fees - exitFees;
+};
+
+export const formatPercentReturn = (pnl, cost) => {
+    if (!cost || cost === 0) return '-';
+    const percent = (pnl / cost) * 100;
+    return `${percent >= 0 ? '+' : ''}${percent.toFixed(1)}%`;
+};
+
+// ==========================================
 // CRYPTO
 // ==========================================
 
