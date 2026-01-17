@@ -214,6 +214,12 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
     console.log(`[INDEX] Indexed ${indexed} Kalshi markets (${parseFailures} parse failures) for ${sport}`);
     console.log(`[INDEX] Unique dates in index:`, Array.from(uniqueDates).sort());
 
+    // DEBUG: Show all Jan 17 games
+    const jan17Keys = Array.from(index.keys()).filter(k => k.includes('2026-01-17'));
+    if (jan17Keys.length > 0) {
+        console.log(`[INDEX] Jan 17 games (${jan17Keys.length}):`, jan17Keys);
+    }
+
     return index;
 };
 
