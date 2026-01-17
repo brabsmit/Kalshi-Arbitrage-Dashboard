@@ -4,7 +4,6 @@ import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, 
 import { SPORT_MAPPING, findKalshiMatch } from './utils/kalshiMatching';
 import {
     americanToProbability,
-    calculateVolatility,
     probabilityToAmericanOdds,
     formatDuration,
     formatMoney,
@@ -2148,25 +2147,6 @@ const KalshiDashboard = () => {
                        };
                   }
 
-                  // --- VOLATILITY TRACKING ---
-                  const currentVal = vigFreeProb * 100;
-
-                  // OPTIMIZATION: Use slice instead of filter+spread to reduce array allocations
-                  const oldHistory = prevMarket?.history || [];
-                  const cutoff = processingTime - 60 * 60 * 1000;
-
-                  let startIndex = 0;
-                  // History is sorted by time, so we can stop at first valid entry
-                  while (startIndex < oldHistory.length && oldHistory[startIndex].t <= cutoff) {
-                      startIndex++;
-                  }
-
-                  const history = oldHistory.slice(startIndex);
-                  history.push({ t: processingTime, v: currentVal });
-
-                  const volatility = calculateVolatility(history);
-                  // ---------------------------
-
                   // Get volume and open interest from realMatch (only available via HTTP)
                   const volume = realMatch?.volume || 0;
                   const openInterest = realMatch?.open_interest || 0;
@@ -2190,8 +2170,6 @@ const KalshiDashboard = () => {
                       kalshiLastUpdate: kalshiLastUpdate,
                       oddsLastUpdate: maxLastUpdate,
                       fairValue: Math.floor(vigFreeProb * 100),
-                      history: history,
-                      volatility: volatility,
                       bookmakerCount: vigFreeProbs.length,
                       oddsSpread: spread,
                       oddsSources: vigFreeProbs.map(v => v.source),
@@ -2205,7 +2183,6 @@ const KalshiDashboard = () => {
                         prevMarket.bestBid === newMarket.bestBid &&
                         prevMarket.bestAsk === newMarket.bestAsk &&
                         prevMarket.fairValue === newMarket.fairValue &&
-                        prevMarket.volatility.toFixed(2) === newMarket.volatility.toFixed(2) &&
                         prevMarket.oddsLastUpdate === newMarket.oddsLastUpdate &&
                         prevMarket.kalshiLastUpdate === newMarket.kalshiLastUpdate &&
                         prevMarket.volume === newMarket.volume &&
@@ -2891,7 +2868,6 @@ const KalshiDashboard = () => {
                             </th>
                             <SortableHeader label="Event" sortKey="event" currentSort={sortConfig} onSort={handleSort} />
                             <SortableHeader label="Implied Fair Value" sortKey="fairValue" currentSort={sortConfig} onSort={handleSort} align="center" />
-                            <SortableHeader label="Vol" sortKey="volatility" currentSort={sortConfig} onSort={handleSort} align="center" />
                             <th className="p-0 bg-slate-50 border-b border-slate-200 select-none font-medium text-slate-500">
                                 <button
                                     onClick={() => handleSort('bestBid')}

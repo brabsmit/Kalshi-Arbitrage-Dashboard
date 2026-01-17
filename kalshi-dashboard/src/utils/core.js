@@ -49,22 +49,6 @@ export const probabilityToAmericanOdds = (prob) => {
     }
 };
 
-export const calculateVolatility = (history) => {
-    if (!history || history.length < 2) return 0;
-    let sum = 0;
-    let sumSq = 0;
-    const n = history.length;
-    // Single pass O(N) loop to avoid array allocation and multiple traversals
-    for (let i = 0; i < n; i++) {
-        const v = history[i].v;
-        sum += v;
-        sumSq += v * v;
-    }
-    // Variance = (SumSq - (Sum*Sum)/N) / (N - 1)
-    const variance = (sumSq - (sum * sum) / n) / (n - 1);
-    return Math.sqrt(Math.max(0, variance));
-};
-
 export const calculateStrategy = (market, marginPercent) => {
     if (!market.isMatchFound) return { smartBid: null, reason: "No Market", edge: -100, maxWillingToPay: 0 };
 
@@ -77,12 +61,9 @@ export const calculateStrategy = (market, marginPercent) => {
     // - Increasing margin during volatility meant AVOIDING the highest-edge trades
     // - In sports betting, unlike financial markets, volatility = opportunity, not risk
     //
-    // New approach: Use base margin only. Volatility is now tracked for informational purposes
-    // but does not affect position sizing or bid prices.
-    const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+    // New approach: Use base margin only.
 
-    const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
+    const maxWillingToPay = Math.floor(fairValue * (1 - marginPercent / 100));
     const currentBestBid = market.bestBid || 0;
     const edge = fairValue - currentBestBid;
 

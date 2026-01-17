@@ -26,3 +26,7 @@
 ## 2025-12-21 - [The Loading Charade]
 **Observation:** `useForge` hook. We were using a React hook, a state variable, and a `useEffect` just to inject a `<script>` tag that the app *requires* to function.
 **Lesson:** If a library is required, put it in `index.html`. Browsers are good at loading scripts. We don't need React to manage `<script>` tags for us.
+
+## 2026-05-23 - [The Vanity Metric]
+**Observation:** `calculateVolatility` maintained a rolling history of implied probabilities for every single market to calculate a "Volatility" score. This score was explicitly ignored by the trading strategy ("Volatility = Opportunity"), yet we were still paying the CPU/Memory tax to calculate and display it.
+**Lesson:** If the data doesn't drive a decision, it's just noise. Don't build expensive features just to make the dashboard look like a Bloomberg terminal.
