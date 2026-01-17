@@ -105,6 +105,11 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
         const key = generateMarketKey(sport, away, home, gameDate);
         if (!key) continue;
 
+        // DEBUG: Log first key to verify date is correct
+        if (indexed === 0) {
+            console.log('[INDEX] First key:', key, '| Date:', new Date(gameDate).toISOString());
+        }
+
         // Determine which side this market represents
         // Kalshi ticker format: SERIES-DATEAWAY/HOME-WINNER
         // Example: KXNBAGAME-26JAN19LACWAS-LAC means "LAC wins"
@@ -173,7 +178,12 @@ export const findMatchInIndex = (index, sport, targetTeam, homeTeam, awayTeam, g
 
     // Look up in index
     const entry = index.get(key);
-    if (!entry) return null;
+    if (!entry) {
+        // DEBUG: Log first failure to compare keys
+        console.log('[MATCH] Looking for:', key, '| Date:', new Date(gameDate).toISOString());
+        console.log('[MATCH] Index has', index.size, 'keys. First 3:', Array.from(index.keys()).slice(0, 3));
+        return null;
+    }
 
     // Determine which side the target team is on
     const targetNorm = normalizeTeamName(targetTeam);
