@@ -3,6 +3,7 @@
 
 /**
  * Normalizes a team name for consistent matching
+ * - Strips team suffixes (Mavericks, Jazz, etc.) to match Kalshi's city-only format
  * - Removes special characters and spaces
  * - Converts to uppercase
  * - Handles common abbreviations
@@ -10,13 +11,25 @@
 const normalizeTeamName = (teamName) => {
     if (!teamName) return '';
 
-    return teamName
-        .toUpperCase()
+    let normalized = teamName.toUpperCase();
+
+    // Strip common team suffixes that Odds API includes but Kalshi doesn't
+    // NBA teams
+    normalized = normalized.replace(/\s+(MAVERICKS|JAZZ|HAWKS|CELTICS|PISTONS|PACERS)$/, '');
+    normalized = normalized.replace(/\s+(76ERS|SIXERS|HEAT|THUNDER|WARRIORS|SUNS|LAKERS)$/, '');
+    normalized = normalized.replace(/\s+(CLIPPERS|TRAIL\s*BLAZERS|BLAZERS|KINGS|SPURS|GRIZZLIES)$/, '');
+    normalized = normalized.replace(/\s+(PELICANS|ROCKETS|TIMBERWOLVES|NUGGETS|BUCKS|BULLS)$/, '');
+    normalized = normalized.replace(/\s+(CAVALIERS|CAVS|RAPTORS|NETS|KNICKS|WIZARDS|HORNETS|MAGIC)$/, '');
+
+    // Remove remaining spaces and special chars
+    normalized = normalized
         .replace(/\s+/g, '')           // Remove all spaces
-        .replace(/[^A-Z0-9]/g, '')     // Remove special chars (parentheses, apostrophes, etc)
+        .replace(/[^A-Z0-9]/g, '')     // Remove special chars
         .replace(/SAINT/g, 'ST')       // St. Louis → STLOUIS
         .replace(/&/g, 'AND')          // Texas A&M → TEXASAM
-        .substring(0, 15);             // Limit length for key size
+        .substring(0, 15);             // Limit length
+
+    return normalized;
 };
 
 /**
