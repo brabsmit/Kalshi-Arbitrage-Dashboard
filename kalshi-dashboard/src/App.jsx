@@ -1025,8 +1025,15 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
     );
 };
 
-const AnalysisModal = ({ data, onClose }) => {
+const AnalysisModal = ({ data, onClose, onSell }) => {
     const backdropProps = useModalClose(!!data, onClose);
+    const [isSelling, setIsSelling] = useState(false);
+
+    // Reset selling state when data changes (modal opens)
+    useEffect(() => {
+        if (data) setIsSelling(false);
+    }, [data]);
+
     if (!data) return null;
     const latency = data.orderPlacedAt - data.oddsTime;
 
@@ -1053,6 +1060,27 @@ const AnalysisModal = ({ data, onClose }) => {
             }
         }
     }
+
+    // P&L Calculation
+    const currentPrice = data.currentPrice || 0;
+    const entryPrice = data.bidPrice || 0;
+    const quantity = data.currentQuantity || 0;
+    const unrealizedPnl = (currentPrice - entryPrice) * quantity;
+    const unrealizedPnlPercent = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * 100 : 0;
+
+    const handleSell = async () => {
+        if (!onSell || !data.currentPrice) return;
+        setIsSelling(true);
+        try {
+            // Sell at market (which is current Best Bid)
+            // executeOrder(marketOrTicker, price, isSell, qtyOverride, source)
+            await onSell(data.ticker, data.currentPrice, true, quantity, 'manual-analysis');
+            onClose();
+        } catch (e) {
+            console.error("Sell failed", e);
+            setIsSelling(false);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
@@ -1109,6 +1137,43 @@ const AnalysisModal = ({ data, onClose }) => {
                             <div className="text-xs text-slate-500 mt-1">Fair Value (Cents)</div>
                         </div>
                     </div>
+
+                    {/* Unrealized P&L Section */}
+                    {quantity > 0 && (
+                        <div className={`mb-6 p-4 rounded-lg border ${unrealizedPnl >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <div className={`text-xs font-bold uppercase mb-1 ${unrealizedPnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>Unrealized P&L</div>
+                                    <div className={`text-3xl font-bold ${unrealizedPnl >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                                        {unrealizedPnl >= 0 ? '+' : ''}{formatMoney(unrealizedPnl)}
+                                    </div>
+                                    <div className={`text-sm font-medium mt-1 ${unrealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                        {unrealizedPnlPercent >= 0 ? '+' : ''}{unrealizedPnlPercent.toFixed(2)}%
+                                    </div>
+                                </div>
+                                <div className="text-right">
+                                     <div className="text-xs text-slate-500 mb-1">Current Price</div>
+                                     <div className="text-xl font-mono font-bold text-slate-700">{currentPrice}¢</div>
+                                     <div className="text-xs text-slate-400 mt-1">Qty: {quantity}</div>
+                                </div>
+                            </div>
+
+                            {onSell && (
+                                <button
+                                    onClick={handleSell}
+                                    disabled={isSelling || currentPrice <= 0}
+                                    className={`mt-4 w-full py-2 px-4 rounded-lg font-bold text-sm text-white shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2 ${
+                                        unrealizedPnl >= 0
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
+                                            : 'bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300'
+                                    }`}
+                                >
+                                    {isSelling ? <Loader2 className="animate-spin" size={16}/> : <DollarSign size={16}/>}
+                                    Sell at Market ({currentPrice}¢)
+                                </button>
+                            )}
+                        </div>
+                    )}
 
                     <div className="space-y-3 border-t border-slate-100 pt-4">
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
@@ -3495,8 +3560,18 @@ const KalshiDashboard = () => {
   };
 
   const handleAnalysis = useCallback((item, historyEntry) => {
-    setAnalysisModalData({ ...historyEntry, currentStatus: item.settlementStatus || item.status });
-  }, []);
+    // Enrich with current market data for P&L calculation
+    const currentMarket = markets.find(m => m.realMarketId === item.marketId);
+    const currentPrice = currentMarket ? currentMarket.bestBid : 0;
+
+    setAnalysisModalData({
+        ...historyEntry,
+        currentStatus: item.settlementStatus || item.status,
+        currentPrice: currentPrice,
+        currentQuantity: item.quantity,
+        ticker: item.marketId // Ensure ticker is available
+    });
+  }, [markets]);
 
   // OPTIMIZATION: Cache enriched markets to preserve object identity for React.memo
   // This prevents all MarketRows from re-rendering when only one market updates.
@@ -3590,7 +3665,7 @@ const KalshiDashboard = () => {
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
       <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} sessionHistory={sessionHistory} />
 
-      <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} />
+      <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} onSell={executeOrder} />
       
       <PositionDetailsModal 
           position={selectedPosition} 
