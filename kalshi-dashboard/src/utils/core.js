@@ -29,6 +29,22 @@ export const formatGameTime = (isoString) => {
     });
 };
 
+export const detectMarketType = (ticker) => {
+    if (!ticker) return 'moneyline';
+    if (/-[OU]\d+(\.\d+)?$/.test(ticker)) return 'totals';
+    if (/-\d+(\.\d+)?$/.test(ticker)) return 'spreads';
+    return 'moneyline';
+};
+
+export const extractLine = (ticker) => {
+    if (!ticker) return null;
+    const totalMatch = ticker.match(/-([OU]\d+(\.\d+)?)$/);
+    if (totalMatch) return totalMatch[1];
+    const spreadMatch = ticker.match(/-(\d+(\.\d+)?)$/);
+    if (spreadMatch) return spreadMatch[1];
+    return null;
+};
+
 // ==========================================
 // MATH & STRATEGY
 // ==========================================
