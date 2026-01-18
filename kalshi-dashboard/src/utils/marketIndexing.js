@@ -321,8 +321,6 @@ export const findMatchInIndex = (index, sport, targetTeam, homeTeam, awayTeam, g
         return null;
     }
 
-    console.log('[MATCH SUCCESS]', key);
-
     // Determine which side the target team is on
     const targetNorm = normalizeTeamName(targetTeam);
     const awayNorm = normalizeTeamName(awayTeam);

@@ -2703,12 +2703,18 @@ const KalshiDashboard = () => {
                   const sportConfig = game._sportConfig;
 
                   const bookmakers = game.bookmakers || [];
-                  if (bookmakers.length === 0) return null;
+                  if (bookmakers.length === 0) {
+                      console.log(`[DEBUG] Game ${game.id} skipped: No bookmakers`);
+                      return null;
+                  }
 
                   const refBookmaker = bookmakers[0];
                   const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
                   
-                  if (!refOutcomes || refOutcomes.length < 2) return null;
+                  if (!refOutcomes || refOutcomes.length < 2) {
+                      console.log(`[DEBUG] Game ${game.id} skipped: Invalid refOutcomes`);
+                      return null;
+                  }
 
                   const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
                   const targetName = targetOutcome.name;
@@ -2743,7 +2749,10 @@ const KalshiDashboard = () => {
                       }
                   }
 
-                  if (vigFreeProbs.length === 0) return null;
+                  if (vigFreeProbs.length === 0) {
+                      console.log(`[DEBUG] Game ${game.id} skipped: No vigFreeProbs`);
+                      return null;
+                  }
 
                   const minProb = Math.min(...vigFreeProbs.map(v => v.prob));
                   const maxProb = Math.max(...vigFreeProbs.map(v => v.prob));
@@ -2876,7 +2885,12 @@ const KalshiDashboard = () => {
               if (!hasChanged && processed.length === prev.length) return prev;
               return processed;
           });
-      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); } finally { setHasScanned(true); isLoadingRef.current = false; }
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+            console.error('fetchLiveOdds Error:', e);
+            setErrorMsg(e.message);
+        }
+      } finally { setHasScanned(true); isLoadingRef.current = false; }
   }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
   useEffect(() => { setMarkets([]); setHasScanned(false); fetchLiveOdds(true); }, [fetchLiveOdds]);
