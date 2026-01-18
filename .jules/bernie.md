@@ -26,3 +26,7 @@
 ## 2025-12-21 - [The Loading Charade]
 **Observation:** `useForge` hook. We were using a React hook, a state variable, and a `useEffect` just to inject a `<script>` tag that the app *requires* to function.
 **Lesson:** If a library is required, put it in `index.html`. Browsers are good at loading scripts. We don't need React to manage `<script>` tags for us.
+
+## 2025-05-28 - [The Dead Matching Logic]
+**Observation:** `findKalshiMatch` and `TEAM_ABBR` in `kalshiMatching.js` were completely unused, superseded by `marketIndexing.js`. `App.jsx` only imported `SPORT_MAPPING` from it.
+**Lesson:** Don't keep two versions of the same logic. If you rewrite it, delete the old one immediately. Files that only export constants should be named `constants.js` or merged into relevant modules.

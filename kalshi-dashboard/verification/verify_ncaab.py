@@ -1,6 +1,7 @@
 
 import json
 import time
+import re
 from playwright.sync_api import sync_playwright, expect
 
 def generate_ncaab_odds_response():
@@ -48,8 +49,8 @@ def generate_kalshi_markets_ncaab():
     }
 
 def run(playwright):
-    browser = playwright.chromium.launch(headless=True)
-    context = browser.new_context()
+    browser = playwright.chromium.launch(headless=True, args=['--ignore-certificate-errors'])
+    context = browser.new_context(ignore_https_errors=True)
     page = context.new_page()
 
     # Inject Mock Forge for auth
@@ -67,6 +68,7 @@ def run(playwright):
     page.add_init_script("""
         localStorage.setItem('kalshi_keys', JSON.stringify({keyId: 'test_id', privateKey: 'test_key'}));
         localStorage.setItem('odds_api_key', 'test_odds_key');
+        sessionStorage.setItem('authenticated', 'true');
     """)
 
     # Mock APIs
@@ -105,22 +107,15 @@ def run(playwright):
     page.route("**/api/kalshi/portfolio/positions*", lambda route: route.fulfill(json={"market_positions": []}))
 
     # Go to app
-    page.goto("http://localhost:3000")
+    page.goto("https://localhost:3000")
 
     # Wait for app to load
     page.wait_for_selector("h1", state="visible")
 
     # Open Sport Filter
-    # "1 Sport" because NFL is selected by default
-    sport_btn = page.get_by_text("1 Sport")
-    if not sport_btn.count():
-        sport_btn = page.get_by_text("Select Sports")
-
+    # "1 Sport" because NFL is selected by default or "Select Sports" if none
+    sport_btn = page.locator("button").filter(has_text=re.compile(r"^(1 Sport|Select Sports)$")).first
     sport_btn.click()
-
-    # Wait a bit for animation
-    page.wait_for_timeout(500)
-    page.screenshot(path="verification/dropdown_debug.png")
 
     # Check if NCAAB is there
     ncaab_option = page.get_by_text("Basketball (NCAAB)")
@@ -139,9 +134,6 @@ def run(playwright):
 
     # Check for the Duke game
     duke_row = page.locator("tr").filter(has_text="Duke Blue Devils")
-    # This assertion ensures that:
-    # 1. The frontend fetched series_ticker=KXNCAAMBGAME (because the mock only returns data for that).
-    # 2. The findKalshiMatch logic correctly matched KXNCAAMBGAME-24MAR20-DUK-UNC to the Odds event.
     expect(duke_row).to_be_visible(timeout=10000)
 
     # Take screenshot
