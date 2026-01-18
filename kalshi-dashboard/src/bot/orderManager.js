@@ -220,6 +220,64 @@ export function createOrderManager(dependencies) {
     }
 
     /**
+     * Executes a "Bail Out" Sell Order using IOC (Immediate or Cancel).
+     * Sells INTO the bid to exit immediately.
+     * @param {string} ticker - The market ticker
+     * @param {number} bidPrice - The current best Bid price in cents
+     * @param {number} quantity - Number of contracts to sell
+     * @param {string} side - 'yes' or 'no'
+     * @returns {Promise<{success: boolean, filled: number}>}
+     */
+    async function executeBailOutOrder(ticker, bidPrice, quantity, side) {
+        if (!walletKeys) return { success: false, filled: 0 };
+
+        try {
+            const ts = Date.now();
+            const orderParams = {
+                ticker: ticker,
+                action: 'sell',
+                type: 'limit',
+                price: bidPrice,
+                count: quantity,
+                time_in_force: 'ioc',
+                client_order_id: `bailout-${ts}-${Math.random().toString(36).substr(2, 5)}`,
+                side: side // 'yes' or 'no'
+            };
+
+            const body = JSON.stringify(orderParams);
+            const sig = await signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
+
+            console.log(`[BAILOUT] Firing IOC Sell: ${quantity}x ${ticker} @ ${bidPrice}¢`);
+            addLog(`Bail Out: ${ticker} @ ${bidPrice}¢`, 'CLOSE');
+
+            const res = await fetch('/api/kalshi/portfolio/orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'KALSHI-ACCESS-KEY': walletKeys.keyId,
+                    'KALSHI-ACCESS-SIGNATURE': sig,
+                    'KALSHI-ACCESS-TIMESTAMP': ts.toString()
+                },
+                body
+            });
+
+            const data = await res.json();
+            if (res.ok && data.order) {
+                const filled = data.order.filled_count || 0;
+                if (filled > 0) {
+                     fetchPortfolio();
+                     return { success: true, filled };
+                }
+            }
+            return { success: false, filled: 0 };
+
+        } catch (e) {
+            console.error(`[BAILOUT ERROR] Failed to liquidate ${ticker}:`, e);
+            return { success: false, filled: 0 };
+        }
+    }
+
+    /**
      * Executes an aggressive Taker Buy order using IOC (Immediate or Cancel).
      * Performs a pre-flight check to ensure Taker fees don't destroy the edge.
      * @param {string} ticker - The market ticker (e.g., 'KX-NFL-24-W1')
@@ -326,6 +384,7 @@ export function createOrderManager(dependencies) {
     return {
         executeOrder,
         cancelOrder,
-        executeTakerOrder
+        executeTakerOrder,
+        executeBailOutOrder
     };
 }

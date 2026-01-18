@@ -2,6 +2,7 @@
 // Auto-close bot logic extracted from App.jsx
 
 import { calculateKalshiFees } from '../utils/core.js';
+import { processBailOuts } from './bailOut.js';
 
 /**
  * Runs the auto-close bot logic
@@ -28,11 +29,15 @@ export async function runAutoClose(params) {
 
     const { closingTracker } = refs;
 
+    // 0. Run Bail Out Logic First
+    const bailedOutTickers = await processBailOuts(positions, markets, config, orderManager, addLog);
+
     const heldPositions = positions.filter(p =>
         !p.isOrder &&
         p.status === 'HELD' &&
         p.quantity > 0 &&
-        p.settlementStatus !== 'settled'
+        p.settlementStatus !== 'settled' &&
+        !bailedOutTickers.includes(p.marketId) // Skip items we just panicked sold
     );
 
     const activeSellOrders = positions.filter(p =>

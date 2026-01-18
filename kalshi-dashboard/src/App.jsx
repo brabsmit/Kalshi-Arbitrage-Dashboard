@@ -1,6 +1,6 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
-import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2 } from 'lucide-react';
+import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2, ShieldAlert } from 'lucide-react';
 import { SPORT_MAPPING } from './utils/kalshiMatching';
 import { buildKalshiIndex, findMatchInIndex, logIndexStats } from './utils/marketIndexing';
 import {
@@ -746,6 +746,60 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                         />
                                     </div>
                                 </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Bail Out Section */}
+                    <div className="border-t border-slate-200 pt-6">
+                        <h4 className="text-xs font-bold text-slate-600 uppercase mb-4 flex items-center gap-2">
+                            <ShieldAlert size={14} />
+                            Bail Out (Stop Loss)
+                        </h4>
+
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <label htmlFor="enable-bailout" className="text-sm text-slate-700 flex-1">
+                                    Enable Bail Out
+                                    <div className="text-xs text-slate-500 mt-0.5">Liquidate losing positions near expiration</div>
+                                </label>
+                                <input
+                                    id="enable-bailout"
+                                    type="checkbox"
+                                    checked={config.isBailOutEnabled}
+                                    onChange={e => setConfig({...config, isBailOutEnabled: e.target.checked})}
+                                    className="w-4 h-4 accent-blue-600"
+                                />
+                            </div>
+
+                            {config.isBailOutEnabled && (
+                                <>
+                                    <RangeSetting
+                                        id="bailout-hours"
+                                        label="Trigger Window"
+                                        value={config.bailOutHoursBeforeExpiry}
+                                        onChange={v => setConfig({...config, bailOutHoursBeforeExpiry: v})}
+                                        min={1}
+                                        max={72}
+                                        unit="h"
+                                        colorClass="text-rose-600"
+                                        accentClass="accent-rose-600"
+                                        helpText="Check contracts expiring in less than X hours."
+                                    />
+
+                                    <RangeSetting
+                                        id="bailout-percent"
+                                        label="Loss Trigger %"
+                                        value={config.bailOutTriggerPercent}
+                                        onChange={v => setConfig({...config, bailOutTriggerPercent: v})}
+                                        min={5}
+                                        max={90}
+                                        unit="%"
+                                        colorClass="text-rose-600"
+                                        accentClass="accent-rose-600"
+                                        helpText="Sell if position is down by this percentage."
+                                    />
+                                </>
                             )}
                         </div>
                     </div>
@@ -2546,6 +2600,9 @@ const KalshiDashboard = () => {
           enableLiquidityChecks: true, // Risk Management: Enable liquidity filtering
           isAutoBid: false,
           isAutoClose: true,
+          isBailOutEnabled: false, // NEW: Master toggle for Bail Out
+          bailOutHoursBeforeExpiry: 24, // NEW: Check contracts expiring in < 24 hours
+          bailOutTriggerPercent: 20, // NEW: Trigger if loss > 20%
           holdStrategy: 'sell_limit',
           selectedSports: ['americanfootball_nfl'],
           isTurboMode: false,
