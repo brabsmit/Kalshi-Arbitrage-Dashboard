@@ -2,6 +2,10 @@
 
 This repository contains a React-based dashboard for arbitrage trading (`kalshi-dashboard`) and a suite of Python-based verification scripts and tests.
 
+## Versioning
+
+When making changes to the application, please update the version number and date in `kalshi-dashboard/src/App.jsx` before submitting a pull request. The version and date are displayed in the `Header` component.
+
 ## Dependencies
 
 To work with this repository, you must install the required dependencies for both the frontend application and the backend testing suite.
