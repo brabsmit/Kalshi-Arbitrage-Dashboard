@@ -859,7 +859,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
     return (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot</h1>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.0 (2026-01-18)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
