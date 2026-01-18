@@ -1098,12 +1098,12 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="bg-slate-900 p-4 flex justify-between items-center">
                     <div className="text-white font-bold flex items-center gap-2"><Calculator size={18} className="text-blue-400"/> Trade Analysis</div>
                     <button aria-label="Close" onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
                 </div>
-                <div className="p-6">
+                <div className="p-6 overflow-y-auto">
                     <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 font-mono">{data.ticker}</p></div>
                     
                     <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
@@ -1172,7 +1172,7 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                                 </div>
                             </div>
 
-                            {onSell && (
+                            {onSell && !data.isOrder && (
                                 <button
                                     onClick={handleSell}
                                     disabled={isSelling || currentPrice <= 0}
@@ -3587,6 +3587,7 @@ const KalshiDashboard = () => {
         currentStatus: item.settlementStatus || item.status,
         currentPrice: currentPrice,
         currentQuantity: item.quantity,
+        isOrder: item.isOrder, // Ensure this is passed
         ticker: item.marketId // Ensure ticker is available
     });
   }, [markets]);
