@@ -1,6 +1,7 @@
 // File: src/App.jsx
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2, ShieldAlert } from 'lucide-react';
+import MarketTypeSelector from './components/MarketTypeSelector';
 import { SPORT_MAPPING } from './utils/kalshiMatching';
 import { buildKalshiIndex, findMatchInIndex, logIndexStats } from './utils/marketIndexing';
 import {
@@ -11,6 +12,8 @@ import {
     formatMoney,
     formatOrderDate,
     formatGameTime,
+    detectMarketType,
+    extractLine,
     calculateStrategy,
     calculateKalshiFees,
     signRequest,
@@ -913,7 +916,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
     return (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.0 (2026-01-18)</span></h1>
+            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1 (2026-01-18)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
@@ -1986,6 +1989,9 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
         }
     };
 
+    const marketType = detectMarketType(market.realMarketId);
+    const line = extractLine(market.realMarketId);
+
     return (
         <>
             <tr key={market.id} onClick={() => setExpanded(!expanded)} className={`hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100 ${!isSelected ? 'opacity-60 bg-slate-50' : ''}`}>
@@ -2007,6 +2013,11 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                     >
                         <div className="font-medium text-slate-700 flex items-center gap-2">
                             {market.event}
+                            {line && (marketType === 'spreads' || marketType === 'totals') && (
+                                <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-100">
+                                    Line: {line}
+                                </span>
+                            )}
                             <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </div>
                         <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
@@ -2537,6 +2548,7 @@ const KalshiDashboard = () => {
   const [walletKeys, setWalletKeys] = useState(null);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('resting');
+  const [marketType, setMarketType] = useState('moneyline');
   const [analysisModalData, setAnalysisModalData] = useState(null);
   const [oddsApiKey, setOddsApiKey] = useState('');
   const [apiUsage, setApiUsage] = useState(null);
@@ -3649,6 +3661,11 @@ const KalshiDashboard = () => {
     });
   }, [markets]);
 
+  // Filtering Logic: Implement a useMemo hook to filter the raw markets array based on marketType.
+  const filteredMarkets = useMemo(() => {
+      return markets.filter(m => detectMarketType(m.realMarketId) === marketType);
+  }, [markets, marketType]);
+
   // OPTIMIZATION: Cache enriched markets to preserve object identity for React.memo
   // This prevents all MarketRows from re-rendering when only one market updates.
   const enrichedCache = useRef(new WeakMap());
@@ -3661,7 +3678,7 @@ const KalshiDashboard = () => {
           lastMarginRef.current = config.marginPercent;
       }
 
-      return markets.map(m => {
+      return filteredMarkets.map(m => {
           // If we have a cached version for this exact market object reference, use it.
           // This works because setMarkets preserves object identity for unchanged markets.
           if (enrichedCache.current.has(m)) {
@@ -3674,7 +3691,7 @@ const KalshiDashboard = () => {
           enrichedCache.current.set(m, enriched);
           return enriched;
       });
-  }, [markets, config.marginPercent]);
+  }, [filteredMarkets, config.marginPercent]);
 
   const groupedMarkets = useMemo(() => {
       const groups = {};
@@ -3759,6 +3776,8 @@ const KalshiDashboard = () => {
                 <div className="flex items-center gap-3">
                     <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
                     <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
+                    <div className="h-6 w-px bg-slate-200 mx-2"></div>
+                    <MarketTypeSelector selectedType={marketType} onSelect={setMarketType} />
                 </div>
                 <div className="flex gap-2">
                     <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
