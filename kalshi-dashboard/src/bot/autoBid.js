@@ -286,7 +286,16 @@ export async function runAutoBid(params) {
 
             // CRITICAL FIX: Check if we're already tracking this market to prevent race conditions
             if (autoBidTracker.current.has(m.realMarketId)) {
-                console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Already in tracker (preventing race condition)`);
+                // TRACKER SAFEGUARD: If we are in tracker but have NO order and NO position (on this ticker),
+                // it implies the previous action failed silently or was lost.
+                // We must release the lock to allow retries, otherwise the market is permanently ignored.
+                if (!existingOrder && tickerPositionCount === 0) {
+                    console.warn(`[AUTO-BID] Releasing stuck tracker for ${m.realMarketId} (No order/position found)`);
+                    autoBidTracker.current.delete(m.realMarketId);
+                    // Continue to next loop to let state settle before retrying
+                } else {
+                    console.log(`[AUTO-BID] Skipping ${m.realMarketId}: Already in tracker (preventing race condition)`);
+                }
                 continue;
             }
 

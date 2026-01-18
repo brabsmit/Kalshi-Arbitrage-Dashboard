@@ -2543,6 +2543,7 @@ const KalshiDashboard = () => {
   const [isLoadingSports, setIsLoadingSports] = useState(false);
   
   const lastFetchTimeRef = useRef(0);
+  const isLoadingRef = useRef(false);
   const abortControllerRef = useRef(null);
   const autoBidTracker = useRef(new Set()); 
   const isAutoBidProcessing = useRef(false);
@@ -2644,12 +2645,16 @@ const KalshiDashboard = () => {
       if (!oddsApiKey) return;
       const now = Date.now();
       const cooldown = config.isTurboMode ? 2000 : REFRESH_COOLDOWN;
+
+      // Prevent overlapping requests that cause abort loops
+      if (!force && isLoadingRef.current) return;
       if (!force && (now - lastFetchTimeRef.current < cooldown)) return;
       
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       try {
+          isLoadingRef.current = true;
           setErrorMsg('');
           
           const selectedSportsList = sportsList.filter(s => config.selectedSports.includes(s.key));
@@ -2871,7 +2876,7 @@ const KalshiDashboard = () => {
               if (!hasChanged && processed.length === prev.length) return prev;
               return processed;
           });
-      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); } finally { setHasScanned(true); }
+      } catch (e) { if (e.name !== 'AbortError') setErrorMsg(e.message); } finally { setHasScanned(true); isLoadingRef.current = false; }
   }, [oddsApiKey, config.selectedSports, config.isTurboMode, sportsList]);
 
   useEffect(() => { setMarkets([]); setHasScanned(false); fetchLiveOdds(true); }, [fetchLiveOdds]);
