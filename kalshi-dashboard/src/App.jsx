@@ -86,7 +86,7 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
         const durationMinutes = endMin - startMin;
         if (durationMinutes <= 0) return 0;
 
-        const intervalSeconds = config.isTurboMode ? 3 : 15;
+        const intervalSeconds = config.isTurboMode ? 3 : (config.refreshInterval || 15);
         const requestsPerMinute = 60 / intervalSeconds;
         const numSports = config.selectedSports.length;
 
@@ -153,7 +153,7 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
                          </div>
                          <div className="flex justify-between items-center mb-1">
                              <span className="text-sm text-slate-600">Update Interval</span>
-                             <span className="font-mono font-bold">{config.isTurboMode ? '3s' : '15s'}</span>
+                             <span className="font-mono font-bold">{config.isTurboMode ? '3s' : `${config.refreshInterval || 15}s`}</span>
                          </div>
                          <div className="border-t border-slate-200 my-2 pt-2 flex justify-between items-center">
                              <span className="text-sm font-bold text-slate-700">Estimated Tokens</span>
@@ -583,6 +583,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
     const backdropProps = useModalClose(isOpen, onClose);
     const bidMarginId = useId();
     const closeMarginId = useId();
+    const refreshRateId = useId();
     const minFvId = useId();
     const maxPosId = useId();
     const [showApiKey, setShowApiKey] = useState(false);
@@ -596,6 +597,19 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                    <RangeSetting
+                        id={refreshRateId}
+                        label="API Refresh Rate"
+                        value={config.refreshInterval || 15}
+                        onChange={v => setConfig({...config, refreshInterval: v})}
+                        min={5}
+                        max={60}
+                        unit="s"
+                        colorClass="text-purple-600"
+                        accentClass="accent-purple-600"
+                        helpText="Interval between API updates (Standard Mode)."
+                    />
+
                     <RangeSetting
                         id={bidMarginId}
                         label="Auto-Bid Margin"
@@ -870,7 +884,7 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                         <Hash size={10} /> {apiUsage.used}/{apiUsage.used + apiUsage.remaining}
                     </span>
                 )}
-                {isTurboMode && <span title="⚠️ Turbo Mode uses 5x more API requests (3s vs 15s polling)" className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-200 animate-pulse flex items-center gap-1 cursor-help"><Zap size={10} fill="currentColor"/> TURBO</span>}
+                {isTurboMode && <span title="⚠️ Turbo Mode uses more API requests (3s polling)" className="text-[10px] font-bold px-2 py-0.5 rounded border bg-purple-100 text-purple-700 border-purple-200 animate-pulse flex items-center gap-1 cursor-help"><Zap size={10} fill="currentColor"/> TURBO</span>}
             </div>
         </div>
         <div className="flex items-center gap-3">
@@ -2469,7 +2483,8 @@ const KalshiDashboard = () => {
           isAutoClose: true,
           holdStrategy: 'sell_limit',
           selectedSports: ['americanfootball_nfl'],
-          isTurboMode: false
+          isTurboMode: false,
+          refreshInterval: 15
       };
       if (saved) {
           try {
@@ -2644,7 +2659,9 @@ const KalshiDashboard = () => {
   const fetchLiveOdds = useCallback(async (force = false) => {
       if (!oddsApiKey) return;
       const now = Date.now();
-      const cooldown = config.isTurboMode ? 2000 : REFRESH_COOLDOWN;
+      // Dynamic cooldown: 2s for turbo, or (interval - 2s) for standard, min 2s
+      const targetInterval = config.isTurboMode ? 3000 : (config.refreshInterval || 15) * 1000;
+      const cooldown = Math.max(2000, targetInterval - 2000);
 
       // Prevent overlapping requests that cause abort loops
       if (!force && isLoadingRef.current) return;
@@ -2884,9 +2901,10 @@ const KalshiDashboard = () => {
   useEffect(() => {
       if (!isRunning) return;
       fetchLiveOdds(true);
-      const interval = setInterval(() => fetchLiveOdds(false), config.isTurboMode ? 3000 : 15000);
+      const intervalTime = config.isTurboMode ? 3000 : (config.refreshInterval || 15) * 1000;
+      const interval = setInterval(() => fetchLiveOdds(false), intervalTime);
       return () => clearInterval(interval);
-  }, [isRunning, fetchLiveOdds, config.isTurboMode]);
+  }, [isRunning, fetchLiveOdds, config.isTurboMode, config.refreshInterval]);
 
   useEffect(() => {
       if (!isRunning || !walletKeys) return;
@@ -3612,7 +3630,7 @@ const KalshiDashboard = () => {
                 <div className="flex gap-2">
                     <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
                     <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
-                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title={config.isTurboMode ? "Turbo Mode ON (3s updates, 5x API cost) - Click to disable" : "Turbo Mode OFF (15s updates) - Click to enable"} onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
+                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title={config.isTurboMode ? "Turbo Mode ON (3s updates, 5x API cost) - Click to disable" : `Turbo Mode OFF (${config.refreshInterval || 15}s updates) - Click to enable`} onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
                 </div>
             </div>
             <div className="overflow-auto flex-1">
@@ -3706,7 +3724,7 @@ const KalshiDashboard = () => {
                                 </div>
                                 <p className="font-medium text-slate-600">No active markets found</p>
                                 <p className="text-xs text-slate-400 mt-1">
-                                    Checked {config.selectedSports.length} sport{config.selectedSports.length > 1 ? 's' : ''}. Next scan in {config.isTurboMode ? '3s' : '15s'}.
+                                    Checked {config.selectedSports.length} sport{config.selectedSports.length > 1 ? 's' : ''}. Next scan in {config.isTurboMode ? '3s' : `${config.refreshInterval || 15}s`}.
                                 </p>
                             </>
                         )}
