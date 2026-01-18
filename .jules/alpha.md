@@ -27,3 +27,19 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-22 - The Timer (Time-Decay Margin)
+
+**Hypothesis:** As an event approaches execution (Game Time), volatility increases and the "time to recovery" for a bad trade drops to zero. A position bought 10 minutes before kickoff is riskier than one bought 2 days prior because there is no time to exit if the line moves against us.
+
+**Change:**
+Old: `margin = config.marginPercent` (constant).
+New:
+- If `hoursUntilStart < 1`: `margin = margin * 1.5`
+- If `hoursUntilStart < 24`: `margin = margin * 1.1`
+- Else: `margin = margin`
+
+**Expected Result:**
+- Reduced risk exposure on imminent events.
+- Prevents the bot from providing liquidity during pre-game chaotic repricing.
+- Protects capital by demanding a higher "Margin of Safety" when uncertainty is highest.
