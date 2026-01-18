@@ -2,6 +2,7 @@
 // Order execution and cancellation logic extracted from App.jsx
 
 import { signRequest } from '../utils/core.js';
+import KalshiMath from '../utils/KalshiMath.js';
 
 /**
  * Creates an order manager that handles Kalshi order operations
@@ -218,8 +219,113 @@ export function createOrderManager(dependencies) {
         if (!skipRefresh) fetchPortfolio();
     }
 
+    /**
+     * Executes an aggressive Taker Buy order using IOC (Immediate or Cancel).
+     * Performs a pre-flight check to ensure Taker fees don't destroy the edge.
+     * @param {string} ticker - The market ticker (e.g., 'KX-NFL-24-W1')
+     * @param {number} askPriceCents - The current best Ask price in cents (1-99)
+     * @param {number} quantity - Desired number of contracts
+     * @param {number} fairValueCents - The calculated Fair Value from Odds API
+     * @returns {Promise<{success: boolean, filled: number, reason: string}>}
+     */
+    async function executeTakerOrder(ticker, askPriceCents, quantity, fairValueCents) {
+        if (!walletKeys) {
+            console.error("[Exec] Missing wallet keys");
+            return { success: false, filled: 0, reason: 'No wallet keys' };
+        }
+
+        // 1. Calculate Exact Taker Fee using our helper class
+        const totalFeeCents = KalshiMath.calculateFee(askPriceCents, quantity, true); // true = isTaker
+        const feePerContract = totalFeeCents / quantity;
+
+        // 2. Calculate "Effective Entry Price" (Price + Fee)
+        // We use floating point here for precision comparison, but logic remains cent-based
+        const effectiveCost = askPriceCents + feePerContract;
+
+        // 3. Profitability Guard Rail
+        // If our cost (including fees) is higher than the fair value, ABORT.
+        // We want at least 1 cent of clearance *after* fees.
+        if (effectiveCost >= fairValueCents) {
+            console.warn(`[Risk] Taker trade aborted. Cost ${effectiveCost.toFixed(3)} > FV ${fairValueCents}`);
+            return { success: false, filled: 0, reason: 'Negative Expected Value after Fees' };
+        }
+
+        // 4. Execute IOC Order
+        try {
+            const ts = Date.now();
+            const orderParams = {
+                ticker: ticker,
+                action: 'buy',
+                type: 'limit',       // We use limit to specify the MAX price we are willing to pay
+                price: askPriceCents, // We buy AT the ask (or better)
+                count: quantity,
+                time_in_force: 'ioc', // CRITICAL: Immediate or Cancel
+                client_order_id: `taker-${ts}-${Math.random().toString(36).substr(2, 5)}`,
+                side: 'yes' // Default to yes (buying the outcome)
+            };
+
+            // Sign and Send
+            const body = JSON.stringify(orderParams);
+            const sig = await signRequest(walletKeys.privateKey, "POST", '/trade-api/v2/portfolio/orders', ts);
+
+            console.log(`[Exec] Firing Taker Order: ${quantity}x ${ticker} @ ${askPriceCents}¢ (FV: ${fairValueCents})`);
+
+            const res = await fetch('/api/kalshi/portfolio/orders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'KALSHI-ACCESS-KEY': walletKeys.keyId,
+                    'KALSHI-ACCESS-SIGNATURE': sig,
+                    'KALSHI-ACCESS-TIMESTAMP': ts.toString()
+                },
+                body
+            });
+
+            const data = await res.json();
+
+            // 5. Handle Response
+            if (res.ok && data.order) {
+                const filled = data.order.filled_count || 0;
+                // Log success/partial
+                if (filled > 0) {
+                    addLog(`Taker Fill: ${ticker} x${filled} @ ${askPriceCents}¢`, 'EXEC');
+
+                    // Optimistic update
+                    if (setPositions) {
+                         setPositions(prev => [...prev, {
+                             id: `${ticker}-taker-${Date.now()}`,
+                             marketId: ticker,
+                             side: 'Yes',
+                             quantity: filled,
+                             avgPrice: askPriceCents,
+                             cost: filled * askPriceCents,
+                             fees: totalFeeCents * (filled/quantity), // Approximate proportional fee
+                             status: 'HELD',
+                             isOrder: false,
+                             settlementStatus: 'unsettled',
+                             _optimistic: true
+                         }]);
+                    }
+
+                    fetchPortfolio(); // Refresh portfolio
+                    return { success: true, filled: filled, reason: 'Filled' };
+                } else {
+                    return { success: false, filled: 0, reason: 'IOC - No liquidity found' };
+                }
+            } else {
+                console.error("Taker Order Failed:", data);
+                return { success: false, filled: 0, reason: data.message || 'Unknown API Error' };
+            }
+
+        } catch (error) {
+            console.error(`[Error] Taker Execution Failed: ${error.message}`);
+            return { success: false, filled: 0, reason: error.message };
+        }
+    }
+
     return {
         executeOrder,
-        cancelOrder
+        cancelOrder,
+        executeTakerOrder
     };
 }
