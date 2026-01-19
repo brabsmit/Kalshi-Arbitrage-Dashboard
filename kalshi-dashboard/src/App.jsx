@@ -401,6 +401,74 @@ const PerformanceAlerts = ({ positions, tradeHistory, sessionStart }) => {
     );
 };
 
+const SessionMetrics = React.memo(({ stats }) => {
+    return (
+        <>
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Wallet size={12} /> Total Exposure
+                </div>
+                <div className="text-2xl font-bold text-slate-800 mt-1">
+                    {formatMoney(stats.exposure)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    Locked in trades & orders
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp size={12} /> Potential Profit
+                </div>
+                <div className="text-2xl font-bold text-emerald-600 mt-1">
+                    +{formatMoney(stats.totalPotentialReturn)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    If all positions win
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Trophy size={12} /> Realized PnL
+                </div>
+                <div className={`text-2xl font-bold mt-1 ${stats.totalRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {stats.totalRealizedPnl > 0 ? '+' : ''}{formatMoney(stats.totalRealizedPnl)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                    {stats.historyCount} settled events
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Activity size={12} /> Win Rate
+                </div>
+                <div className="text-2xl font-bold text-slate-800 mt-1">
+                    {stats.winRate}%
+                </div>
+                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                    <div className="bg-emerald-500 h-full" style={{width: `${stats.winRate}%`}}></div>
+                </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                    <Calculator size={12} /> Statistical Sig.
+                </div>
+                <div className={`text-2xl font-bold mt-1 ${stats.isSignificant ? 'text-emerald-600' : 'text-slate-400'}`}>
+                    {stats.tStat.toFixed(2)}
+                </div>
+                <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                    {stats.isSignificant ? <Check size={12} className="text-emerald-500"/> : <XCircle size={12}/>}
+                    {stats.isSignificant ? 'Significant' : 'Not Sig'} (α=0.05)
+                </div>
+            </div>
+        </>
+    );
+});
+SessionMetrics.displayName = 'SessionMetrics';
+
 const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
     const now = React.useContext(TimeContext);
 
@@ -468,66 +536,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
 
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Wallet size={12} /> Total Exposure
-                </div>
-                <div className="text-2xl font-bold text-slate-800 mt-1">
-                    {formatMoney(stats.exposure)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                    Locked in trades & orders
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <TrendingUp size={12} /> Potential Profit
-                </div>
-                <div className="text-2xl font-bold text-emerald-600 mt-1">
-                    +{formatMoney(stats.totalPotentialReturn)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                    If all positions win
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Trophy size={12} /> Realized PnL
-                </div>
-                <div className={`text-2xl font-bold mt-1 ${stats.totalRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {stats.totalRealizedPnl > 0 ? '+' : ''}{formatMoney(stats.totalRealizedPnl)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                    {stats.historyCount} settled events
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Activity size={12} /> Win Rate
-                </div>
-                <div className="text-2xl font-bold text-slate-800 mt-1">
-                    {stats.winRate}%
-                </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div className="bg-emerald-500 h-full" style={{width: `${stats.winRate}%`}}></div>
-                </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <Calculator size={12} /> Statistical Sig.
-                </div>
-                <div className={`text-2xl font-bold mt-1 ${stats.isSignificant ? 'text-emerald-600' : 'text-slate-400'}`}>
-                    {stats.tStat.toFixed(2)}
-                </div>
-                <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                    {stats.isSignificant ? <Check size={12} className="text-emerald-500"/> : <XCircle size={12}/>}
-                    {stats.isSignificant ? 'Significant' : 'Not Sig'} (α=0.05)
-                </div>
-            </div>
+             <SessionMetrics stats={stats} />
 
              <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
                 <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
