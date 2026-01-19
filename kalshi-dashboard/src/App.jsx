@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2, ShieldAlert } from 'lucide-react';
 import MarketTypeSelector from './components/MarketTypeSelector';
-import { SPORT_MAPPING } from './utils/kalshiMatching';
-import { buildKalshiIndex, findMatchInIndex, logIndexStats } from './utils/marketIndexing';
+import { buildKalshiIndex, findMatchInIndex, logIndexStats, SPORT_MAPPING } from './utils/marketIndexing';
 import {
     americanToProbability,
     calculateVolatility,

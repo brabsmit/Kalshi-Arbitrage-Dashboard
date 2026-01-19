@@ -1,6 +1,16 @@
 // File: src/utils/marketIndexing.js
 // Normalized market key system for reliable Kalshi ↔ Odds API matching
 
+export const SPORT_MAPPING = [
+    { key: 'americanfootball_nfl', title: 'Football (NFL)', kalshiSeries: 'KXNFLGAME' },
+    { key: 'basketball_nba', title: 'Basketball (NBA)', kalshiSeries: 'KXNBAGAME' },
+    { key: 'baseball_mlb', title: 'Baseball (MLB)', kalshiSeries: 'KXMLBGAME' },
+    { key: 'icehockey_nhl', title: 'Hockey (NHL)', kalshiSeries: 'KXNHLGAME' },
+    { key: 'americanfootball_ncaaf', title: 'Football (NCAAF)', kalshiSeries: 'KXNCAAF' },
+    { key: 'basketball_ncaab', title: 'Basketball (NCAAB)', kalshiSeries: 'KXNCAAMBGAME' },
+    { key: 'cricket_test_match', title: 'Cricket (Test)', kalshiSeries: 'KXCRICKETTESTMATCH' },
+];
+
 /**
  * Normalizes a team name for consistent matching across all sports
  * Strategy: Extract the FIRST significant word (usually city/state/university name)
