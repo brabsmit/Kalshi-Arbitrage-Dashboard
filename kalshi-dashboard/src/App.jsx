@@ -581,7 +581,7 @@ const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorCl
     );
 };
 
-const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
+const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList, theme, setTheme }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const bidMarginId = useId();
     const closeMarginId = useId();
@@ -599,6 +599,25 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                    <div className="flex flex-col gap-2 mb-6">
+                        <label className="text-xs font-bold text-slate-500 uppercase">Theme</label>
+                        <div className="flex bg-slate-100 p-1 rounded-lg">
+                            {['light', 'dark', 'auto'].map((t) => (
+                                <button
+                                    key={t}
+                                    onClick={() => setTheme(t)}
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md capitalize transition-all ${
+                                        theme === t
+                                            ? 'bg-white text-blue-600 shadow-sm'
+                                            : 'text-slate-500 hover:text-slate-700'
+                                    }`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <RangeSetting
                         id={refreshRateId}
                         label="API Refresh Rate"
@@ -913,9 +932,9 @@ const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSessio
     const wsTooltip = wsStats ? `Subscribed: ${wsStats.subscribed} | Confirmed: ${wsStats.confirmed} | Pending: ${wsStats.pending} | Failed: ${wsStats.failed}` : '';
 
     return (
-    <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1 (2026-01-18)</span></h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1 (2026-01-18)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
@@ -947,25 +966,25 @@ const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSessio
              <button aria-label="Run Schedule" onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
                 <Clock size={20} className={isScheduled ? 'animate-pulse' : ''}/>
             </button>
-             <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Session Reports">
+            <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Session Reports">
                 <FileText size={20} />
             </button>
-             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Settings">
+             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Settings">
                 <Settings size={20} />
             </button>
-            <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
+            <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/50'}`}>
                 {connected ? <Check size={16} /> : <Wallet size={16} />} <span className="font-medium text-sm">{connected ? "Wallet Active" : "Connect Wallet"}</span>
             </button>
-            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+            <div className="flex items-center gap-4 bg-slate-50 dark:bg-slate-700/50 px-4 py-2 rounded-xl border border-slate-100 dark:border-slate-600">
                 <div className="text-center min-w-[80px]">
-                    <div className="font-mono font-bold text-lg text-slate-800 leading-none">
+                    <div className="font-mono font-bold text-lg text-slate-800 dark:text-slate-200 leading-none">
                         {connected && balance !== null ? `$${(balance / 100).toFixed(2)}` : '-'}
                     </div>
                     <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Cash</div>
                 </div>
-                <div className="w-px h-8 bg-slate-200"></div>
+                <div className="w-px h-8 bg-slate-200 dark:bg-slate-600"></div>
                 <div className="text-center min-w-[80px]">
-                     <div className="font-mono font-bold text-lg text-slate-800 leading-none">
+                     <div className="font-mono font-bold text-lg text-slate-800 dark:text-slate-200 leading-none">
                         {connected && portfolioValue !== null ? `$${(portfolioValue / 100).toFixed(2)}` : '-'}
                     </div>
                     <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Portfolio</div>
@@ -2008,7 +2027,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
 
     return (
         <>
-            <tr key={market.id} onClick={() => setExpanded(!expanded)} className={`hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100 ${!isSelected ? 'opacity-60 bg-slate-50' : ''}`}>
+            <tr key={market.id} onClick={() => setExpanded(!expanded)} className={`hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors cursor-pointer border-b border-slate-100 dark:border-slate-700 ${!isSelected ? 'opacity-60 bg-slate-50 dark:bg-slate-700/50' : ''}`}>
                 <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                      <input
                         type="checkbox"
@@ -2025,36 +2044,36 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                         aria-controls={`details-${market.id}`}
                         className="w-full text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded p-1 -m-1"
                     >
-                        <div className="font-medium text-slate-700 flex items-center gap-2">
+                        <div className="font-medium text-slate-700 dark:text-slate-200 flex items-center gap-2">
                             {market.event}
                             {line && (marketType === 'spreads' || marketType === 'totals') && (
-                                <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-100">
+                                <span className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-100 dark:border-blue-800">
                                     Line: {line}
                                 </span>
                             )}
                             <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                             <Clock size={10} /> {formatGameTime(market.commenceTime)}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                            {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
+                            {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1 rounded">No Match</span>}
                             <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay}</span>
                         </div>
                     </button>
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className="font-bold text-slate-700">{market.fairValue}¢</div>
+                    <div className="font-bold text-slate-700 dark:text-slate-200">{market.fairValue}¢</div>
                     <LatencyDisplay timestamp={market.oddsLastUpdate} />
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                    <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600 dark:text-amber-500' : 'text-slate-400'}`}>
                         {market.volatility.toFixed(2)}
                     </div>
                     {market.volatility > 1.0 && <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider flex justify-center items-center gap-1"><Activity size={8}/> Volatile</div>}
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className="font-mono text-slate-500 flex items-center justify-center gap-1">
+                    <div className="font-mono text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1">
                         {/* WebSocket Status Indicators */}
                         {market.isWsSubscribed && market.priceSource === 'WS' && (
                             <Zap size={12} className="text-emerald-500" title="✓ Live WebSocket Data" />
@@ -2063,7 +2082,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                             <Zap size={12} className="text-amber-500" title="⏳ WebSocket Subscribed (using HTTP fallback)" />
                         )}
                         {!market.isWsSubscribed && market.isMatchFound && (
-                            <Zap size={12} className="text-slate-500" title="HTTP Only" />
+                            <Zap size={12} className="text-slate-500 dark:text-slate-600" title="HTTP Only" />
                         )}
                         {market.bestBid}¢ / {market.bestAsk}¢
                     </div>
@@ -2071,7 +2090,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                 </td>
                 <td className="px-4 py-3 text-right text-slate-400">{market.maxWillingToPay}¢</td>
                 <td className="px-4 py-3 text-right">
-                    {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
+                    {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600 dark:text-emerald-400">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
                 </td>
                 <td className="px-4 py-3 text-center">
                     <button
@@ -2137,53 +2156,53 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
     const source = historyEntry?.source;
 
     return (
-        <tr className="hover:bg-slate-50 group">
+        <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 group">
             <td className="px-2 py-2">
                 <div className="flex items-center gap-2">
-                    <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
-                    <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
-                    {source === 'auto' && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-100 text-indigo-700 rounded uppercase">AUTO</span>}
+                    <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`}>{item.side}</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-200">{item.marketId.split('-').pop()}</span>
+                    {source === 'auto' && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 rounded uppercase">AUTO</span>}
                 </div>
             </td>
 
             {activeTab === 'positions' && (
                 <>
-                    <td className="px-2 py-2 text-center font-mono font-bold text-slate-700">
+                    <td className="px-2 py-2 text-center font-mono font-bold text-slate-700 dark:text-slate-200">
                         {item.quantity}
                     </td>
                     <td className="px-2 py-2 text-center font-mono">
-                         <div className="text-slate-600 font-bold">{entryPrice}¢</div>
+                         <div className="text-slate-600 dark:text-slate-400 font-bold">{entryPrice}¢</div>
                          <div className="text-slate-400 text-[10px] mt-0.5">{currentPrice}¢</div>
                     </td>
                     <td className="px-2 py-2 text-right font-mono">
-                        <div className={`font-bold ${unrealizedPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <div className={`font-bold ${unrealizedPnL >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {unrealizedPnL >= 0 ? '+' : ''}{formatMoney(unrealizedPnL)}
                         </div>
-                        <div className={`text-[10px] ${unrealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        <div className={`text-[10px] ${unrealizedPnL >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                             {unrealizedPnLPercent >= 0 ? '+' : ''}{unrealizedPnLPercent.toFixed(1)}%
                         </div>
                     </td>
                     <td className="px-2 py-2 text-center">
-                        <div className={`font-mono ${entryEdge !== null && entryEdge >= 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <div className={`font-mono ${entryEdge !== null && entryEdge >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                             {entryEdge !== null ? `${entryEdge >= 0 ? '+' : ''}${entryEdge}¢` : '-'}
                         </div>
-                        <div className={`font-mono ${currentEdge !== null && currentEdge >= 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                        <div className={`font-mono ${currentEdge !== null && currentEdge >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>
                             {currentEdge !== null ? `${currentEdge >= 0 ? '+' : ''}${currentEdge}¢` : '-'}
                         </div>
                     </td>
-                    <td className="px-2 py-2 text-center font-mono text-slate-500">
+                    <td className="px-2 py-2 text-center font-mono text-slate-500 dark:text-slate-400">
                         {holdDuration ? formatHoldDuration(holdDuration) : '-'}
                     </td>
                     <td className="px-2 py-2 text-center">
                         {exitOrder ? (
                             <div className="text-xs">
-                                <div className="font-mono text-emerald-600 font-bold">{exitOrder.price}¢</div>
+                                <div className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{exitOrder.price}¢</div>
                                 <div className="text-[10px] text-slate-400">
                                     {exitOrder.filled > 0 ? `${exitOrder.filled}/${item.quantity}` : 'Resting'}
                                 </div>
                             </div>
                         ) : (
-                            <span className="text-slate-300">-</span>
+                            <span className="text-slate-300 dark:text-slate-600">-</span>
                         )}
                     </td>
                 </>
@@ -2192,7 +2211,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
             {activeTab === 'resting' && (
                 <>
                     <td className="px-2 py-2 text-center">
-                        <span className={`px-2 py-0.5 font-bold rounded ${item.action === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        <span className={`px-2 py-0.5 font-bold rounded ${item.action === 'buy' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-400' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400'}`}>
                             {item.action?.toUpperCase() || 'BUY'}
                         </span>
                     </td>
@@ -2201,20 +2220,20 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                     </td>
                     <td className="px-2 py-2 text-center font-mono">{item.price}¢</td>
                     <td className="px-2 py-2 text-center text-xs font-mono">
-                        <div className="text-slate-600 mb-0.5">{currentFV ? `${currentFV}¢` : '-'}</div>
+                        <div className="text-slate-600 dark:text-slate-400 mb-0.5">{currentFV ? `${currentFV}¢` : '-'}</div>
                         {(() => {
                             const isBuy = item.action === 'buy';
                             const market = currentPrice ? { bestBid: currentPrice, bestAsk: currentPrice } : null;
                             if (!market) return <span className="text-slate-400">-</span>;
                             const distance = calculateDistanceFromMarket(item.price, market.bestBid, market.bestAsk, isBuy);
                             return (
-                                <span className={distance < 0 ? 'text-rose-500' : distance > 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                                <span className={distance < 0 ? 'text-rose-500 dark:text-rose-400' : distance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}>
                                     {distance > 0 ? '+' : ''}{distance}¢
                                 </span>
                             );
                         })()}
                     </td>
-                    <td className="px-2 py-2 text-center font-mono text-slate-500">
+                    <td className="px-2 py-2 text-center font-mono text-slate-500 dark:text-slate-400">
                         {item.created ? formatHoldDuration(Date.now() - item.created) : '-'}
                     </td>
                 </>
@@ -2223,21 +2242,21 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
             {activeTab === 'history' && (
                 <>
                     <td className="px-2 py-2 text-center">
-                        <div className="font-mono text-slate-600">{entryPrice}¢</div>
+                        <div className="font-mono text-slate-600 dark:text-slate-400">{entryPrice}¢</div>
                         {(() => {
                             const exitPrice = item.payout ? Math.floor(item.payout / item.quantity) : null;
                             return exitPrice !== null ? (
-                                <div className="font-mono text-slate-600">{exitPrice}¢</div>
+                                <div className="font-mono text-slate-600 dark:text-slate-400">{exitPrice}¢</div>
                             ) : null;
                         })()}
                     </td>
                     <td className="px-2 py-2 text-right">
                         {item.realizedPnl !== undefined ? (
                             <>
-                                <div className={`font-mono font-bold ${item.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <div className={`font-mono font-bold ${item.realizedPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                     {item.realizedPnl >= 0 ? '+' : ''}{formatMoney(item.realizedPnl)}
                                 </div>
-                                <div className={`text-[10px] font-mono ${item.realizedPnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                <div className={`text-[10px] font-mono ${item.realizedPnl >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-400'}`}>
                                     {formatPercentReturn(item.realizedPnl, item.cost)}
                                 </div>
                             </>
@@ -2250,7 +2269,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                             const fvEdge = historyEntry ? historyEntry.fairValue - entryPrice : null;
                             return (
                                 <>
-                                    <div className={`font-mono ${edgeCaptured && edgeCaptured > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                    <div className={`font-mono ${edgeCaptured && edgeCaptured > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                                         {edgeCaptured !== null ? `${edgeCaptured >= 0 ? '+' : ''}${edgeCaptured}¢` : '-'}
                                     </div>
                                     {fvEdge !== null && (
@@ -2262,14 +2281,14 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                             );
                         })()}
                     </td>
-                    <td className="px-2 py-2 text-center font-mono text-slate-500">
+                    <td className="px-2 py-2 text-center font-mono text-slate-500 dark:text-slate-400">
                         {historyEntry?.orderPlacedAt && item.settled ?
                             formatHoldDuration(item.settled - historyEntry.orderPlacedAt) : '-'}
                     </td>
-                    <td className="px-2 py-2 text-center font-mono text-slate-500">
+                    <td className="px-2 py-2 text-center font-mono text-slate-500 dark:text-slate-400">
                         {item.fees ? formatMoney(item.fees) : '-'}
                     </td>
-                    <td className="px-2 py-2 text-center text-slate-500">
+                    <td className="px-2 py-2 text-center text-slate-500 dark:text-slate-400">
                         {item.settled ? formatOrderDate(item.settled) : formatOrderDate(item.created)}
                     </td>
                 </>
@@ -2277,7 +2296,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
 
             <td className="px-2 py-2 text-center flex justify-center gap-2">
                 {item.isOrder && (
-                    <button aria-label={`Cancel Order for ${item.marketId}`} onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                    <button aria-label={`Cancel Order for ${item.marketId}`} onClick={() => onCancel(item.id)} className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors" title="Cancel Order">
                         <XCircle size={16}/>
                     </button>
                 )}
@@ -2285,7 +2304,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                     aria-label="Trade Analysis"
                     onClick={() => onAnalysis(item, historyEntry)}
                     disabled={!historyEntry}
-                    className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
+                    className="text-slate-300 dark:text-slate-600 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-20"
                 >
                     <Info size={16}/>
                 </button>
@@ -2385,7 +2404,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
     return (
         <div role="tabpanel" aria-labelledby={`tab-${activeTab}`} className="overflow-auto flex-1">
             <table className="w-full text-xs text-left">
-                <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium sticky top-0 z-10 shadow-sm">
                     <tr>
                         <SortableHeader label="Details" sortKey="details" currentSort={sortConfig} onSort={onSort} />
                         
@@ -2426,14 +2445,14 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 
                 {groupedItems.map(([gameName, items]) => (
                     <React.Fragment key={gameName}>
-                        <tbody className="bg-slate-50 border-b border-slate-200">
+                        <tbody className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                             <tr>
-                                <td colSpan={activeTab === 'positions' ? 8 : activeTab === 'resting' ? 7 : 8} className="px-2 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
+                                <td colSpan={activeTab === 'positions' ? 8 : activeTab === 'resting' ? 7 : 8} className="px-2 py-2 font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider bg-slate-100/50 dark:bg-slate-800/50">
                                     {gameName}
                                 </td>
                             </tr>
                         </tbody>
-                        <tbody className="divide-y divide-slate-50">
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
                             {items.map(item => (
                                 <PortfolioRow
                                     key={item.id}
@@ -2453,32 +2472,32 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 {positions.length === 0 && (
                     <tbody>
                         <tr>
-                            <td colSpan={activeTab === 'positions' ? 8 : (activeTab === 'resting' ? 7 : 8)} className="py-12 text-center text-slate-400">
+                            <td colSpan={activeTab === 'positions' ? 8 : (activeTab === 'resting' ? 7 : 8)} className="py-12 text-center text-slate-400 dark:text-slate-500">
                                 <div className="flex flex-col items-center gap-3">
                                     {activeTab === 'positions' && (
                                         <>
-                                            <div className="p-4 bg-slate-100 rounded-full"><Briefcase size={24} className="text-slate-400"/></div>
+                                            <div className="p-4 bg-slate-100 dark:bg-slate-700/50 rounded-full"><Briefcase size={24} className="text-slate-400 dark:text-slate-500"/></div>
                                             <div>
-                                                <p className="font-medium text-slate-600">No active positions</p>
-                                                <p className="text-xs text-slate-400 mt-1">Use the Market Scanner to find trades</p>
+                                                <p className="font-medium text-slate-600 dark:text-slate-400">No active positions</p>
+                                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Use the Market Scanner to find trades</p>
                                             </div>
                                         </>
                                     )}
                                     {activeTab === 'resting' && (
                                         <>
-                                            <div className="p-4 bg-slate-100 rounded-full"><Clock size={24} className="text-slate-400"/></div>
+                                            <div className="p-4 bg-slate-100 dark:bg-slate-700/50 rounded-full"><Clock size={24} className="text-slate-400 dark:text-slate-500"/></div>
                                             <div>
-                                                <p className="font-medium text-slate-600">No open orders</p>
-                                                <p className="text-xs text-slate-400 mt-1">Active bids and offers will appear here</p>
+                                                <p className="font-medium text-slate-600 dark:text-slate-400">No open orders</p>
+                                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Active bids and offers will appear here</p>
                                             </div>
                                         </>
                                     )}
                                     {activeTab === 'history' && (
                                         <>
-                                            <div className="p-4 bg-slate-100 rounded-full"><FileText size={24} className="text-slate-400"/></div>
+                                            <div className="p-4 bg-slate-100 dark:bg-slate-700/50 rounded-full"><FileText size={24} className="text-slate-400 dark:text-slate-500"/></div>
                                             <div>
-                                                <p className="font-medium text-slate-600">No trade history</p>
-                                                <p className="text-xs text-slate-400 mt-1">Settled auto-trades will appear here</p>
+                                                <p className="font-medium text-slate-600 dark:text-slate-400">No trade history</p>
+                                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Settled auto-trades will appear here</p>
                                             </div>
                                         </>
                                     )}
@@ -2505,24 +2524,24 @@ const EventLog = ({ logs }) => {
     }, [logs]);
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[300px]">
-             <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText size={18} className="text-slate-400"/> Event Log</h3>
+        <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col h-[300px]">
+             <div className="p-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-700/50">
+                <h3 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><FileText size={18} className="text-slate-400 dark:text-slate-500"/> Event Log</h3>
             </div>
             <div ref={scrollRef} className="overflow-y-auto p-4 space-y-2 flex-1 font-mono text-xs">
-                {logs.length === 0 && <div className="text-slate-400 text-center italic mt-10">No events yet</div>}
+                {logs.length === 0 && <div className="text-slate-400 dark:text-slate-500 text-center italic mt-10">No events yet</div>}
                 {logs.map(log => (
-                    <div key={log.id} className="flex gap-2 border-b border-slate-50 pb-1 last:border-0">
-                        <span className="text-slate-400 min-w-[60px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <div key={log.id} className="flex gap-2 border-b border-slate-50 dark:border-slate-700 pb-1 last:border-0">
+                        <span className="text-slate-400 dark:text-slate-500 min-w-[60px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
                         <span className={`font-bold w-[60px] ${
-                            log.type === 'BID' ? 'text-blue-600' :
-                            log.type === 'CANCEL' ? 'text-rose-400' :
-                            log.type === 'FILL' ? 'text-emerald-600' :
-                            log.type === 'CLOSE' ? 'text-amber-600' :
-                            log.type === 'UPDATE' ? 'text-purple-600' :
-                            'text-slate-700'
+                            log.type === 'BID' ? 'text-blue-600 dark:text-blue-400' :
+                            log.type === 'CANCEL' ? 'text-rose-400 dark:text-rose-400' :
+                            log.type === 'FILL' ? 'text-emerald-600 dark:text-emerald-400' :
+                            log.type === 'CLOSE' ? 'text-amber-600 dark:text-amber-400' :
+                            log.type === 'UPDATE' ? 'text-purple-600 dark:text-purple-400' :
+                            'text-slate-700 dark:text-slate-300'
                         }`}>[{log.type}]</span>
-                        <span className="text-slate-700 truncate">{log.message}</span>
+                        <span className="text-slate-700 dark:text-slate-300 truncate">{log.message}</span>
                     </div>
                 ))}
             </div>
@@ -2536,6 +2555,34 @@ const EventLog = ({ logs }) => {
 
 const KalshiDashboard = () => {
   
+  const [theme, setTheme] = useState(() => localStorage.getItem('kalshi_theme') || 'auto');
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+
+    const applyTheme = (t) => {
+      const isDark = t === 'dark' || (t === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (isDark) {
+        root.classList.add('dark');
+        root.classList.remove('light');
+      } else {
+        root.classList.add('light');
+        root.classList.remove('dark');
+      }
+    };
+
+    applyTheme(theme);
+    localStorage.setItem('kalshi_theme', theme);
+
+    if (theme === 'auto') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleChange = () => applyTheme('auto');
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
+    }
+  }, [theme]);
+
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
   const [balance, setBalance] = useState(null); 
@@ -3779,7 +3826,7 @@ const KalshiDashboard = () => {
 
   return (
     <TimeProvider>
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans p-4 md:p-8 transition-colors duration-200">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} portfolioValue={portfolioValue} isRunning={isRunning} setIsRunning={setIsRunning} onSaveSession={saveCurrentSession} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
@@ -3789,7 +3836,7 @@ const KalshiDashboard = () => {
 
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} theme={theme} setTheme={setTheme} />
       <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} sessionHistory={sessionHistory} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} onSell={executeOrder} />
@@ -3805,25 +3852,25 @@ const KalshiDashboard = () => {
       {errorMsg && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center gap-2"><AlertCircle size={16}/>{errorMsg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[800px]">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col max-h-[800px]">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-700/50">
                 <div className="flex items-center gap-3">
-                    <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
+                    <h2 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
                     <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
-                    <div className="h-6 w-px bg-slate-200 mx-2"></div>
+                    <div className="h-6 w-px bg-slate-200 dark:bg-slate-600 mx-2"></div>
                     <MarketTypeSelector selectedType={marketType} onSelect={setMarketType} />
                 </div>
                 <div className="flex gap-2">
-                    <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
-                    <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
-                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title={config.isTurboMode ? "Turbo Mode ON (3s updates, 5x API cost) - Click to disable" : `Turbo Mode OFF (${config.refreshInterval || 15}s updates) - Click to enable`} onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
+                    <button aria-pressed={config.isAutoBid} onClick={() => setConfig(c => ({...c, isAutoBid: !c.isAutoBid}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${config.isAutoBid ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}><Bot size={14}/> Auto-Bid {config.isAutoBid ? 'ON' : 'OFF'}</button>
+                    <button aria-pressed={config.isAutoClose} onClick={() => setConfig(c => ({...c, isAutoClose: !c.isAutoClose}))} className={`px-3 py-1 rounded text-xs font-bold transition-all flex items-center gap-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${config.isAutoClose ? 'bg-blue-100 text-blue-700 ring-1 ring-blue-500' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}><Bot size={14}/> Auto-Close {config.isAutoClose ? 'ON' : 'OFF'}</button>
+                    <button aria-pressed={config.isTurboMode} aria-label="Toggle Turbo Mode" title={config.isTurboMode ? "Turbo Mode ON (3s updates, 5x API cost) - Click to disable" : `Turbo Mode OFF (${config.refreshInterval || 15}s updates) - Click to enable`} onClick={() => setConfig(c => ({...c, isTurboMode: !c.isTurboMode}))} className={`p-1.5 rounded transition-all focus:outline-none focus:ring-2 focus:ring-purple-500 ${config.isTurboMode ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'}`}><Zap size={16} fill={config.isTurboMode ? "currentColor" : "none"}/></button>
                 </div>
             </div>
             <div className="overflow-auto flex-1">
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                    <thead className="bg-slate-50 dark:bg-slate-700 text-slate-500 dark:text-slate-400 font-medium sticky top-0 z-10 shadow-sm">
                         <tr>
-                            <th className="px-4 py-3 text-center w-12 bg-slate-50 z-20">
+                            <th className="px-4 py-3 text-center w-12 bg-slate-50 dark:bg-slate-700 z-20">
                                 <input
                                     type="checkbox"
                                     aria-label="Select or Deselect All Markets"
@@ -3858,14 +3905,14 @@ const KalshiDashboard = () => {
                     </thead>
                     {groupedMarkets.map(([dateKey, groupMarkets]) => (
                         <React.Fragment key={dateKey}>
-                            <tbody className="bg-slate-50 border-b border-slate-200">
+                            <tbody className="bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-2 font-bold text-xs text-slate-500 uppercase tracking-wider flex items-center gap-2">
+                                    <td colSpan={8} className="px-4 py-2 font-bold text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                         <Calendar size={14} /> {dateKey}
                                     </td>
                                 </tr>
                             </tbody>
-                            <tbody className="divide-y divide-slate-50">
+                            <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
                                 {groupMarkets.map(m => (
                                     <MarketRow
                                         key={m.id}
