@@ -27,3 +27,18 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2026-01-24 - The Timer (Dynamic Time Decay)
+
+**Hypothesis:** As an event approaches (`commenceTime`), the risk of ruin increases because there is less time to hedge or recover from a bad position. Volatility often spikes in the final hour.
+
+**Change:**
+Old: `effectiveMargin = marginPercent` (Constant)
+New:
+- If < 6 hours to start: `effectiveMargin = marginPercent * 1.25`
+- If < 1 hour to start: `effectiveMargin = marginPercent * 1.50`
+
+**Expected Result:**
+- Lower max willingness to pay for markets about to start.
+- Reduced exposure to last-minute "sharp" moves or injury news.
+- "Scratch" trades are avoided; we only enter if the edge is massive enough to justify the time risk.
