@@ -910,7 +910,7 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
+const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSession, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
     const wsTooltip = wsStats ? `Subscribed: ${wsStats.subscribed} | Confirmed: ${wsStats.confirmed} | Pending: ${wsStats.pending} | Failed: ${wsStats.failed}` : '';
 
     return (
@@ -957,14 +957,26 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
                 {connected ? <Check size={16} /> : <Wallet size={16} />} <span className="font-medium text-sm">{connected ? "Wallet Active" : "Connect Wallet"}</span>
             </button>
-            <div className="bg-slate-100 px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-2 min-w-[100px] justify-end">
-                <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
+            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                <div className="text-center min-w-[80px]">
+                    <div className="font-mono font-bold text-lg text-slate-800 leading-none">
+                        {connected && balance !== null ? `$${(balance / 100).toFixed(2)}` : '-'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Cash</div>
+                </div>
+                <div className="w-px h-8 bg-slate-200"></div>
+                <div className="text-center min-w-[80px]">
+                     <div className="font-mono font-bold text-lg text-slate-800 leading-none">
+                        {connected && portfolioValue !== null ? `$${(portfolioValue / 100).toFixed(2)}` : '-'}
+                    </div>
+                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Portfolio</div>
+                </div>
             </div>
             <button
                 onClick={() => {
-                    if (isRunning) {
+                    if (isRunning && onSaveSession) {
                         // Stopping the bot - save current session
-                        saveCurrentSession();
+                        onSaveSession();
                     }
                     setIsRunning(!isRunning);
                 }}
@@ -1287,69 +1299,72 @@ const escapeCSV = (str) => {
     return safe;
 };
 
+const buildSessionData = (tradeHistory, positions) => {
+    return Object.entries(tradeHistory).map(([ticker, data]) => {
+        const position = positions.find(p => p.marketId === ticker && !p.isOrder);
+        const entryTimestamp = data.orderPlacedAt;
+
+        // Use exit tracking data if available, otherwise fallback to position data
+        const exitTimestamp = data.exitTimestamp || position?.settled || position?.created;
+        const exitPrice = data.exitPrice || (position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null);
+        const exitFairValue = data.exitFairValue;
+        const exitMethod = data.exitMethod || 'unknown';
+
+        const entryPrice = data.bidPrice;
+        const holdDuration = entryTimestamp && exitTimestamp ? exitTimestamp - entryTimestamp : null;
+
+        return {
+            // Entry data
+            entryTimestamp,
+            ticker,
+            event: data.event,
+            side: position?.side || 'Yes',
+            quantity: data.quantity || position?.quantity || 0,
+
+            // Pricing
+            entryPrice,
+            fairValueAtEntry: data.fairValue,
+            entryEdge: data.fairValue - entryPrice,
+            exitPrice,
+            exitFairValue,
+            exitEdge: exitPrice && exitFairValue ? exitPrice - exitFairValue : null,
+
+            // P&L
+            pnl: data.realizedPnl || position?.realizedPnl || 0,
+            fees: data.totalFees || position?.fees || 0,
+            netPnl: (data.realizedPnl || position?.realizedPnl || 0) - (data.totalFees || position?.fees || 0),
+
+            // Status
+            status: position ? (position.settlementStatus || position.status) : 'Unknown',
+            exitTimestamp,
+            exitMethod,
+            holdDuration,
+
+            // Market data
+            sportsbookOdds: data.sportsbookOdds,
+            vigFreeProb: data.vigFreeProb || 0,
+            bookmakerCount: Number(data.bookmakerCount || 0),
+            oddsSpread: data.oddsSpread || 0,
+            latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null
+        };
+    }).sort((a, b) => b.entryTimestamp - a.entryTimestamp);
+};
+
 const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionStart, sessionHistory = [] }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const [activeTab, setActiveTab] = useState('summary');
 
+    const sessionMetrics = useMemo(() => {
+        if (!isOpen) return calculateSessionMetrics({}, {}); // dummy return to keep hook order
+        return calculateSessionMetrics(positions, tradeHistory);
+    }, [isOpen, positions, tradeHistory]);
+
     if (!isOpen) return null;
 
-    // Calculate comprehensive session metrics
-    const sessionMetrics = useMemo(() => calculateSessionMetrics(positions, tradeHistory), [positions, tradeHistory]);
     const sessionDuration = sessionStart ? Date.now() - sessionStart : 0;
 
-    const generateSessionData = () => {
-        return Object.entries(tradeHistory).map(([ticker, data]) => {
-            const position = positions.find(p => p.marketId === ticker && !p.isOrder);
-            const entryTimestamp = data.orderPlacedAt;
-
-            // Use exit tracking data if available, otherwise fallback to position data
-            const exitTimestamp = data.exitTimestamp || position?.settled || position?.created;
-            const exitPrice = data.exitPrice || (position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null);
-            const exitFairValue = data.exitFairValue;
-            const exitMethod = data.exitMethod || 'unknown';
-
-            const entryPrice = data.bidPrice;
-            const holdDuration = entryTimestamp && exitTimestamp ? exitTimestamp - entryTimestamp : null;
-
-            return {
-                // Entry data
-                entryTimestamp,
-                ticker,
-                event: data.event,
-                side: position?.side || 'Yes',
-                quantity: data.quantity || position?.quantity || 0,
-
-                // Pricing
-                entryPrice,
-                fairValueAtEntry: data.fairValue,
-                entryEdge: data.fairValue - entryPrice,
-                exitPrice,
-                exitFairValue,
-                exitEdge: exitPrice && exitFairValue ? exitPrice - exitFairValue : null,
-
-                // P&L
-                pnl: data.realizedPnl || position?.realizedPnl || 0,
-                fees: data.totalFees || position?.fees || 0,
-                netPnl: (data.realizedPnl || position?.realizedPnl || 0) - (data.totalFees || position?.fees || 0),
-
-                // Status
-                status: position ? (position.settlementStatus || position.status) : 'Unknown',
-                exitTimestamp,
-                exitMethod,
-                holdDuration,
-
-                // Market data
-                sportsbookOdds: data.sportsbookOdds,
-                vigFreeProb: data.vigFreeProb || 0,
-                bookmakerCount: Number(data.bookmakerCount || 0),
-                oddsSpread: data.oddsSpread || 0,
-                latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null
-            };
-        }).sort((a, b) => b.entryTimestamp - a.entryTimestamp);
-    };
-
     const downloadCSV = () => {
-        const data = generateSessionData();
+        const data = buildSessionData(tradeHistory, positions);
 
         // Enhanced headers with all missing data
         const headers = [
@@ -1414,7 +1429,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     };
 
     const downloadJSON = () => {
-        const data = generateSessionData();
+        const data = buildSessionData(tradeHistory, positions);
         const jsonContent = JSON.stringify(data, null, 2);
         const blob = new Blob([jsonContent], { type: 'application/json' });
         const link = document.createElement("a");
@@ -1424,7 +1439,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     };
 
     const printReport = () => {
-        const data = generateSessionData();
+        const data = buildSessionData(tradeHistory, positions);
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
             <html>
@@ -1616,7 +1631,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                 <h4 className="font-bold text-slate-800 mb-3">Trade-by-Trade P&L</h4>
                                 <div className="bg-slate-50 p-4 rounded-lg font-mono text-sm">
                                     {(() => {
-                                        const trades = generateSessionData().filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
+                                        const trades = buildSessionData(tradeHistory, positions).filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
                                         if (trades.length === 0) return <div className="text-slate-500 text-center">No settled trades yet</div>;
 
                                         const maxPnl = Math.max(...trades.map(t => Math.abs(t.netPnl)));
@@ -1651,7 +1666,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                     <h4 className="font-bold text-slate-800 mb-3">Cumulative P&L</h4>
                                     <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs">
                                         {(() => {
-                                            const trades = generateSessionData().filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
+                                            const trades = buildSessionData(tradeHistory, positions).filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
                                             if (trades.length === 0) return <div className="text-slate-500 text-center">No settled trades yet</div>;
 
                                             let cumulative = 0;
@@ -2086,6 +2101,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
         </>
     );
 });
+MarketRow.displayName = 'MarketRow';
 
 const arePortfolioPropsEqual = (prev, next) => {
     if (prev.activeTab !== next.activeTab) return false;
@@ -2293,6 +2309,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
         </tr>
     );
 }, arePortfolioPropsEqual);
+PortfolioRow.displayName = 'PortfolioRow';
 
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
@@ -2567,6 +2584,39 @@ const KalshiDashboard = () => {
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
 
+  // Portfolio Value Calculation
+  const portfolioValue = useMemo(() => {
+      if (balance === null) return null;
+
+      // 1. Locked in Orders
+      let lockedInOrders = 0;
+      positions.forEach(p => {
+          if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
+              if (p.action === 'buy') {
+                  lockedInOrders += (p.price * (p.quantity - p.filled));
+              }
+          }
+      });
+
+      // 2. Position Market Value
+      const priceMap = new Map();
+      markets.forEach(m => {
+          if (m.realMarketId) priceMap.set(m.realMarketId, m.bestBid);
+      });
+
+      let positionsValue = 0;
+      positions.forEach(p => {
+          if (!p.isOrder && p.status === 'HELD' && (!p.settlementStatus || p.settlementStatus === 'unsettled')) {
+              const marketPrice = priceMap.get(p.marketId);
+              // Use market price if available, otherwise fallback to cost basis (to prevent 0 value for untracked markets)
+              const valuationPrice = marketPrice !== undefined ? marketPrice : (p.avgPrice || (p.quantity ? p.cost / p.quantity : 0) || 0);
+              positionsValue += p.quantity * valuationPrice;
+          }
+      });
+
+      return balance + lockedInOrders + positionsValue;
+  }, [balance, positions, markets]);
+
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
 
@@ -2723,7 +2773,7 @@ const KalshiDashboard = () => {
 
   // Function to save current session to history
   const saveCurrentSession = useCallback(() => {
-      const sessionData = generateSessionData();
+      const sessionData = buildSessionData(tradeHistory, positions);
       const sessionMetrics = calculateSessionMetrics(positions, tradeHistory);
 
       const sessionRecord = {
@@ -3750,7 +3800,7 @@ const KalshiDashboard = () => {
     <TimeProvider>
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
+      <Header balance={balance} portfolioValue={portfolioValue} isRunning={isRunning} setIsRunning={setIsRunning} onSaveSession={saveCurrentSession} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
