@@ -101,33 +101,33 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="flex justify-between items-center p-4 border-b border-slate-100">
-                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Clock size={18}/> Schedule Run</h3>
-                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200 transition-colors">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2"><Clock size={18}/> Schedule Run</h3>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" /></button>
                 </div>
                 <div className="p-6 space-y-4">
                     <div className="flex items-center justify-between">
-                         <span className="font-bold text-slate-700">Enable Schedule</span>
+                         <span className="font-bold text-slate-700 dark:text-slate-200">Enable Schedule</span>
                          <label className="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" aria-label="Enable Schedule" checked={schedule.enabled} onChange={e => setSchedule({...schedule, enabled: e.target.checked})} className="sr-only peer"/>
-                            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            <div className="w-11 h-6 bg-slate-200 dark:bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                         </label>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="schedule-start" className="block text-xs font-bold text-slate-500 mb-1">Start Time</label>
-                            <input id="schedule-start" type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="w-full p-2 border rounded" />
+                            <label htmlFor="schedule-start" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">Start Time</label>
+                            <input id="schedule-start" type="time" value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} className="w-full p-2 border rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white" />
                         </div>
                         <div>
-                            <label htmlFor="schedule-end" className="block text-xs font-bold text-slate-500 mb-1">End Time</label>
-                            <input id="schedule-end" type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="w-full p-2 border rounded" />
+                            <label htmlFor="schedule-end" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">End Time</label>
+                            <input id="schedule-end" type="time" value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} className="w-full p-2 border rounded bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white" />
                         </div>
                     </div>
 
                      <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-2">Active Days</label>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">Active Days</label>
                         <div className="flex justify-between gap-1">
                             {['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map((dayName, i) => (
                                 <button
@@ -140,7 +140,7 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
                                         const newDays = schedule.days.includes(i) ? schedule.days.filter(d => d !== i) : [...schedule.days, i];
                                         setSchedule({...schedule, days: newDays});
                                     }}
-                                    className={`w-8 h-8 rounded-full text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${schedule.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                    className={`w-8 h-8 rounded-full text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${schedule.days.includes(i) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:hover:bg-slate-700'}`}
                                 >
                                     {dayName[0]}
                                 </button>
@@ -148,28 +148,28 @@ const ScheduleModal = ({ isOpen, onClose, schedule, setSchedule, config }) => {
                         </div>
                     </div>
 
-                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-100">
-                         <div className="text-xs font-bold text-slate-500 uppercase mb-2">Resource Estimate</div>
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-100 dark:border-slate-700">
+                         <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Resource Estimate</div>
                          <div className="flex justify-between items-center mb-1">
-                             <span className="text-sm text-slate-600">Selected Sports</span>
-                             <span className="font-mono font-bold">{config.selectedSports.length}</span>
+                             <span className="text-sm text-slate-600 dark:text-slate-400">Selected Sports</span>
+                             <span className="font-mono font-bold dark:text-slate-300">{config.selectedSports.length}</span>
                          </div>
                          <div className="flex justify-between items-center mb-1">
-                             <span className="text-sm text-slate-600">Update Interval</span>
-                             <span className="font-mono font-bold">{config.isTurboMode ? '3s' : `${config.refreshInterval || 15}s`}</span>
+                             <span className="text-sm text-slate-600 dark:text-slate-400">Update Interval</span>
+                             <span className="font-mono font-bold dark:text-slate-300">{config.isTurboMode ? '3s' : `${config.refreshInterval || 15}s`}</span>
                          </div>
-                         <div className="border-t border-slate-200 my-2 pt-2 flex justify-between items-center">
-                             <span className="text-sm font-bold text-slate-700">Estimated Tokens</span>
-                             <span className="font-mono font-bold text-blue-600">{estimate.toLocaleString()}</span>
+                         <div className="border-t border-slate-200 dark:border-slate-700 my-2 pt-2 flex justify-between items-center">
+                             <span className="text-sm font-bold text-slate-700 dark:text-slate-300">Estimated Tokens</span>
+                             <span className="font-mono font-bold text-blue-600 dark:text-blue-400">{estimate.toLocaleString()}</span>
                          </div>
-                          <p className="text-[10px] text-slate-400 mt-1">
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
                             * Based on currently selected sports and update speed. Actual usage may vary.
                         </p>
                     </div>
 
                 </div>
-                 <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
-                    <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800">Save</button>
+                 <div className="p-4 bg-slate-50 dark:bg-slate-800 border-t border-slate-100 dark:border-slate-700 text-right">
+                    <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800 dark:bg-slate-700 dark:hover:bg-slate-600">Save</button>
                 </div>
             </div>
         </div>
@@ -213,7 +213,7 @@ const SportFilter = ({ selected, options, onChange }) => {
                 aria-haspopup="dialog"
                 aria-controls={dropdownId}
                 aria-label="Filter by Sport"
-                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-all shadow-sm"
+                className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
             >
                 <Trophy size={14} className="text-blue-500"/>
                 {selected.length === 0 ? 'Select Sports' : `${selected.length} Sport${selected.length > 1 ? 's' : ''}`}
@@ -224,15 +224,15 @@ const SportFilter = ({ selected, options, onChange }) => {
                     id={dropdownId}
                     role="dialog"
                     aria-label="Select Sports"
-                    className="absolute top-full left-0 mt-2 w-[85vw] md:w-[600px] max-w-[600px] bg-white rounded-xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                    className="absolute top-full left-0 mt-2 w-[85vw] md:w-[600px] max-w-[600px] bg-white dark:bg-slate-900 rounded-xl shadow-xl border border-slate-100 dark:border-slate-800 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 >
                     <div className="p-3">
                         <div className="flex justify-between items-center mb-2 px-1">
-                            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
+                            <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Available Sports</div>
                             {selected.length > 0 && (
                                 <button 
                                     onClick={() => onChange([])}
-                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1"
+                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 flex items-center gap-1"
                                 >
                                     <XCircle size={12}/> Clear
                                 </button>
@@ -251,13 +251,13 @@ const SportFilter = ({ selected, options, onChange }) => {
                                         }}
                                         className={`text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all border focus:outline-none focus:ring-2 focus:ring-blue-500 ${
                                             isSelected
-                                                ? 'bg-blue-50 border-blue-200 text-blue-700'
-                                                : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200'
+                                                ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-300'
+                                                : 'bg-white border-slate-100 text-slate-600 hover:bg-slate-50 hover:border-slate-200 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-700'
                                         } ${isIntegrated ? 'font-bold' : 'font-normal'}`}
                                         title={isIntegrated ? "Integrated with Kalshi" : "Odds Only"}
                                     >
                                         <span className="truncate mr-2">{opt.title}</span>
-                                        {isSelected && <Check size={14} className="text-blue-600 flex-shrink-0"/>}
+                                        {isSelected && <Check size={14} className="text-blue-600 dark:text-blue-400 flex-shrink-0"/>}
                                     </button>
                                 );
                             })}
@@ -275,18 +275,18 @@ const CancellationModal = ({ isOpen, progress }) => {
     
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 m-4 animate-in fade-in zoom-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-sm p-6 m-4 animate-in fade-in zoom-in duration-200 transition-colors">
                 <div className="flex flex-col items-center gap-4">
-                    <div className="p-3 bg-slate-100 rounded-full">
-                        <Loader2 className="animate-spin text-slate-600" size={32} />
+                    <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-full">
+                        <Loader2 className="animate-spin text-slate-600 dark:text-slate-400" size={32} />
                     </div>
                     <div className="text-center">
-                        <h3 className="font-bold text-lg text-slate-800">Stopping Auto-Bid</h3>
-                        <p className="text-slate-500 text-sm mt-1">Cancelling open orders to prevent rate limits...</p>
+                        <h3 className="font-bold text-lg text-slate-800 dark:text-white">Stopping Auto-Bid</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">Cancelling open orders to prevent rate limits...</p>
                     </div>
                     
                     <div className="w-full mt-2">
-                        <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
+                        <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
                             <span>Progress</span>
                             <span>{progress.current} / {progress.total}</span>
                         </div>
@@ -296,10 +296,10 @@ const CancellationModal = ({ isOpen, progress }) => {
                             aria-valuemin="0"
                             aria-valuemax="100"
                             aria-label="Cancellation Progress"
-                            className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"
+                            className="w-full bg-slate-100 dark:bg-slate-800 h-2 rounded-full overflow-hidden"
                         >
                             <div 
-                                className="bg-blue-600 h-full transition-all duration-300 ease-out" 
+                                className="bg-blue-600 dark:bg-blue-500 h-full transition-all duration-300 ease-out"
                                 style={{width: `${percentage}%`}}
                             />
                         </div>
@@ -469,75 +469,75 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
 
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Wallet size={12} /> Total Exposure
                 </div>
-                <div className="text-2xl font-bold text-slate-800 mt-1">
+                <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
                     {formatMoney(stats.exposure)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     Locked in trades & orders
                 </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <TrendingUp size={12} /> Potential Profit
                 </div>
-                <div className="text-2xl font-bold text-emerald-600 mt-1">
+                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">
                     +{formatMoney(stats.totalPotentialReturn)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     If all positions win
                 </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Trophy size={12} /> Realized PnL
                 </div>
-                <div className={`text-2xl font-bold mt-1 ${stats.totalRealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <div className={`text-2xl font-bold mt-1 ${stats.totalRealizedPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                     {stats.totalRealizedPnl > 0 ? '+' : ''}{formatMoney(stats.totalRealizedPnl)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     {stats.historyCount} settled events
                 </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Activity size={12} /> Win Rate
                 </div>
-                <div className="text-2xl font-bold text-slate-800 mt-1">
+                <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1">
                     {stats.winRate}%
                 </div>
-                <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full mt-2 overflow-hidden">
                     <div className="bg-emerald-500 h-full" style={{width: `${stats.winRate}%`}}></div>
                 </div>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+            <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Calculator size={12} /> Statistical Sig.
                 </div>
-                <div className={`text-2xl font-bold mt-1 ${stats.isSignificant ? 'text-emerald-600' : 'text-slate-400'}`}>
+                <div className={`text-2xl font-bold mt-1 ${stats.isSignificant ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                     {stats.tStat.toFixed(2)}
                 </div>
-                <div className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1 flex items-center gap-1">
                     {stats.isSignificant ? <Check size={12} className="text-emerald-500"/> : <XCircle size={12}/>}
                     {stats.isSignificant ? 'Significant' : 'Not Sig'} (α=0.05)
                 </div>
             </div>
 
-             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
-                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider flex items-center gap-1">
+             <div className="bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-colors">
+                <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1">
                     <Clock size={12} /> Session Time
                 </div>
-                <div className="text-2xl font-bold text-slate-800 mt-1 font-mono">
+                <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mt-1 font-mono">
                     {sessionStart ? formatDuration(elapsed || (Date.now() - sessionStart)) : '0s'}
                 </div>
-                <div className="text-xs text-slate-400 mt-1">
+                <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">
                     {isRunning ? 'Bot is running' : 'Bot is paused'}
                 </div>
             </div>
@@ -549,7 +549,7 @@ const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorCl
     return (
         <div>
             <div className="flex justify-between items-center mb-2">
-                <label htmlFor={`${id}-input`} className="text-xs font-bold text-slate-500">{label}</label>
+                <label htmlFor={`${id}-input`} className="text-xs font-bold text-slate-500 dark:text-slate-400">{label}</label>
                 <div className="flex items-center gap-1">
                     <input
                         type="number"
@@ -561,7 +561,7 @@ const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorCl
                             const val = parseInt(e.target.value);
                             if (!isNaN(val)) onChange(Math.max(min, Math.min(max, val)));
                         }}
-                        className={`w-12 text-right text-xs font-bold ${colorClass} border-b border-slate-200 focus:outline-none focus:border-current bg-transparent p-0`}
+                        className={`w-12 text-right text-xs font-bold ${colorClass} border-b border-slate-200 dark:border-slate-700 focus:outline-none focus:border-current bg-transparent p-0`}
                     />
                     <span className={`text-xs font-bold ${colorClass}`}>{unit}</span>
                 </div>
@@ -575,14 +575,14 @@ const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorCl
                 max={max}
                 value={value}
                 onChange={e => onChange(parseInt(e.target.value))}
-                className={`w-full ${accentClass} h-1.5 bg-slate-200 rounded-lg cursor-pointer`}
+                className={`w-full ${accentClass} h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg cursor-pointer`}
             />
-            {helpText && <p id={`${id}-help`} className="text-[10px] text-slate-400 mt-1">{helpText}</p>}
+            {helpText && <p id={`${id}-help`} className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{helpText}</p>}
         </div>
     );
 };
 
-const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList }) => {
+const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList, theme, setTheme }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const bidMarginId = useId();
     const closeMarginId = useId();
@@ -594,12 +594,31 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-shrink-0">
-                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
-                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200 transition-colors">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" /></button>
                 </div>
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase">Theme</label>
+                        <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                            {['light', 'dark', 'auto'].map((t) => (
+                                <button
+                                    key={t}
+                                    onClick={() => setTheme(t)}
+                                    className={`flex-1 py-1.5 text-xs font-bold rounded-md capitalize transition-all ${
+                                        theme === t
+                                            ? 'bg-white text-blue-600 shadow-sm dark:bg-slate-700 dark:text-blue-400'
+                                            : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     <RangeSetting
                         id={refreshRateId}
                         label="API Refresh Rate"
@@ -665,14 +684,14 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label htmlFor="trade-size" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
-                            <input id="trade-size" type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                            <label htmlFor="trade-size" className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1 block">Trade Size (Contracts)</label>
+                            <input id="trade-size" type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white"/>
                         </div>
                     </div>
 
                     {/* Risk Management Section */}
-                    <div className="border-t border-slate-200 pt-6">
-                        <h4 className="text-xs font-bold text-slate-600 uppercase mb-4 flex items-center gap-2">
+                    <div className="border-t border-slate-200 dark:border-slate-800 pt-6">
+                        <h4 className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-4 flex items-center gap-2">
                             <AlertCircle size={14} />
                             Risk Management
                         </h4>
@@ -680,9 +699,9 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                         <div className="space-y-4">
                             {/* Sport Diversification */}
                             <div className="flex items-center justify-between">
-                                <label htmlFor="enable-sport-div" className="text-sm text-slate-700 flex-1">
+                                <label htmlFor="enable-sport-div" className="text-sm text-slate-700 dark:text-slate-300 flex-1">
                                     Sport Diversification
-                                    <div className="text-xs text-slate-500 mt-0.5">Limit positions per sport to reduce correlation risk</div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-500 mt-0.5">Limit positions per sport to reduce correlation risk</div>
                                 </label>
                                 <input
                                     id="enable-sport-div"
@@ -695,7 +714,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 
                             {config.enableSportDiversification && (
                                 <div className="ml-4">
-                                    <label htmlFor="max-per-sport" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Max Per Sport</label>
+                                    <label htmlFor="max-per-sport" className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1 block">Max Per Sport</label>
                                     <input
                                         id="max-per-sport"
                                         type="number"
@@ -703,7 +722,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                         onChange={e => setConfig({...config, maxPositionsPerSport: parseInt(e.target.value) || 1})}
                                         min={1}
                                         max={config.maxPositions}
-                                        className="w-24 p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
+                                        className="w-24 p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white"
                                     />
                                 </div>
                             )}
@@ -914,15 +933,15 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
     const wsTooltip = wsStats ? `Subscribed: ${wsStats.subscribed} | Confirmed: ${wsStats.confirmed} | Pending: ${wsStats.pending} | Failed: ${wsStats.failed}` : '';
 
     return (
-    <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+    <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-900 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 transition-colors">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1 (2026-01-18)</span></h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1 (2026-01-18)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
-                        wsStatus === 'OPEN' ? 'bg-green-100 text-green-700 border-green-200' :
+                        wsStatus === 'OPEN' ? 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800' :
                         wsStatus === 'ERROR' ? 'bg-red-100 text-red-700 border-red-200' :
-                        'bg-slate-100 text-slate-500 border-slate-200'
+                        'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
                     }`}
                     title={wsTooltip}
                 >
@@ -931,10 +950,10 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
                      wsStatus === 'ERROR' ? 'WS ERROR' :
                      'WS OFF'}
                 </span>
-                {lastUpdated && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500"><Clock size={10} /> {lastUpdated.toLocaleTimeString()}</span>}
+                {lastUpdated && <span className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700"><Clock size={10} /> {lastUpdated.toLocaleTimeString()}</span>}
                 {apiUsage && (
                     <span
-                        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-indigo-50 text-indigo-600 border-indigo-100"
+                        className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border bg-indigo-50 text-indigo-600 border-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800"
                         title={`Used: ${apiUsage.used} | Remaining: ${apiUsage.remaining}`}
                         aria-label={`API Usage: ${apiUsage.used} requests used of ${apiUsage.used + apiUsage.remaining} total`}
                     >
@@ -945,20 +964,20 @@ const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, on
             </div>
         </div>
         <div className="flex items-center gap-3">
-             <button aria-label="Run Schedule" onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`} title="Run Schedule">
+             <button aria-label="Run Schedule" onClick={onOpenSchedule} className={`p-2.5 rounded-lg border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 ${isScheduled ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800'}`} title="Run Schedule">
                 <Clock size={20} className={isScheduled ? 'animate-pulse' : ''}/>
             </button>
-             <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Session Reports">
+             <button aria-label="Session Reports" onClick={onOpenExport} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" title="Session Reports">
                 <FileText size={20} />
             </button>
-             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500" title="Settings">
+             <button aria-label="Settings" onClick={onOpenSettings} className="p-2.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800" title="Settings">
                 <Settings size={20} />
             </button>
-            <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
+            <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-900/30 dark:border-emerald-800 dark:text-emerald-400' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/50'}`}>
                 {connected ? <Check size={16} /> : <Wallet size={16} />} <span className="font-medium text-sm">{connected ? "Wallet Active" : "Connect Wallet"}</span>
             </button>
-            <div className="bg-slate-100 px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-2 min-w-[100px] justify-end">
-                <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
+            <div className="bg-slate-100 px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-2 min-w-[100px] justify-end dark:bg-slate-800 dark:border-slate-700">
+                <DollarSign size={16} className={connected ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700 dark:text-slate-200">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
             </div>
             <button
                 onClick={() => {
@@ -1040,10 +1059,10 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 m-4">
-                <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
-                    <h3 className="font-bold text-lg text-slate-800">Connect Kalshi API</h3>
-                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400" /></button>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-md p-6 m-4 transition-colors">
+                <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">Connect Kalshi API</h3>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" /></button>
                 </div>
                 <div className="space-y-4">
                     {validationError && (
@@ -1051,23 +1070,23 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                             <strong>Connection Failed:</strong><br/>{validationError}
                         </div>
                     )}
-                    <div className="text-xs bg-blue-50 text-blue-800 p-3 rounded flex items-start gap-2">
+                    <div className="text-xs bg-blue-50 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300 p-3 rounded flex items-start gap-2">
                         <Info size={14} className="mt-0.5 flex-shrink-0"/>
                         <span>Keys stored locally. Supports standard PKCS#1 keys.</span>
                     </div>
 
                     <div>
-                        <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 mb-1 uppercase">
+                        <label htmlFor="api-key-id" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase">
                             API Key ID <span className="text-red-500 ml-1" aria-hidden="true">*</span>
                         </label>
-                        <input id="api-key-id" type="text" required value={keyId} onChange={e => setKeyId(e.target.value)} maxLength={100} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none" />
+                        <input id="api-key-id" type="text" required value={keyId} onChange={e => setKeyId(e.target.value)} maxLength={100} placeholder="Enter your Key ID" className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-white" />
                     </div>
 
                     <div>
-                        <label htmlFor="private-key-upload" className="block text-xs font-bold text-slate-500 mb-1 uppercase">
+                        <label htmlFor="private-key-upload" className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 uppercase">
                             Private Key <span className="text-red-500 ml-1" aria-hidden="true">*</span>
                         </label>
-                        <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer relative transition-all group ${fileName ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'} focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2`}>
+                        <div className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer relative transition-all group ${fileName ? 'border-emerald-500 bg-emerald-50/30' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800'} focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-2`}>
                             <input id="private-key-upload" type="file" required aria-label="Upload Private Key" onChange={handleFile} className="absolute inset-0 opacity-0 cursor-pointer" accept=".key,.pem,.txt" />
                             <div className="flex flex-col items-center gap-2">
                                 {fileName ? (
@@ -1078,16 +1097,16 @@ const ConnectModal = ({ isOpen, onClose, onConnect }) => {
                                     </>
                                 ) : (
                                     <>
-                                        <div className="p-2 bg-slate-100 rounded-full text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-500 transition-colors"><Upload size={20} /></div>
-                                        <span className="text-slate-600 font-medium text-sm">Click to upload .key file</span>
-                                        <span className="text-[10px] text-slate-400">or drag and drop here</span>
+                                        <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-500 transition-colors"><Upload size={20} /></div>
+                                        <span className="text-slate-600 dark:text-slate-400 font-medium text-sm">Click to upload .key file</span>
+                                        <span className="text-[10px] text-slate-400 dark:text-slate-500">or drag and drop here</span>
                                     </>
                                 )}
                             </div>
                         </div>
                     </div>
 
-                    <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 outline-none">
+                    <button onClick={handleSave} disabled={isValidating} className="w-full bg-slate-900 text-white py-3 rounded font-bold hover:bg-blue-600 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-500 outline-none dark:bg-slate-700 dark:hover:bg-slate-600">
                         {isValidating ? 'Validating...' : 'Connect'}
                     </button>
                 </div>
@@ -1155,20 +1174,20 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="bg-slate-900 p-4 flex justify-between items-center">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200 transition-colors">
+                <div className="bg-slate-900 dark:bg-slate-800 p-4 flex justify-between items-center">
                     <div className="text-white font-bold flex items-center gap-2"><Calculator size={18} className="text-blue-400"/> Trade Analysis</div>
                     <button aria-label="Close" onClick={onClose} className="text-slate-400 hover:text-white transition-colors"><X size={20} /></button>
                 </div>
                 <div className="p-6 overflow-y-auto">
-                    <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 font-mono">{data.ticker}</p></div>
+                    <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 dark:text-white leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 dark:text-slate-400 font-mono">{data.ticker}</p></div>
                     
-                    <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
-                        <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
+                    <div className="mb-6 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden">
+                        <div className="bg-slate-50 dark:bg-slate-800 px-4 py-2 border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex justify-between">
                             <span>Vig-Free Fair Value Calculator</span>
                         </div>
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-white text-slate-500 text-xs">
+                            <thead className="bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs">
                                 <tr>
                                     <th className="px-4 py-2 font-medium">Outcome</th>
                                     <th className="px-4 py-2 font-medium">Odds</th>
@@ -1176,56 +1195,56 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                                     <th className="px-4 py-2 font-medium text-right">Fair Odds</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                <tr className="bg-blue-50/50">
-                                    <td className="px-4 py-2 font-bold text-blue-800">Target</td>
-                                    <td className="px-4 py-2 font-mono">{data.sportsbookOdds > 0 ? '+' : ''}{data.sportsbookOdds}</td>
-                                    <td className="px-4 py-2 font-mono font-bold text-emerald-600">
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                <tr className="bg-blue-50/50 dark:bg-blue-900/10">
+                                    <td className="px-4 py-2 font-bold text-blue-800 dark:text-blue-400">Target</td>
+                                    <td className="px-4 py-2 font-mono dark:text-slate-200">{data.sportsbookOdds > 0 ? '+' : ''}{data.sportsbookOdds}</td>
+                                    <td className="px-4 py-2 font-mono font-bold text-emerald-600 dark:text-emerald-400">
                                         {(data.vigFreeProb || 0).toFixed(2)}%
-                                        {data.bookmakerCount && <span className="text-[9px] text-slate-400 block font-normal">Avg of {data.bookmakerCount} bks</span>}
+                                        {data.bookmakerCount && <span className="text-[9px] text-slate-400 dark:text-slate-500 block font-normal">Avg of {data.bookmakerCount} bks</span>}
                                     </td>
-                                    <td className="px-4 py-2 font-mono text-right">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-right dark:text-slate-200">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</td>
                                 </tr>
                                 <tr>
-                                    <td className="px-4 py-2 text-slate-500">Opponent</td>
-                                    <td className="px-4 py-2 font-mono">{displayOpposingOdds}</td>
-                                    <td className="px-4 py-2 font-mono text-slate-600">{(opposingVigFreeProb * 100).toFixed(2)}%</td>
-                                    <td className="px-4 py-2 font-mono text-right">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</td>
+                                    <td className="px-4 py-2 text-slate-500 dark:text-slate-400">Opponent</td>
+                                    <td className="px-4 py-2 font-mono dark:text-slate-300">{displayOpposingOdds}</td>
+                                    <td className="px-4 py-2 font-mono text-slate-600 dark:text-slate-400">{(opposingVigFreeProb * 100).toFixed(2)}%</td>
+                                    <td className="px-4 py-2 font-mono text-right dark:text-slate-300">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4 mb-6">
-                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                            <div className="text-xs text-blue-600 font-bold uppercase mb-1">Execution</div>
-                            <div className="text-2xl font-bold text-slate-800">{data.bidPrice}¢</div>
-                            <div className="text-xs text-slate-500 mt-1">Paid Price</div>
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-900/30">
+                            <div className="text-xs text-blue-600 dark:text-blue-400 font-bold uppercase mb-1">Execution</div>
+                            <div className="text-2xl font-bold text-slate-800 dark:text-white">{data.bidPrice}¢</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Paid Price</div>
                         </div>
-                        <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-100">
-                            <div className="text-xs text-emerald-600 font-bold uppercase mb-1">True Value</div>
-                            <div className="text-2xl font-bold text-slate-800">{data.fairValue}¢</div>
-                            <div className="text-xs text-slate-500 mt-1">Fair Value (Cents)</div>
+                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                            <div className="text-xs text-emerald-600 dark:text-emerald-400 font-bold uppercase mb-1">True Value</div>
+                            <div className="text-2xl font-bold text-slate-800 dark:text-white">{data.fairValue}¢</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">Fair Value (Cents)</div>
                         </div>
                     </div>
 
                     {/* Unrealized P&L Section */}
                     {quantity > 0 && (
-                        <div className={`mb-6 p-4 rounded-lg border ${unrealizedPnl >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                        <div className={`mb-6 p-4 rounded-lg border ${unrealizedPnl >= 0 ? 'bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20 dark:border-emerald-800' : 'bg-rose-50 border-rose-200 dark:bg-rose-900/20 dark:border-rose-800'}`}>
                             <div className="flex justify-between items-center">
                                 <div>
-                                    <div className={`text-xs font-bold uppercase mb-1 ${unrealizedPnl >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>Unrealized P&L</div>
-                                    <div className={`text-3xl font-bold ${unrealizedPnl >= 0 ? 'text-emerald-800' : 'text-rose-800'}`}>
+                                    <div className={`text-xs font-bold uppercase mb-1 ${unrealizedPnl >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>Unrealized P&L</div>
+                                    <div className={`text-3xl font-bold ${unrealizedPnl >= 0 ? 'text-emerald-800 dark:text-emerald-300' : 'text-rose-800 dark:text-rose-300'}`}>
                                         {unrealizedPnl >= 0 ? '+' : ''}{formatMoney(unrealizedPnl)}
                                     </div>
-                                    <div className={`text-sm font-medium mt-1 ${unrealizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    <div className={`text-sm font-medium mt-1 ${unrealizedPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                         {unrealizedPnlPercent >= 0 ? '+' : ''}{unrealizedPnlPercent.toFixed(2)}%
                                     </div>
                                 </div>
                                 <div className="text-right">
-                                     <div className="text-xs text-slate-500 mb-1">Current Price</div>
-                                     <div className="text-xl font-mono font-bold text-slate-700">{currentPrice}¢</div>
-                                     <div className="text-xs text-slate-400 mt-1">Qty: {quantity}</div>
+                                     <div className="text-xs text-slate-500 dark:text-slate-400 mb-1">Current Price</div>
+                                     <div className="text-xl font-mono font-bold text-slate-700 dark:text-slate-200">{currentPrice}¢</div>
+                                     <div className="text-xs text-slate-400 dark:text-slate-500 mt-1">Qty: {quantity}</div>
                                 </div>
                             </div>
 
@@ -1235,8 +1254,8 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                                     disabled={isSelling || currentPrice <= 0}
                                     className={`mt-4 w-full py-2 px-4 rounded-lg font-bold text-sm text-white shadow-sm transition-all active:scale-95 flex items-center justify-center gap-2 ${
                                         unrealizedPnl >= 0
-                                            ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300'
-                                            : 'bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300'
+                                            ? 'bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 dark:bg-emerald-700 dark:hover:bg-emerald-600'
+                                            : 'bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300 dark:bg-rose-700 dark:hover:bg-rose-600'
                                     }`}
                                 >
                                     {isSelling ? <Loader2 className="animate-spin" size={16}/> : <DollarSign size={16}/>}
@@ -1246,14 +1265,14 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                         </div>
                     )}
 
-                    <div className="space-y-3 border-t border-slate-100 pt-4">
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
-                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
-                         <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
+                    <div className="space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500 dark:text-slate-400">Sportsbook Updated</span><span className="font-mono text-slate-700 dark:text-slate-300">{formatOrderDate(data.oddsTime)}</span></div>
+                        <div className="flex justify-between items-center text-sm"><span className="text-slate-500 dark:text-slate-400">Order Placed</span><span className="font-mono text-slate-700 dark:text-slate-300">{formatOrderDate(data.orderPlacedAt)}</span></div>
+                         <div className="flex justify-between items-center text-sm bg-amber-50 dark:bg-amber-900/20 p-2 rounded border border-amber-100 dark:border-amber-800"><span className="text-amber-800 dark:text-amber-400 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700 dark:text-amber-300">{formatDuration(latency)}</span></div>
                          
                          <div className="flex justify-between items-center text-sm">
-                            <span className="text-slate-500">Status</span>
-                            <span className="font-mono font-bold text-slate-700 uppercase">{data.currentStatus || '-'}</span>
+                            <span className="text-slate-500 dark:text-slate-400">Status</span>
+                            <span className="font-mono font-bold text-slate-700 dark:text-slate-300 uppercase">{data.currentStatus || '-'}</span>
                          </div>
                     </div>
                 </div>
@@ -1486,64 +1505,64 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden animate-in fade-in zoom-in duration-200 flex flex-col transition-colors">
                 {/* Header */}
-                <div className="flex justify-between items-center p-6 border-b border-slate-200">
-                    <h3 className="font-bold text-xl text-slate-800 flex items-center gap-2">
-                        <Trophy size={24} className="text-emerald-600"/> Session Report
+                <div className="flex justify-between items-center p-6 border-b border-slate-200 dark:border-slate-800">
+                    <h3 className="font-bold text-xl text-slate-800 dark:text-white flex items-center gap-2">
+                        <Trophy size={24} className="text-emerald-600 dark:text-emerald-400"/> Session Report
                     </h3>
                     <button aria-label="Close" onClick={onClose}>
-                        <X size={24} className="text-slate-400 hover:text-slate-600" />
+                        <X size={24} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" />
                     </button>
                 </div>
 
                 {/* Executive Summary */}
-                <div className="p-6 bg-gradient-to-br from-emerald-50 to-blue-50 border-b border-slate-200">
-                    <div className="text-sm text-slate-600 mb-3">
+                <div className="p-6 bg-gradient-to-br from-emerald-50 to-blue-50 dark:from-emerald-900/20 dark:to-blue-900/20 border-b border-slate-200 dark:border-slate-800">
+                    <div className="text-sm text-slate-600 dark:text-slate-400 mb-3">
                         Session: {sessionStart ? new Date(sessionStart).toLocaleString() : 'N/A'} • Duration: {formatHoldDuration(sessionDuration)}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white/80 p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 font-bold uppercase">Net P&L</div>
-                            <div className={`text-2xl font-bold ${sessionMetrics.netPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Net P&L</div>
+                            <div className={`text-2xl font-bold ${sessionMetrics.netPnL >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                 {sessionMetrics.netPnL >= 0 ? '+' : ''}{formatMoney(sessionMetrics.netPnL)}
                             </div>
-                            <div className="text-xs text-slate-500">ROI: {sessionMetrics.roi >= 0 ? '+' : ''}{sessionMetrics.roi.toFixed(1)}%</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">ROI: {sessionMetrics.roi >= 0 ? '+' : ''}{sessionMetrics.roi.toFixed(1)}%</div>
                         </div>
 
-                        <div className="bg-white/80 p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 font-bold uppercase">Trades</div>
-                            <div className="text-2xl font-bold text-slate-800">{sessionMetrics.totalTrades}</div>
-                            <div className="text-xs text-slate-500">{sessionMetrics.settledTrades} settled, {sessionMetrics.pendingTrades} pending</div>
+                        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Trades</div>
+                            <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">{sessionMetrics.totalTrades}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{sessionMetrics.settledTrades} settled, {sessionMetrics.pendingTrades} pending</div>
                         </div>
 
-                        <div className="bg-white/80 p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 font-bold uppercase">Win Rate</div>
-                            <div className="text-2xl font-bold text-emerald-600">{sessionMetrics.winRate.toFixed(0)}%</div>
-                            <div className="text-xs text-slate-500">{sessionMetrics.wins}W-{sessionMetrics.losses}L-{sessionMetrics.breakevens}BE</div>
+                        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Win Rate</div>
+                            <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{sessionMetrics.winRate.toFixed(0)}%</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{sessionMetrics.wins}W-{sessionMetrics.losses}L-{sessionMetrics.breakevens}BE</div>
                         </div>
 
-                        <div className="bg-white/80 p-3 rounded-lg">
-                            <div className="text-xs text-slate-500 font-bold uppercase">Sharpe</div>
-                            <div className={`text-2xl font-bold ${sessionMetrics.sharpeRatio > 2 ? 'text-emerald-600' : 'text-slate-600'}`}>
+                        <div className="bg-white/80 dark:bg-slate-800/80 p-3 rounded-lg">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase">Sharpe</div>
+                            <div className={`text-2xl font-bold ${sessionMetrics.sharpeRatio > 2 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>
                                 {sessionMetrics.sharpeRatio.toFixed(2)}
                             </div>
-                            <div className="text-xs text-slate-500">Avg Hold: {formatHoldDuration(sessionMetrics.avgHoldTime)}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">Avg Hold: {formatHoldDuration(sessionMetrics.avgHoldTime)}</div>
                         </div>
                     </div>
 
                     {/* Best/Worst Trades */}
                     <div className="mt-4 grid grid-cols-2 gap-4">
                         <div className="text-sm">
-                            <span className="text-slate-600">🏆 Best: </span>
-                            <span className="font-bold text-emerald-600">
+                            <span className="text-slate-600 dark:text-slate-400">🏆 Best: </span>
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
                                 {sessionMetrics.bestTrade ? `${sessionMetrics.bestTrade.marketId.split('-').pop()} → ${formatMoney(sessionMetrics.largestWin)}` : 'N/A'}
                             </span>
                         </div>
                         <div className="text-sm">
-                            <span className="text-slate-600">📉 Worst: </span>
-                            <span className="font-bold text-rose-600">
+                            <span className="text-slate-600 dark:text-slate-400">📉 Worst: </span>
+                            <span className="font-bold text-rose-600 dark:text-rose-400">
                                 {sessionMetrics.worstTrade ? `${sessionMetrics.worstTrade.marketId.split('-').pop()} → ${formatMoney(sessionMetrics.largestLoss)}` : 'N/A'}
                             </span>
                         </div>
@@ -1551,15 +1570,15 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-slate-200 px-6">
+                <div className="flex border-b border-slate-200 dark:border-slate-800 px-6">
                     {['summary', 'performance', 'risk', 'history', 'export'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setActiveTab(tab)}
                             className={`px-4 py-3 font-medium text-sm capitalize transition-colors ${
                                 activeTab === tab
-                                    ? 'text-blue-600 border-b-2 border-blue-600'
-                                    : 'text-slate-500 hover:text-slate-700'
+                                    ? 'text-blue-600 border-b-2 border-blue-600 dark:text-blue-400 dark:border-blue-400'
+                                    : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
                             }`}
                         >
                             {tab}
@@ -1571,7 +1590,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                 <div className="flex-1 overflow-y-auto p-6">
                     {activeTab === 'summary' && (
                         <div className="space-y-4">
-                            <h4 className="font-bold text-slate-800">Key Metrics</h4>
+                            <h4 className="font-bold text-slate-800 dark:text-white">Key Metrics</h4>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                 <MetricCard label="Total Trades" value={sessionMetrics.totalTrades} />
                                 <MetricCard label="Settled Trades" value={sessionMetrics.settledTrades} />
@@ -1587,12 +1606,12 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                 <MetricCard label="Max Hold Time" value={formatHoldDuration(sessionMetrics.maxHoldTime)} />
                             </div>
 
-                            <h4 className="font-bold text-slate-800 mt-6">Sport Breakdown</h4>
+                            <h4 className="font-bold text-slate-800 dark:text-white mt-6">Sport Breakdown</h4>
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                 {Object.entries(sessionMetrics.sportBreakdown).map(([sport, count]) => (
-                                    <div key={sport} className="bg-slate-50 p-3 rounded-lg">
-                                        <div className="text-sm text-slate-600">{sport}</div>
-                                        <div className="text-xl font-bold text-slate-800">{count}</div>
+                                    <div key={sport} className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+                                        <div className="text-sm text-slate-600 dark:text-slate-400">{sport}</div>
+                                        <div className="text-xl font-bold text-slate-800 dark:text-slate-100">{count}</div>
                                     </div>
                                 ))}
                             </div>
@@ -1795,9 +1814,9 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
 
 // Helper component for metric cards
 const MetricCard = ({ label, value }) => (
-    <div className="bg-slate-50 p-3 rounded-lg">
-        <div className="text-xs text-slate-500 font-medium">{label}</div>
-        <div className="text-lg font-bold text-slate-800 mt-1">{value}</div>
+    <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+        <div className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</div>
+        <div className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">{value}</div>
     </div>
 );
 
@@ -1811,22 +1830,22 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" {...backdropProps}>
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="flex justify-between items-center p-4 border-b border-slate-100">
-                    <h3 className="font-bold text-lg text-slate-800">Position Details</h3>
-                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200 transition-colors">
+                <div className="flex justify-between items-center p-4 border-b border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">Position Details</h3>
+                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200" /></button>
                 </div>
                 
                 <div className="p-6">
                     <div className="flex items-start gap-4 mb-8">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                            <Briefcase className="text-emerald-600" size={20} />
+                        <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center flex-shrink-0">
+                            <Briefcase className="text-emerald-600 dark:text-emerald-400" size={20} />
                         </div>
                         <div>
-                            <div className="text-sm text-slate-500 font-medium mb-1">
+                            <div className="text-sm text-slate-500 dark:text-slate-400 font-medium mb-1">
                                 {market ? market.event : position.marketId}
                             </div>
-                            <div className="text-2xl font-bold text-slate-900">
+                            <div className="text-2xl font-bold text-slate-900 dark:text-white">
                                 {position.side}
                             </div>
                         </div>
@@ -1835,7 +1854,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
                     <div className="overflow-x-auto">
                         <table className="w-full text-left text-sm">
                             <thead>
-                                <tr className="text-slate-400 border-b border-slate-100">
+                                <tr className="text-slate-400 border-b border-slate-100 dark:border-slate-800">
                                     <th className="pb-3 font-normal">Market</th>
                                     <th className="pb-3 font-normal text-right">Avg price</th>
                                     <th className="pb-3 font-normal text-right">Contracts filled</th>
@@ -1844,14 +1863,14 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
                                     <th className="pb-3 font-normal text-right">Last updated</th>
                                 </tr>
                             </thead>
-                            <tbody className="text-slate-700">
+                            <tbody className="text-slate-700 dark:text-slate-200">
                                 <tr>
-                                    <td className="py-4 font-medium text-blue-600">Bought {position.side}</td>
+                                    <td className="py-4 font-medium text-blue-600 dark:text-blue-400">Bought {position.side}</td>
                                     <td className="py-4 text-right font-mono">{safeAvgPrice.toFixed(2)}¢</td>
                                     <td className="py-4 text-right font-mono">{position.quantity}</td>
                                     <td className="py-4 text-right font-mono">{formatMoney(position.cost)}</td>
                                     <td className="py-4 text-right font-mono">{formatMoney(position.fees)}</td>
-                                    <td className="py-4 text-right font-mono text-slate-500 text-xs">
+                                    <td className="py-4 text-right font-mono text-slate-500 dark:text-slate-400 text-xs">
                                         {formatDate(position.created || Date.now())}
                                     </td>
                                 </tr>
@@ -1870,15 +1889,15 @@ const SortableHeader = ({ label, sortKey, currentSort, onSort, align = 'left' })
     const justifyClass = align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start';
 
     return (
-        <th className="p-0 bg-slate-50 border-b border-slate-200 select-none font-medium text-slate-500" aria-sort={ariaSort}>
+        <th className="p-0 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 select-none font-medium text-slate-500 dark:text-slate-400" aria-sort={ariaSort}>
             <button
                 onClick={() => onSort(sortKey)}
-                className={`w-full h-full px-4 py-3 flex items-center gap-1 hover:bg-slate-100 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 outline-none transition-colors group ${justifyClass}`}
+                className={`w-full h-full px-4 py-3 flex items-center gap-1 hover:bg-slate-100 dark:hover:bg-slate-700 focus-visible:bg-slate-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 outline-none transition-colors group ${justifyClass}`}
             >
                 <span className={align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'}>
                     {label}
                 </span>
-                <span className={`text-slate-400 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
+                <span className={`text-slate-400 dark:text-slate-500 ${isActive ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`}>
                     {isActive && currentSort.direction === 'asc' ? <ArrowUp size={12}/> : <ArrowDown size={12}/>}
                 </span>
             </button>
@@ -1910,63 +1929,63 @@ const MarketExpandedDetails = ({ market }) => {
     const opposingFairOdds = probabilityToAmericanOdds(opposingVigFreeProb);
 
     return (
-        <div className="p-4 border-b border-slate-200 bg-slate-50 animate-in slide-in-from-top-2">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 animate-in slide-in-from-top-2">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* 1. Odds Sources */}
                 <div className="space-y-2">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                         <Briefcase size={12}/> Odds Sources ({market.bookmakerCount})
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                         {market.oddsSources && market.oddsSources.map((source, i) => (
-                            <span key={i} className="px-2 py-1 bg-white border border-slate-200 rounded text-xs font-medium text-slate-600 shadow-sm">
+                            <span key={i} className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-xs font-medium text-slate-600 dark:text-slate-300 shadow-sm">
                                 {source}
                             </span>
                         ))}
                     </div>
-                     <div className="text-[10px] text-slate-400 mt-1">
-                        Spread: <span className="font-mono text-slate-600">{(market.oddsSpread * 100).toFixed(2)}%</span> (Max variance)
+                     <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                        Spread: <span className="font-mono text-slate-600 dark:text-slate-400">{(market.oddsSpread * 100).toFixed(2)}%</span> (Max variance)
                     </div>
                 </div>
 
                 {/* 2. Calculator */}
                 <div className="space-y-2">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                         <Calculator size={12}/> Vig-Free Valuation
                     </div>
-                     <div className="bg-white border border-slate-200 rounded p-2 text-xs">
+                     <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-2 text-xs">
                         <div className="flex justify-between mb-1">
-                            <span className="text-slate-500">Target No-Vig Prob:</span>
-                            <span className="font-mono font-bold text-emerald-600">{(market.vigFreeProb).toFixed(2)}%</span>
+                            <span className="text-slate-500 dark:text-slate-400">Target No-Vig Prob:</span>
+                            <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">{(market.vigFreeProb).toFixed(2)}%</span>
                         </div>
                          <div className="flex justify-between mb-1">
-                            <span className="text-slate-500">Fair Odds:</span>
-                            <span className="font-mono font-bold text-slate-700">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</span>
+                            <span className="text-slate-500 dark:text-slate-400">Fair Odds:</span>
+                            <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{targetFairOdds > 0 ? '+' : ''}{targetFairOdds}</span>
                         </div>
-                        <div className="border-t border-slate-100 my-1 pt-1 flex justify-between">
-                             <span className="text-slate-500">Opponent Fair Odds:</span>
-                             <span className="font-mono text-slate-600">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</span>
+                        <div className="border-t border-slate-100 dark:border-slate-700 my-1 pt-1 flex justify-between">
+                             <span className="text-slate-500 dark:text-slate-400">Opponent Fair Odds:</span>
+                             <span className="font-mono text-slate-600 dark:text-slate-400">{opposingFairOdds > 0 ? '+' : ''}{opposingFairOdds}</span>
                         </div>
                     </div>
                 </div>
 
                 {/* 3. Latency & Timings */}
                 <div className="space-y-2">
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1">
                         <Clock size={12}/> Data Freshness
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="bg-white p-2 border border-slate-200 rounded">
-                            <div className="text-slate-400 text-[10px] mb-0.5">Odds Update</div>
-                            <div className="font-mono text-slate-700">{formatDuration(Date.now() - market.oddsLastUpdate)} ago</div>
+                        <div className="bg-white dark:bg-slate-800 p-2 border border-slate-200 dark:border-slate-700 rounded">
+                            <div className="text-slate-400 dark:text-slate-500 text-[10px] mb-0.5">Odds Update</div>
+                            <div className="font-mono text-slate-700 dark:text-slate-300">{formatDuration(Date.now() - market.oddsLastUpdate)} ago</div>
                         </div>
-                        <div className="bg-white p-2 border border-slate-200 rounded">
-                             <div className="text-slate-400 text-[10px] mb-0.5">Kalshi Update</div>
-                            <div className="font-mono text-slate-700">{formatDuration(Date.now() - market.kalshiLastUpdate)} ago</div>
+                        <div className="bg-white dark:bg-slate-800 p-2 border border-slate-200 dark:border-slate-700 rounded">
+                             <div className="text-slate-400 dark:text-slate-500 text-[10px] mb-0.5">Kalshi Update</div>
+                            <div className="font-mono text-slate-700 dark:text-slate-300">{formatDuration(Date.now() - market.kalshiLastUpdate)} ago</div>
                         </div>
                     </div>
-                     <div className="text-[10px] text-slate-400 text-right">
+                     <div className="text-[10px] text-slate-400 dark:text-slate-500 text-right">
                         Refreshed: {new Date(market.lastChange).toLocaleTimeString()}
                     </div>
                 </div>
@@ -1994,14 +2013,14 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
 
     return (
         <>
-            <tr key={market.id} onClick={() => setExpanded(!expanded)} className={`hover:bg-slate-50 transition-colors cursor-pointer border-b border-slate-100 ${!isSelected ? 'opacity-60 bg-slate-50' : ''}`}>
+            <tr key={market.id} onClick={() => setExpanded(!expanded)} className={`hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer border-b border-slate-100 dark:border-slate-800 ${!isSelected ? 'opacity-60 bg-slate-50 dark:bg-slate-800' : ''}`}>
                 <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                      <input
                         type="checkbox"
                         aria-label={`Select ${market.event}`}
                         checked={isSelected}
                         onChange={() => onToggleSelect(market.id)}
-                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                        className="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 cursor-pointer dark:bg-slate-700 dark:border-slate-600"
                     />
                 </td>
                 <td className="px-4 py-3">
@@ -2011,36 +2030,36 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                         aria-controls={`details-${market.id}`}
                         className="w-full text-left group focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded p-1 -m-1"
                     >
-                        <div className="font-medium text-slate-700 flex items-center gap-2">
+                        <div className="font-medium text-slate-700 dark:text-slate-200 flex items-center gap-2">
                             {market.event}
                             {line && (marketType === 'spreads' || marketType === 'totals') && (
-                                <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-100">
+                                <span className="bg-blue-50 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded border border-blue-100 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800">
                                     Line: {line}
                                 </span>
                             )}
                             <ChevronDown size={14} className={`text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
                         </div>
-                        <div className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-0.5">
                             <Clock size={10} /> {formatGameTime(market.commenceTime)}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                            {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 text-slate-400 px-1 rounded">No Match</span>}
-                            <span className="text-[10px] text-slate-400 font-mono">Odds: {market.oddsDisplay}</span>
+                            {market.isMatchFound ? <LiquidityBadge volume={market.volume} openInterest={market.openInterest}/> : <span className="text-[10px] bg-slate-100 dark:bg-slate-700 text-slate-400 px-1 rounded">No Match</span>}
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 font-mono">Odds: {market.oddsDisplay}</span>
                         </div>
                     </button>
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className="font-bold text-slate-700">{market.fairValue}¢</div>
+                    <div className="font-bold text-slate-700 dark:text-slate-300">{market.fairValue}¢</div>
                     <LatencyDisplay timestamp={market.oddsLastUpdate} />
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                    <div className={`font-bold ${market.volatility > 1.0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`}>
                         {market.volatility.toFixed(2)}
                     </div>
                     {market.volatility > 1.0 && <div className="text-[9px] text-amber-500 font-bold uppercase tracking-wider flex justify-center items-center gap-1"><Activity size={8}/> Volatile</div>}
                 </td>
                 <td className="px-4 py-3 text-center">
-                    <div className="font-mono text-slate-500 flex items-center justify-center gap-1">
+                    <div className="font-mono text-slate-500 dark:text-slate-400 flex items-center justify-center gap-1">
                         {/* WebSocket Status Indicators */}
                         {market.isWsSubscribed && market.priceSource === 'WS' && (
                             <Zap size={12} className="text-emerald-500" title="✓ Live WebSocket Data" />
@@ -2049,21 +2068,21 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                             <Zap size={12} className="text-amber-500" title="⏳ WebSocket Subscribed (using HTTP fallback)" />
                         )}
                         {!market.isWsSubscribed && market.isMatchFound && (
-                            <Zap size={12} className="text-slate-500" title="HTTP Only" />
+                            <Zap size={12} className="text-slate-500 dark:text-slate-600" title="HTTP Only" />
                         )}
                         {market.bestBid}¢ / {market.bestAsk}¢
                     </div>
                     <LatencyDisplay timestamp={market.kalshiLastUpdate} />
                 </td>
-                <td className="px-4 py-3 text-right text-slate-400">{market.maxWillingToPay}¢</td>
+                <td className="px-4 py-3 text-right text-slate-400 dark:text-slate-500">{market.maxWillingToPay}¢</td>
                 <td className="px-4 py-3 text-right">
-                    {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 uppercase">{market.reason}</span></div> : '-'}
+                    {market.smartBid ? <div className="flex flex-col items-end"><span className="font-bold text-emerald-600 dark:text-emerald-400">{market.smartBid}¢</span><span className="text-[9px] text-slate-400 dark:text-slate-500 uppercase">{market.reason}</span></div> : '-'}
                 </td>
                 <td className="px-4 py-3 text-center">
                     <button
                         onClick={handleBid}
                         disabled={!market.smartBid || isBidding}
-                        className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px]"
+                        className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold hover:bg-blue-600 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px] dark:bg-slate-700 dark:hover:bg-blue-600"
                     >
                         {isBidding ? (
                             <>
@@ -2075,7 +2094,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
                 </td>
             </tr>
             {expanded && (
-                <tr className="bg-slate-50/50">
+                <tr className="bg-slate-50/50 dark:bg-slate-800/50">
                     <td colSpan={8} className="p-0">
                         <div id={`details-${market.id}`}>
                             <MarketExpandedDetails market={market} />
@@ -2122,56 +2141,56 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
     const source = historyEntry?.source;
 
     return (
-        <tr className="hover:bg-slate-50 group">
+        <tr className="hover:bg-slate-50 dark:hover:bg-slate-800 group border-b border-slate-100 dark:border-slate-800 transition-colors">
             <td className="px-4 py-3">
                 <div className="flex items-center gap-2">
-                    <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600' : 'text-rose-600'}`}>{item.side}</span>
-                    <span className="text-slate-400">for</span>
-                    <span className="font-medium text-slate-700">{item.marketId.split('-').pop()}</span>
-                    {source === 'auto' && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-100 text-indigo-700 rounded uppercase">AUTO</span>}
+                    <span className={`font-bold ${item.side === 'Yes' ? 'text-blue-600 dark:text-blue-400' : 'text-rose-600 dark:text-rose-400'}`}>{item.side}</span>
+                    <span className="text-slate-400 dark:text-slate-500">for</span>
+                    <span className="font-medium text-slate-700 dark:text-slate-300">{item.marketId.split('-').pop()}</span>
+                    {source === 'auto' && <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded uppercase">AUTO</span>}
                 </div>
             </td>
 
             {activeTab === 'positions' && (
                 <>
-                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-700">
+                    <td className="px-4 py-3 text-center font-mono font-bold text-slate-700 dark:text-slate-300">
                         {item.quantity}
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-600">
+                    <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-slate-400">
                         {entryPrice}¢
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-600">
+                    <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-slate-400">
                         {currentPrice}¢
                     </td>
                     <td className="px-4 py-3 text-right font-mono">
-                        <div className={`font-bold ${unrealizedPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        <div className={`font-bold ${unrealizedPnL >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                             {unrealizedPnL >= 0 ? '+' : ''}{formatMoney(unrealizedPnL)}
                         </div>
-                        <div className={`text-[10px] ${unrealizedPnL >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        <div className={`text-[10px] ${unrealizedPnL >= 0 ? 'text-emerald-500 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
                             {unrealizedPnLPercent >= 0 ? '+' : ''}{unrealizedPnLPercent.toFixed(1)}%
                         </div>
                     </td>
                     <td className="px-4 py-3 text-center">
-                        <div className={`font-mono text-sm ${entryEdge !== null && entryEdge >= 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        <div className={`font-mono text-sm ${entryEdge !== null && entryEdge >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                             {entryEdge !== null ? `${entryEdge >= 0 ? '+' : ''}${entryEdge}¢` : '-'}
                         </div>
-                        <div className={`font-mono text-sm ${currentEdge !== null && currentEdge >= 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                        <div className={`font-mono text-sm ${currentEdge !== null && currentEdge >= 0 ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400 dark:text-slate-500'}`}>
                             {currentEdge !== null ? `${currentEdge >= 0 ? '+' : ''}${currentEdge}¢` : '-'}
                         </div>
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500 dark:text-slate-400">
                         {holdDuration ? formatHoldDuration(holdDuration) : '-'}
                     </td>
                     <td className="px-4 py-3 text-center">
                         {exitOrder ? (
                             <div className="text-xs">
-                                <div className="font-mono text-emerald-600 font-bold">{exitOrder.price}¢</div>
-                                <div className="text-[10px] text-slate-400">
+                                <div className="font-mono text-emerald-600 dark:text-emerald-400 font-bold">{exitOrder.price}¢</div>
+                                <div className="text-[10px] text-slate-400 dark:text-slate-500">
                                     {exitOrder.filled > 0 ? `${exitOrder.filled}/${item.quantity}` : 'Resting'}
                                 </div>
                             </div>
                         ) : (
-                            <span className="text-slate-300">-</span>
+                            <span className="text-slate-300 dark:text-slate-600">-</span>
                         )}
                     </td>
                 </>
@@ -2180,31 +2199,31 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
             {activeTab === 'resting' && (
                 <>
                     <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-0.5 text-xs font-bold rounded ${item.action === 'buy' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        <span className={`px-2 py-0.5 text-xs font-bold rounded ${item.action === 'buy' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'}`}>
                             {item.action?.toUpperCase() || 'BUY'}
                         </span>
                     </td>
                     <td className="px-4 py-3 text-center font-mono">
-                        <span className="font-bold">{item.filled}</span> <span className="text-slate-400">/ {item.quantity}</span>
+                        <span className="font-bold dark:text-slate-300">{item.filled}</span> <span className="text-slate-400 dark:text-slate-500">/ {item.quantity}</span>
                     </td>
-                    <td className="px-4 py-3 text-center font-mono">{item.price}¢</td>
-                    <td className="px-4 py-3 text-center font-mono text-slate-600">
+                    <td className="px-4 py-3 text-center font-mono dark:text-slate-300">{item.price}¢</td>
+                    <td className="px-4 py-3 text-center font-mono text-slate-600 dark:text-slate-400">
                         {currentFV ? `${currentFV}¢` : '-'}
                     </td>
                     <td className="px-4 py-3 text-center text-xs font-mono">
                         {(() => {
                             const isBuy = item.action === 'buy';
                             const market = currentPrice ? { bestBid: currentPrice, bestAsk: currentPrice } : null;
-                            if (!market) return <span className="text-slate-400">-</span>;
+                            if (!market) return <span className="text-slate-400 dark:text-slate-600">-</span>;
                             const distance = calculateDistanceFromMarket(item.price, market.bestBid, market.bestAsk, isBuy);
                             return (
-                                <span className={distance < 0 ? 'text-rose-500' : distance > 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                                <span className={distance < 0 ? 'text-rose-500 dark:text-rose-400' : distance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}>
                                     {distance > 0 ? '+' : ''}{distance}¢
                                 </span>
                             );
                         })()}
                     </td>
-                    <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">
+                    <td className="px-4 py-3 text-center text-xs font-mono text-slate-500 dark:text-slate-400">
                         {item.created ? formatHoldDuration(Date.now() - item.created) : '-'}
                     </td>
                 </>
@@ -2213,8 +2232,8 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
             {activeTab === 'history' && (
                 <>
                     <td className="px-4 py-3 text-center">
-                        <div className="font-mono text-sm text-slate-600">{entryPrice}¢</div>
-                        <div className="font-mono text-[10px] text-slate-400">
+                        <div className="font-mono text-sm text-slate-600 dark:text-slate-400">{entryPrice}¢</div>
+                        <div className="font-mono text-[10px] text-slate-400 dark:text-slate-500">
                             {historyEntry ? `(${historyEntry.fairValue}¢ FV)` : ''}
                         </div>
                     </td>
@@ -2223,8 +2242,8 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                             const exitPrice = item.payout ? Math.floor(item.payout / item.quantity) : null;
                             return exitPrice !== null ? (
                                 <>
-                                    <div className="font-mono text-sm text-slate-600">{exitPrice}¢</div>
-                                    <div className="font-mono text-[10px] text-slate-400">
+                                    <div className="font-mono text-sm text-slate-600 dark:text-slate-400">{exitPrice}¢</div>
+                                    <div className="font-mono text-[10px] text-slate-400 dark:text-slate-500">
                                         {item.payout ? formatMoney(item.payout) : ''}
                                     </div>
                                 </>
@@ -2234,10 +2253,10 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                     <td className="px-4 py-3 text-right">
                         {item.realizedPnl !== undefined ? (
                             <>
-                                <div className={`font-mono font-bold ${item.realizedPnl >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                <div className={`font-mono font-bold ${item.realizedPnl >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                     {item.realizedPnl >= 0 ? '+' : ''}{formatMoney(item.realizedPnl)}
                                 </div>
-                                <div className={`text-[10px] font-mono ${item.realizedPnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                <div className={`text-[10px] font-mono ${item.realizedPnl >= 0 ? 'text-emerald-500 dark:text-emerald-300' : 'text-rose-500 dark:text-rose-300'}`}>
                                     {formatPercentReturn(item.realizedPnl, item.cost)}
                                 </div>
                             </>
@@ -2250,11 +2269,11 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                             const fvEdge = historyEntry ? historyEntry.fairValue - entryPrice : null;
                             return (
                                 <>
-                                    <div className={`font-mono text-sm ${edgeCaptured && edgeCaptured > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                    <div className={`font-mono text-sm ${edgeCaptured && edgeCaptured > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 dark:text-slate-500'}`}>
                                         {edgeCaptured !== null ? `${edgeCaptured >= 0 ? '+' : ''}${edgeCaptured}¢` : '-'}
                                     </div>
                                     {fvEdge !== null && (
-                                        <div className="text-[10px] text-slate-400">
+                                        <div className="text-[10px] text-slate-400 dark:text-slate-500">
                                             / {fvEdge >= 0 ? '+' : ''}{fvEdge}¢ FV
                                         </div>
                                     )}
@@ -2262,14 +2281,14 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                             );
                         })()}
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500 dark:text-slate-400">
                         {historyEntry?.orderPlacedAt && item.settled ?
                             formatHoldDuration(item.settled - historyEntry.orderPlacedAt) : '-'}
                     </td>
-                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500">
+                    <td className="px-4 py-3 text-center font-mono text-xs text-slate-500 dark:text-slate-400">
                         {item.fees ? formatMoney(item.fees) : '-'}
                     </td>
-                    <td className="px-4 py-3 text-center text-xs text-slate-500">
+                    <td className="px-4 py-3 text-center text-xs text-slate-500 dark:text-slate-400">
                         {item.settled ? formatOrderDate(item.settled) : formatOrderDate(item.created)}
                     </td>
                 </>
@@ -2277,7 +2296,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
 
             <td className="px-4 py-3 text-center flex justify-center gap-2">
                 {item.isOrder && (
-                    <button aria-label={`Cancel Order for ${item.marketId}`} onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 transition-colors" title="Cancel Order">
+                    <button aria-label={`Cancel Order for ${item.marketId}`} onClick={() => onCancel(item.id)} className="text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 transition-colors" title="Cancel Order">
                         <XCircle size={16}/>
                     </button>
                 )}
@@ -2285,7 +2304,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
                     aria-label="Trade Analysis"
                     onClick={() => onAnalysis(item, historyEntry)}
                     disabled={!historyEntry}
-                    className="text-slate-300 hover:text-blue-600 disabled:opacity-20"
+                    className="text-slate-300 dark:text-slate-600 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-20"
                 >
                     <Info size={16}/>
                 </button>
@@ -2384,7 +2403,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
     return (
         <div role="tabpanel" aria-labelledby={`tab-${activeTab}`} className="overflow-auto flex-1">
             <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
+                <thead className="bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-medium sticky top-0 z-10 shadow-sm">
                     <tr>
                         <SortableHeader label="Details" sortKey="details" currentSort={sortConfig} onSort={onSort} />
                         
@@ -2428,14 +2447,14 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 
                 {groupedItems.map(([gameName, items]) => (
                     <React.Fragment key={gameName}>
-                        <tbody className="bg-slate-50 border-b border-slate-200">
+                        <tbody className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
                             <tr>
-                                <td colSpan={activeTab === 'positions' ? 9 : activeTab === 'resting' ? 8 : 9} className="px-4 py-2 font-bold text-xs text-slate-700 uppercase tracking-wider bg-slate-100/50">
+                                <td colSpan={activeTab === 'positions' ? 9 : activeTab === 'resting' ? 8 : 9} className="px-4 py-2 font-bold text-xs text-slate-700 dark:text-slate-300 uppercase tracking-wider bg-slate-100/50 dark:bg-slate-700/50">
                                     {gameName}
                                 </td>
                             </tr>
                         </tbody>
-                        <tbody className="divide-y divide-slate-50">
+                        <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                             {items.map(item => (
                                 <PortfolioRow
                                     key={item.id}
@@ -2455,32 +2474,32 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 {positions.length === 0 && (
                     <tbody>
                         <tr>
-                            <td colSpan={activeTab === 'positions' ? 7 : (activeTab === 'resting' ? 6 : 5)} className="py-12 text-center text-slate-400">
+                            <td colSpan={activeTab === 'positions' ? 7 : (activeTab === 'resting' ? 6 : 5)} className="py-12 text-center text-slate-400 dark:text-slate-500">
                                 <div className="flex flex-col items-center gap-3">
                                     {activeTab === 'positions' && (
                                         <>
-                                            <div className="p-4 bg-slate-100 rounded-full"><Briefcase size={24} className="text-slate-400"/></div>
+                                            <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full"><Briefcase size={24} className="text-slate-400 dark:text-slate-500"/></div>
                                             <div>
-                                                <p className="font-medium text-slate-600">No active positions</p>
-                                                <p className="text-xs text-slate-400 mt-1">Use the Market Scanner to find trades</p>
+                                                <p className="font-medium text-slate-600 dark:text-slate-400">No active positions</p>
+                                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Use the Market Scanner to find trades</p>
                                             </div>
                                         </>
                                     )}
                                     {activeTab === 'resting' && (
                                         <>
-                                            <div className="p-4 bg-slate-100 rounded-full"><Clock size={24} className="text-slate-400"/></div>
+                                            <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full"><Clock size={24} className="text-slate-400 dark:text-slate-500"/></div>
                                             <div>
-                                                <p className="font-medium text-slate-600">No open orders</p>
-                                                <p className="text-xs text-slate-400 mt-1">Active bids and offers will appear here</p>
+                                                <p className="font-medium text-slate-600 dark:text-slate-400">No open orders</p>
+                                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Active bids and offers will appear here</p>
                                             </div>
                                         </>
                                     )}
                                     {activeTab === 'history' && (
                                         <>
-                                            <div className="p-4 bg-slate-100 rounded-full"><FileText size={24} className="text-slate-400"/></div>
+                                            <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full"><FileText size={24} className="text-slate-400 dark:text-slate-500"/></div>
                                             <div>
-                                                <p className="font-medium text-slate-600">No trade history</p>
-                                                <p className="text-xs text-slate-400 mt-1">Settled auto-trades will appear here</p>
+                                                <p className="font-medium text-slate-600 dark:text-slate-400">No trade history</p>
+                                                <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Settled auto-trades will appear here</p>
                                             </div>
                                         </>
                                     )}
@@ -2507,24 +2526,24 @@ const EventLog = ({ logs }) => {
     }, [logs]);
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[300px]">
-             <div className="p-4 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText size={18} className="text-slate-400"/> Event Log</h3>
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col h-[300px] transition-colors">
+             <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
+                <h3 className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2"><FileText size={18} className="text-slate-400 dark:text-slate-500"/> Event Log</h3>
             </div>
             <div ref={scrollRef} className="overflow-y-auto p-4 space-y-2 flex-1 font-mono text-xs">
-                {logs.length === 0 && <div className="text-slate-400 text-center italic mt-10">No events yet</div>}
+                {logs.length === 0 && <div className="text-slate-400 dark:text-slate-500 text-center italic mt-10">No events yet</div>}
                 {logs.map(log => (
-                    <div key={log.id} className="flex gap-2 border-b border-slate-50 pb-1 last:border-0">
-                        <span className="text-slate-400 min-w-[60px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                    <div key={log.id} className="flex gap-2 border-b border-slate-50 dark:border-slate-800 pb-1 last:border-0">
+                        <span className="text-slate-400 dark:text-slate-500 min-w-[60px]">{new Date(log.timestamp).toLocaleTimeString()}</span>
                         <span className={`font-bold w-[60px] ${
-                            log.type === 'BID' ? 'text-blue-600' :
-                            log.type === 'CANCEL' ? 'text-rose-400' :
-                            log.type === 'FILL' ? 'text-emerald-600' :
-                            log.type === 'CLOSE' ? 'text-amber-600' :
-                            log.type === 'UPDATE' ? 'text-purple-600' :
-                            'text-slate-700'
+                            log.type === 'BID' ? 'text-blue-600 dark:text-blue-400' :
+                            log.type === 'CANCEL' ? 'text-rose-400 dark:text-rose-400' :
+                            log.type === 'FILL' ? 'text-emerald-600 dark:text-emerald-400' :
+                            log.type === 'CLOSE' ? 'text-amber-600 dark:text-amber-400' :
+                            log.type === 'UPDATE' ? 'text-purple-600 dark:text-purple-400' :
+                            'text-slate-700 dark:text-slate-300'
                         }`}>[{log.type}]</span>
-                        <span className="text-slate-700 truncate">{log.message}</span>
+                        <span className="text-slate-700 dark:text-slate-300 truncate">{log.message}</span>
                     </div>
                 ))}
             </div>
@@ -2537,6 +2556,29 @@ const EventLog = ({ logs }) => {
 // ==========================================
 
 const KalshiDashboard = () => {
+  const [theme, setTheme] = useState(() => localStorage.getItem('kalshi_theme') || 'auto');
+
+  useEffect(() => {
+    localStorage.setItem('kalshi_theme', theme);
+    const root = window.document.documentElement;
+    root.classList.remove('dark');
+
+    if (theme === 'dark' || (theme === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        root.classList.add('dark');
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    if (theme !== 'auto') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => {
+        const root = window.document.documentElement;
+        if (mediaQuery.matches) root.classList.add('dark');
+        else root.classList.remove('dark');
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [theme]);
   
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
@@ -3748,7 +3790,7 @@ const KalshiDashboard = () => {
 
   return (
     <TimeProvider>
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-black text-slate-800 dark:text-slate-200 font-sans p-4 md:p-8 transition-colors duration-200">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
       <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
@@ -3758,7 +3800,7 @@ const KalshiDashboard = () => {
 
       <ConnectModal isOpen={isWalletOpen} onClose={() => setIsWalletOpen(false)} onConnect={k => {setWalletKeys(k); sessionStorage.setItem('kalshi_keys', JSON.stringify(k));}} />
       <ScheduleModal isOpen={isScheduleOpen} onClose={() => setIsScheduleOpen(false)} schedule={schedule} setSchedule={setSchedule} config={config} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} config={config} setConfig={setConfig} oddsApiKey={oddsApiKey} setOddsApiKey={setOddsApiKey} sportsList={sportsList} theme={theme} setTheme={setTheme} />
       <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} sessionHistory={sessionHistory} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} onSell={executeOrder} />
@@ -3771,11 +3813,11 @@ const KalshiDashboard = () => {
 
       <ActionToast action={activeAction} />
       
-      {errorMsg && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center gap-2"><AlertCircle size={16}/>{errorMsg}</div>}
+      {errorMsg && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center gap-2 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400"><AlertCircle size={16}/>{errorMsg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col max-h-[800px]">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+        <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[800px] transition-colors">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
                 <div className="flex items-center gap-3">
                     <h2 className="font-bold text-slate-700 flex items-center gap-2"><Activity size={18} className={isRunning ? "text-emerald-500" : "text-slate-400"}/> Market Scanner</h2>
                     <SportFilter selected={config.selectedSports} options={sportsList} onChange={(s) => setConfig({...config, selectedSports: s})}/>
@@ -3889,8 +3931,8 @@ const KalshiDashboard = () => {
         </div>
 
         <div className="space-y-6 flex flex-col h-full lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 overflow-hidden flex flex-col min-h-[300px]">
-                <div role="tablist" aria-label="Portfolio Views" className="flex border-b border-slate-100 bg-slate-50/50">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 flex-1 overflow-hidden flex flex-col min-h-[300px] transition-colors">
+                <div role="tablist" aria-label="Portfolio Views" className="flex border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/50">
                     {['positions', 'resting', 'history'].map(tab => (
                         <button
                             key={tab}
