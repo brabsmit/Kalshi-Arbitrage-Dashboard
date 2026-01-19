@@ -35,7 +35,7 @@ import { runAutoClose } from './bot/autoClose';
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
 
-const REFRESH_COOLDOWN = 10000; 
+const REFRESH_COOLDOWN = 10000;
 const STALE_DATA_THRESHOLD = 30000; // 30 seconds
 
 // ==========================================
@@ -207,8 +207,8 @@ const SportFilter = ({ selected, options, onChange }) => {
 
     return (
         <div className="relative" ref={containerRef}>
-            <button 
-                onClick={() => setIsOpen(!isOpen)} 
+            <button
+                onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
                 aria-controls={dropdownId}
@@ -230,7 +230,7 @@ const SportFilter = ({ selected, options, onChange }) => {
                         <div className="flex justify-between items-center mb-2 px-1">
                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
                             {selected.length > 0 && (
-                                <button 
+                                <button
                                     onClick={() => onChange([])}
                                     className="text-[10px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1"
                                 >
@@ -272,7 +272,7 @@ const SportFilter = ({ selected, options, onChange }) => {
 const CancellationModal = ({ isOpen, progress }) => {
     if (!isOpen) return null;
     const percentage = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-    
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 m-4 animate-in fade-in zoom-in duration-200">
@@ -284,7 +284,7 @@ const CancellationModal = ({ isOpen, progress }) => {
                         <h3 className="font-bold text-lg text-slate-800">Stopping Auto-Bid</h3>
                         <p className="text-slate-500 text-sm mt-1">Cancelling open orders to prevent rate limits...</p>
                     </div>
-                    
+
                     <div className="w-full mt-2">
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
                             <span>Progress</span>
@@ -298,8 +298,8 @@ const CancellationModal = ({ isOpen, progress }) => {
                             aria-label="Cancellation Progress"
                             className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"
                         >
-                            <div 
-                                className="bg-blue-600 h-full transition-all duration-300 ease-out" 
+                            <div
+                                className="bg-blue-600 h-full transition-all duration-300 ease-out"
                                 style={{width: `${percentage}%`}}
                             />
                         </div>
@@ -867,7 +867,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 const ActionToast = ({ action }) => {
     if (!action) return null;
     const isBid = action.type === 'BID';
-    
+
     return (
         <div role="status" aria-live="polite" className="fixed bottom-6 right-6 bg-slate-900 text-white p-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300 z-50 max-w-sm border border-slate-700/50">
             <div className={`p-3 rounded-full flex-shrink-0 ${isBid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
@@ -1120,11 +1120,11 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
     } else if (data.sportsbookOdds && data.vigFreeProb) {
         const targetRaw = americanToProbability(data.sportsbookOdds);
         const vigFreeDecimal = data.vigFreeProb / 100;
-        
+
         if (vigFreeDecimal > 0.001) {
             const totalImplied = targetRaw / vigFreeDecimal;
             const opponentRaw = totalImplied - targetRaw;
-            
+
             if (opponentRaw > 0 && opponentRaw < 1) {
                 const calcOdds = probabilityToAmericanOdds(opponentRaw);
                 displayOpposingOdds = (calcOdds > 0 ? '+' : '') + calcOdds + ' (Est)';
@@ -1162,7 +1162,7 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                 </div>
                 <div className="p-6 overflow-y-auto">
                     <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 font-mono">{data.ticker}</p></div>
-                    
+
                     <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
                             <span>Vig-Free Fair Value Calculator</span>
@@ -1250,7 +1250,7 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
                          <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
-                         
+
                          <div className="flex justify-between items-center text-sm">
                             <span className="text-slate-500">Status</span>
                             <span className="font-mono font-bold text-slate-700 uppercase">{data.currentStatus || '-'}</span>
@@ -1816,7 +1816,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
                     <h3 className="font-bold text-lg text-slate-800">Position Details</h3>
                     <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
-                
+
                 <div className="p-6">
                     <div className="flex items-start gap-4 mb-8">
                         <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
@@ -2280,7 +2280,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
 }, arePortfolioPropsEqual);
 
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
-    
+
     // Optimization: Create a map for O(1) market lookups
     const marketMap = useMemo(() => {
         const map = new Map();
@@ -2306,7 +2306,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
         const liveMarket = marketMap.get(ticker);
         if (liveMarket) return liveMarket.event;
         if (tradeHistory[ticker]) return tradeHistory[ticker].event;
-        return ticker; 
+        return ticker;
     };
 
     const getCurrentFV = (ticker) => {
@@ -2372,7 +2372,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
                     <tr>
                         <SortableHeader label="Details" sortKey="details" currentSort={sortConfig} onSort={onSort} />
-                        
+
                         {activeTab === 'positions' && (
                             <>
                                 <SortableHeader label="Qty" sortKey="quantity" currentSort={sortConfig} onSort={onSort} align="center" />
@@ -2407,7 +2407,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                         <th className="px-2 py-2 text-center">Action</th>
                     </tr>
                 </thead>
-                
+
                 {groupedItems.map(([gameName, items]) => (
                     <React.Fragment key={gameName}>
                         <tbody className="bg-slate-50 border-b border-slate-200">
@@ -2519,14 +2519,14 @@ const EventLog = ({ logs }) => {
 // ==========================================
 
 const KalshiDashboard = () => {
-  
+
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [balance, setBalance] = useState(null); 
+  const [balance, setBalance] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(''); 
+  const [errorMsg, setErrorMsg] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [wsStatus, setWsStatus] = useState('CLOSED'); 
+  const [wsStatus, setWsStatus] = useState('CLOSED');
   const [walletKeys, setWalletKeys] = useState(null);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('resting');
@@ -2534,7 +2534,7 @@ const KalshiDashboard = () => {
   const [analysisModalData, setAnalysisModalData] = useState(null);
   const [oddsApiKey, setOddsApiKey] = useState('');
   const [apiUsage, setApiUsage] = useState(null);
-  
+
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [activeAction, setActiveAction] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -2672,13 +2672,13 @@ const KalshiDashboard = () => {
 
   const [sportsList, setSportsList] = useState(SPORT_MAPPING);
   const [isLoadingSports, setIsLoadingSports] = useState(false);
-  
+
   const lastFetchTimeRef = useRef(0);
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef(null);
-  const autoBidTracker = useRef(new Set()); 
+  const autoBidTracker = useRef(new Set());
   const isAutoBidProcessing = useRef(false);
-  const closingTracker = useRef(new Set()); 
+  const closingTracker = useRef(new Set());
   const wsRef = useRef(null);
   const lastOrdersRef = useRef({});
   const isFirstFetchRef = useRef(true);
@@ -2695,7 +2695,7 @@ const KalshiDashboard = () => {
   // Keep refs synced with state
   useEffect(() => { latestMarketsRef.current = markets; }, [markets]);
   useEffect(() => { latestDeselectedRef.current = deselectedMarketIds; }, [deselectedMarketIds]);
-  
+
   const [tradeHistory, setTradeHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_trade_history') || '{}'));
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
 
@@ -2782,14 +2782,14 @@ const KalshiDashboard = () => {
       // Prevent overlapping requests that cause abort loops
       if (!force && isLoadingRef.current) return;
       if (!force && (now - lastFetchTimeRef.current < cooldown)) return;
-      
+
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       try {
           isLoadingRef.current = true;
           setErrorMsg('');
-          
+
           const selectedSportsList = sportsList.filter(s => config.selectedSports.includes(s.key));
           if (selectedSportsList.length === 0) {
               setMarkets([]);
@@ -2817,7 +2817,7 @@ const KalshiDashboard = () => {
           });
 
           const results = await Promise.all(requests);
-          
+
           // Update API usage from the last successful request
           const lastUsage = results.find(r => r.apiUsage)?.apiUsage;
           if (lastUsage) setApiUsage(lastUsage);
@@ -2840,14 +2840,14 @@ const KalshiDashboard = () => {
 
                   const refBookmaker = bookmakers[0];
                   const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
-                  
+
                   if (!refOutcomes || refOutcomes.length < 2) return null;
 
                   const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
                   const targetName = targetOutcome.name;
-                  
+
                   const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
-                  const oddsDisplay = opposingOutcome 
+                  const oddsDisplay = opposingOutcome
                     ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
                     : `${targetOutcome.price}`;
 
@@ -3008,7 +3008,7 @@ const KalshiDashboard = () => {
                   hasChanged = true;
                   return newMarket;
               }).filter(Boolean);
-              
+
               if (!hasChanged && processed.length === prev.length) return prev;
               return processed;
           });
@@ -3286,7 +3286,7 @@ const KalshiDashboard = () => {
           const settledPos = settledPosRes.ok ? await settledPosRes.json() : { market_positions: [] };
 
           if (bal?.balance) setBalance(bal.balance);
-          
+
           // Process fills
           (orders.orders || []).forEach(o => {
               const prev = lastOrdersRef.current[o.order_id];
@@ -3501,7 +3501,7 @@ const KalshiDashboard = () => {
       } catch (e) { console.error("Portfolio Error", e); }
   }, [walletKeys]);
 
-  useEffect(() => { 
+  useEffect(() => {
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
   }, [walletKeys, fetchPortfolio]);
 
@@ -3744,15 +3744,15 @@ const KalshiDashboard = () => {
       <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} sessionHistory={sessionHistory} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} onSell={executeOrder} />
-      
-      <PositionDetailsModal 
-          position={selectedPosition} 
+
+      <PositionDetailsModal
+          position={selectedPosition}
           market={selectedPosition ? markets.find(m => m.realMarketId === selectedPosition.marketId) : null}
-          onClose={() => setSelectedPosition(null)} 
+          onClose={() => setSelectedPosition(null)}
       />
 
       <ActionToast action={activeAction} />
-      
+
       {errorMsg && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center gap-2"><AlertCircle size={16}/>{errorMsg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3887,11 +3887,11 @@ const KalshiDashboard = () => {
                         </button>
                     ))}
                 </div>
-                
-                <PortfolioSection 
-                    activeTab={activeTab} 
-                    positions={activeContent} 
-                    markets={markets} 
+
+                <PortfolioSection
+                    activeTab={activeTab}
+                    positions={activeContent}
+                    markets={markets}
                     tradeHistory={tradeHistory}
                     onAnalysis={handleAnalysis}
                     onCancel={cancelOrder}
