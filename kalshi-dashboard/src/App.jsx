@@ -2931,7 +2931,10 @@ const KalshiDashboard = () => {
           setLastUpdated(new Date());
 
           // Flatten results with new index
-          const allOddsData = results.flatMap(r => r.oddsData.map(o => ({ ...o, _kalshiIndex: r.kalshiIndex, _sportConfig: r.sportConfig })));
+          const allOddsData = (Array.isArray(results) ? results : []).flatMap(r => {
+            if (!r || !Array.isArray(r.oddsData)) return [];
+            return r.oddsData.map(o => ({ ...o, _kalshiIndex: r.kalshiIndex, _sportConfig: r.sportConfig }));
+          });
 
           setMarkets(prev => {
               const processingTime = Date.now();

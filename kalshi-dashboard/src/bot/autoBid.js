@@ -45,6 +45,11 @@ export async function runAutoBid(params) {
     try {
         // Fix: Only count currently open/held positions towards the limit, ignoring settled history.
         // SCOPE: Only consider markets currently displayed in the scanner to support sport switching without interference.
+        // Guard against null/undefined markets
+        if (!markets || !Array.isArray(markets)) {
+            console.warn('[AUTO-BID] markets is not an array:', markets);
+            return;
+        }
         const currentMarketIds = new Set(markets.map(m => m.realMarketId));
 
         // FIX: Track total positions per ticker to prevent accumulating excessive positions
