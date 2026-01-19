@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, useId } from 'react';
 import { Settings, Play, Pause, TrendingUp, DollarSign, AlertCircle, Briefcase, Activity, Trophy, Clock, Zap, Wallet, X, Check, Loader2, Hash, ArrowUp, ArrowDown, Calendar, XCircle, Bot, Wifi, WifiOff, Info, FileText, Droplets, Calculator, ChevronDown, Eye, EyeOff, Upload, Trash2, ShieldAlert } from 'lucide-react';
 import MarketTypeSelector from './components/MarketTypeSelector';
-import { buildKalshiIndex, findMatchInIndex, logIndexStats, SPORT_MAPPING } from './utils/marketIndexing';
+import { SPORT_MAPPING } from './utils/kalshiMatching';
+import { buildKalshiIndex, findMatchInIndex, logIndexStats } from './utils/marketIndexing';
 import {
     americanToProbability,
     calculateVolatility,
@@ -34,7 +35,7 @@ import { runAutoClose } from './bot/autoClose';
 // 1. CONFIGURATION & CONSTANTS
 // ==========================================
 
-const REFRESH_COOLDOWN = 10000; 
+const REFRESH_COOLDOWN = 10000;
 const STALE_DATA_THRESHOLD = 30000; // 30 seconds
 
 // ==========================================
@@ -206,8 +207,8 @@ const SportFilter = ({ selected, options, onChange }) => {
 
     return (
         <div className="relative" ref={containerRef}>
-            <button 
-                onClick={() => setIsOpen(!isOpen)} 
+            <button
+                onClick={() => setIsOpen(!isOpen)}
                 aria-expanded={isOpen}
                 aria-haspopup="dialog"
                 aria-controls={dropdownId}
@@ -229,7 +230,7 @@ const SportFilter = ({ selected, options, onChange }) => {
                         <div className="flex justify-between items-center mb-2 px-1">
                             <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Available Sports</div>
                             {selected.length > 0 && (
-                                <button 
+                                <button
                                     onClick={() => onChange([])}
                                     className="text-[10px] font-bold text-rose-500 hover:text-rose-700 flex items-center gap-1"
                                 >
@@ -271,7 +272,7 @@ const SportFilter = ({ selected, options, onChange }) => {
 const CancellationModal = ({ isOpen, progress }) => {
     if (!isOpen) return null;
     const percentage = progress.total > 0 ? Math.round((progress.current / progress.total) * 100) : 0;
-    
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm">
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm p-6 m-4 animate-in fade-in zoom-in duration-200">
@@ -283,7 +284,7 @@ const CancellationModal = ({ isOpen, progress }) => {
                         <h3 className="font-bold text-lg text-slate-800">Stopping Auto-Bid</h3>
                         <p className="text-slate-500 text-sm mt-1">Cancelling open orders to prevent rate limits...</p>
                     </div>
-                    
+
                     <div className="w-full mt-2">
                         <div className="flex justify-between text-xs font-bold text-slate-500 mb-1">
                             <span>Progress</span>
@@ -297,8 +298,8 @@ const CancellationModal = ({ isOpen, progress }) => {
                             aria-label="Cancellation Progress"
                             className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"
                         >
-                            <div 
-                                className="bg-blue-600 h-full transition-all duration-300 ease-out" 
+                            <div
+                                className="bg-blue-600 h-full transition-all duration-300 ease-out"
                                 style={{width: `${percentage}%`}}
                             />
                         </div>
@@ -866,7 +867,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
 const ActionToast = ({ action }) => {
     if (!action) return null;
     const isBid = action.type === 'BID';
-    
+
     return (
         <div role="status" aria-live="polite" className="fixed bottom-6 right-6 bg-slate-900 text-white p-4 rounded-xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-bottom-10 fade-in duration-300 z-50 max-w-sm border border-slate-700/50">
             <div className={`p-3 rounded-full flex-shrink-0 ${isBid ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
@@ -909,7 +910,7 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSession, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
+const Header = ({ balance, isRunning, setIsRunning, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
     const wsTooltip = wsStats ? `Subscribed: ${wsStats.subscribed} | Confirmed: ${wsStats.confirmed} | Pending: ${wsStats.pending} | Failed: ${wsStats.failed}` : '';
 
     return (
@@ -956,26 +957,14 @@ const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSessio
             <button onClick={onConnect} className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${connected ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100'}`}>
                 {connected ? <Check size={16} /> : <Wallet size={16} />} <span className="font-medium text-sm">{connected ? "Wallet Active" : "Connect Wallet"}</span>
             </button>
-            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                <div className="text-center min-w-[80px]">
-                    <div className="font-mono font-bold text-lg text-slate-800 leading-none">
-                        {connected && balance !== null ? `$${(balance / 100).toFixed(2)}` : '-'}
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Cash</div>
-                </div>
-                <div className="w-px h-8 bg-slate-200"></div>
-                <div className="text-center min-w-[80px]">
-                     <div className="font-mono font-bold text-lg text-slate-800 leading-none">
-                        {connected && portfolioValue !== null ? `$${(portfolioValue / 100).toFixed(2)}` : '-'}
-                    </div>
-                    <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Portfolio</div>
-                </div>
+            <div className="bg-slate-100 px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-2 min-w-[100px] justify-end">
+                <DollarSign size={16} className={connected ? 'text-emerald-600' : 'text-slate-400'}/><span className="font-mono font-bold text-lg text-slate-700">{connected && balance !== null ? (balance / 100).toFixed(2) : '-'}</span>
             </div>
             <button
                 onClick={() => {
-                    if (isRunning && onSaveSession) {
+                    if (isRunning) {
                         // Stopping the bot - save current session
-                        onSaveSession();
+                        saveCurrentSession();
                     }
                     setIsRunning(!isRunning);
                 }}
@@ -1131,11 +1120,11 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
     } else if (data.sportsbookOdds && data.vigFreeProb) {
         const targetRaw = americanToProbability(data.sportsbookOdds);
         const vigFreeDecimal = data.vigFreeProb / 100;
-        
+
         if (vigFreeDecimal > 0.001) {
             const totalImplied = targetRaw / vigFreeDecimal;
             const opponentRaw = totalImplied - targetRaw;
-            
+
             if (opponentRaw > 0 && opponentRaw < 1) {
                 const calcOdds = probabilityToAmericanOdds(opponentRaw);
                 displayOpposingOdds = (calcOdds > 0 ? '+' : '') + calcOdds + ' (Est)';
@@ -1173,7 +1162,7 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                 </div>
                 <div className="p-6 overflow-y-auto">
                     <div className="mb-6"><h3 className="text-lg font-bold text-slate-800 leading-tight mb-1">{data.event}</h3><p className="text-sm text-slate-500 font-mono">{data.ticker}</p></div>
-                    
+
                     <div className="mb-6 border border-slate-200 rounded-lg overflow-hidden">
                         <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-wider flex justify-between">
                             <span>Vig-Free Fair Value Calculator</span>
@@ -1261,7 +1250,7 @@ const AnalysisModal = ({ data, onClose, onSell }) => {
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Sportsbook Updated</span><span className="font-mono text-slate-700">{formatOrderDate(data.oddsTime)}</span></div>
                         <div className="flex justify-between items-center text-sm"><span className="text-slate-500">Order Placed</span><span className="font-mono text-slate-700">{formatOrderDate(data.orderPlacedAt)}</span></div>
                          <div className="flex justify-between items-center text-sm bg-amber-50 p-2 rounded border border-amber-100"><span className="text-amber-800 font-medium flex items-center gap-2"><Clock size={14}/> Data Latency</span><span className="font-mono font-bold text-amber-700">{formatDuration(latency)}</span></div>
-                         
+
                          <div className="flex justify-between items-center text-sm">
                             <span className="text-slate-500">Status</span>
                             <span className="font-mono font-bold text-slate-700 uppercase">{data.currentStatus || '-'}</span>
@@ -1298,72 +1287,69 @@ const escapeCSV = (str) => {
     return safe;
 };
 
-const buildSessionData = (tradeHistory, positions) => {
-    return Object.entries(tradeHistory).map(([ticker, data]) => {
-        const position = positions.find(p => p.marketId === ticker && !p.isOrder);
-        const entryTimestamp = data.orderPlacedAt;
-
-        // Use exit tracking data if available, otherwise fallback to position data
-        const exitTimestamp = data.exitTimestamp || position?.settled || position?.created;
-        const exitPrice = data.exitPrice || (position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null);
-        const exitFairValue = data.exitFairValue;
-        const exitMethod = data.exitMethod || 'unknown';
-
-        const entryPrice = data.bidPrice;
-        const holdDuration = entryTimestamp && exitTimestamp ? exitTimestamp - entryTimestamp : null;
-
-        return {
-            // Entry data
-            entryTimestamp,
-            ticker,
-            event: data.event,
-            side: position?.side || 'Yes',
-            quantity: data.quantity || position?.quantity || 0,
-
-            // Pricing
-            entryPrice,
-            fairValueAtEntry: data.fairValue,
-            entryEdge: data.fairValue - entryPrice,
-            exitPrice,
-            exitFairValue,
-            exitEdge: exitPrice && exitFairValue ? exitPrice - exitFairValue : null,
-
-            // P&L
-            pnl: data.realizedPnl || position?.realizedPnl || 0,
-            fees: data.totalFees || position?.fees || 0,
-            netPnl: (data.realizedPnl || position?.realizedPnl || 0) - (data.totalFees || position?.fees || 0),
-
-            // Status
-            status: position ? (position.settlementStatus || position.status) : 'Unknown',
-            exitTimestamp,
-            exitMethod,
-            holdDuration,
-
-            // Market data
-            sportsbookOdds: data.sportsbookOdds,
-            vigFreeProb: data.vigFreeProb || 0,
-            bookmakerCount: Number(data.bookmakerCount || 0),
-            oddsSpread: data.oddsSpread || 0,
-            latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null
-        };
-    }).sort((a, b) => b.entryTimestamp - a.entryTimestamp);
-};
-
 const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionStart, sessionHistory = [] }) => {
     const backdropProps = useModalClose(isOpen, onClose);
     const [activeTab, setActiveTab] = useState('summary');
 
-    const sessionMetrics = useMemo(() => {
-        if (!isOpen) return calculateSessionMetrics({}, {}); // dummy return to keep hook order
-        return calculateSessionMetrics(positions, tradeHistory);
-    }, [isOpen, positions, tradeHistory]);
-
     if (!isOpen) return null;
 
+    // Calculate comprehensive session metrics
+    const sessionMetrics = useMemo(() => calculateSessionMetrics(positions, tradeHistory), [positions, tradeHistory]);
     const sessionDuration = sessionStart ? Date.now() - sessionStart : 0;
 
+    const generateSessionData = () => {
+        return Object.entries(tradeHistory).map(([ticker, data]) => {
+            const position = positions.find(p => p.marketId === ticker && !p.isOrder);
+            const entryTimestamp = data.orderPlacedAt;
+
+            // Use exit tracking data if available, otherwise fallback to position data
+            const exitTimestamp = data.exitTimestamp || position?.settled || position?.created;
+            const exitPrice = data.exitPrice || (position?.payout && position?.quantity ? Math.floor(position.payout / position.quantity) : null);
+            const exitFairValue = data.exitFairValue;
+            const exitMethod = data.exitMethod || 'unknown';
+
+            const entryPrice = data.bidPrice;
+            const holdDuration = entryTimestamp && exitTimestamp ? exitTimestamp - entryTimestamp : null;
+
+            return {
+                // Entry data
+                entryTimestamp,
+                ticker,
+                event: data.event,
+                side: position?.side || 'Yes',
+                quantity: data.quantity || position?.quantity || 0,
+
+                // Pricing
+                entryPrice,
+                fairValueAtEntry: data.fairValue,
+                entryEdge: data.fairValue - entryPrice,
+                exitPrice,
+                exitFairValue,
+                exitEdge: exitPrice && exitFairValue ? exitPrice - exitFairValue : null,
+
+                // P&L
+                pnl: data.realizedPnl || position?.realizedPnl || 0,
+                fees: data.totalFees || position?.fees || 0,
+                netPnl: (data.realizedPnl || position?.realizedPnl || 0) - (data.totalFees || position?.fees || 0),
+
+                // Status
+                status: position ? (position.settlementStatus || position.status) : 'Unknown',
+                exitTimestamp,
+                exitMethod,
+                holdDuration,
+
+                // Market data
+                sportsbookOdds: data.sportsbookOdds,
+                vigFreeProb: data.vigFreeProb || 0,
+                bookmakerCount: Number(data.bookmakerCount || 0),
+                oddsSpread: data.oddsSpread || 0,
+                latency: (data.orderPlacedAt && data.oddsTime) ? (data.orderPlacedAt - data.oddsTime) : null
+            };
+        }).sort((a, b) => b.entryTimestamp - a.entryTimestamp);
+    };
+
     const downloadCSV = () => {
-        const data = buildSessionData(tradeHistory, positions);
+        const data = generateSessionData();
 
         // Enhanced headers with all missing data
         const headers = [
@@ -1428,7 +1414,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     };
 
     const downloadJSON = () => {
-        const data = buildSessionData(tradeHistory, positions);
+        const data = generateSessionData();
         const jsonContent = JSON.stringify(data, null, 2);
         const blob = new Blob([jsonContent], { type: 'application/json' });
         const link = document.createElement("a");
@@ -1438,7 +1424,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     };
 
     const printReport = () => {
-        const data = buildSessionData(tradeHistory, positions);
+        const data = generateSessionData();
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
             <html>
@@ -1630,7 +1616,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                 <h4 className="font-bold text-slate-800 mb-3">Trade-by-Trade P&L</h4>
                                 <div className="bg-slate-50 p-4 rounded-lg font-mono text-sm">
                                     {(() => {
-                                        const trades = buildSessionData(tradeHistory, positions).filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
+                                        const trades = generateSessionData().filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
                                         if (trades.length === 0) return <div className="text-slate-500 text-center">No settled trades yet</div>;
 
                                         const maxPnl = Math.max(...trades.map(t => Math.abs(t.netPnl)));
@@ -1665,7 +1651,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
                                     <h4 className="font-bold text-slate-800 mb-3">Cumulative P&L</h4>
                                     <div className="bg-slate-50 p-4 rounded-lg font-mono text-xs">
                                         {(() => {
-                                            const trades = buildSessionData(tradeHistory, positions).filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
+                                            const trades = generateSessionData().filter(t => t.netPnl !== 0).sort((a, b) => a.entryTimestamp - b.entryTimestamp);
                                             if (trades.length === 0) return <div className="text-slate-500 text-center">No settled trades yet</div>;
 
                                             let cumulative = 0;
@@ -1830,7 +1816,7 @@ const PositionDetailsModal = ({ position, market, onClose }) => {
                     <h3 className="font-bold text-lg text-slate-800">Position Details</h3>
                     <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
-                
+
                 <div className="p-6">
                     <div className="flex items-start gap-4 mb-8">
                         <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
@@ -2100,7 +2086,6 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
         </>
     );
 });
-MarketRow.displayName = 'MarketRow';
 
 const arePortfolioPropsEqual = (prev, next) => {
     if (prev.activeTab !== next.activeTab) return false;
@@ -2293,10 +2278,9 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
         </tr>
     );
 }, arePortfolioPropsEqual);
-PortfolioRow.displayName = 'PortfolioRow';
 
 const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
-    
+
     // Optimization: Create a map for O(1) market lookups
     const marketMap = useMemo(() => {
         const map = new Map();
@@ -2322,7 +2306,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
         const liveMarket = marketMap.get(ticker);
         if (liveMarket) return liveMarket.event;
         if (tradeHistory[ticker]) return tradeHistory[ticker].event;
-        return ticker; 
+        return ticker;
     };
 
     const getCurrentFV = (ticker) => {
@@ -2388,7 +2372,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                 <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0 z-10 shadow-sm">
                     <tr>
                         <SortableHeader label="Details" sortKey="details" currentSort={sortConfig} onSort={onSort} />
-                        
+
                         {activeTab === 'positions' && (
                             <>
                                 <SortableHeader label="Qty" sortKey="quantity" currentSort={sortConfig} onSort={onSort} align="center" />
@@ -2423,7 +2407,7 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
                         <th className="px-2 py-2 text-center">Action</th>
                     </tr>
                 </thead>
-                
+
                 {groupedItems.map(([gameName, items]) => (
                     <React.Fragment key={gameName}>
                         <tbody className="bg-slate-50 border-b border-slate-200">
@@ -2535,14 +2519,14 @@ const EventLog = ({ logs }) => {
 // ==========================================
 
 const KalshiDashboard = () => {
-  
+
   const [markets, setMarkets] = useState([]);
   const [positions, setPositions] = useState([]);
-  const [balance, setBalance] = useState(null); 
+  const [balance, setBalance] = useState(null);
   const [isRunning, setIsRunning] = useState(false);
-  const [errorMsg, setErrorMsg] = useState(''); 
+  const [errorMsg, setErrorMsg] = useState('');
   const [lastUpdated, setLastUpdated] = useState(null);
-  const [wsStatus, setWsStatus] = useState('CLOSED'); 
+  const [wsStatus, setWsStatus] = useState('CLOSED');
   const [walletKeys, setWalletKeys] = useState(null);
   const [isWalletOpen, setIsWalletOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('resting');
@@ -2550,7 +2534,7 @@ const KalshiDashboard = () => {
   const [analysisModalData, setAnalysisModalData] = useState(null);
   const [oddsApiKey, setOddsApiKey] = useState('');
   const [apiUsage, setApiUsage] = useState(null);
-  
+
   const [selectedPosition, setSelectedPosition] = useState(null);
   const [activeAction, setActiveAction] = useState(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -2564,39 +2548,6 @@ const KalshiDashboard = () => {
 
   const [isCancelling, setIsCancelling] = useState(false);
   const [cancellationProgress, setCancellationProgress] = useState({ current: 0, total: 0 });
-
-  // Portfolio Value Calculation
-  const portfolioValue = useMemo(() => {
-      if (balance === null) return null;
-
-      // 1. Locked in Orders
-      let lockedInOrders = 0;
-      positions.forEach(p => {
-          if (p.isOrder && ['active', 'resting', 'bidding', 'pending'].includes(p.status?.toLowerCase())) {
-              if (p.action === 'buy') {
-                  lockedInOrders += (p.price * (p.quantity - p.filled));
-              }
-          }
-      });
-
-      // 2. Position Market Value
-      const priceMap = new Map();
-      markets.forEach(m => {
-          if (m.realMarketId) priceMap.set(m.realMarketId, m.bestBid);
-      });
-
-      let positionsValue = 0;
-      positions.forEach(p => {
-          if (!p.isOrder && p.status === 'HELD' && (!p.settlementStatus || p.settlementStatus === 'unsettled')) {
-              const marketPrice = priceMap.get(p.marketId);
-              // Use market price if available, otherwise fallback to cost basis (to prevent 0 value for untracked markets)
-              const valuationPrice = marketPrice !== undefined ? marketPrice : (p.avgPrice || (p.quantity ? p.cost / p.quantity : 0) || 0);
-              positionsValue += p.quantity * valuationPrice;
-          }
-      });
-
-      return balance + lockedInOrders + positionsValue;
-  }, [balance, positions, markets]);
 
   const [sortConfig, setSortConfig] = useState({ key: 'edge', direction: 'desc' });
   const [portfolioSortConfig, setPortfolioSortConfig] = useState({ key: 'created', direction: 'desc' });
@@ -2721,13 +2672,13 @@ const KalshiDashboard = () => {
 
   const [sportsList, setSportsList] = useState(SPORT_MAPPING);
   const [isLoadingSports, setIsLoadingSports] = useState(false);
-  
+
   const lastFetchTimeRef = useRef(0);
   const isLoadingRef = useRef(false);
   const abortControllerRef = useRef(null);
-  const autoBidTracker = useRef(new Set()); 
+  const autoBidTracker = useRef(new Set());
   const isAutoBidProcessing = useRef(false);
-  const closingTracker = useRef(new Set()); 
+  const closingTracker = useRef(new Set());
   const wsRef = useRef(null);
   const lastOrdersRef = useRef({});
   const isFirstFetchRef = useRef(true);
@@ -2744,7 +2695,7 @@ const KalshiDashboard = () => {
   // Keep refs synced with state
   useEffect(() => { latestMarketsRef.current = markets; }, [markets]);
   useEffect(() => { latestDeselectedRef.current = deselectedMarketIds; }, [deselectedMarketIds]);
-  
+
   const [tradeHistory, setTradeHistory] = useState(() => JSON.parse(localStorage.getItem('kalshi_trade_history') || '{}'));
   useEffect(() => localStorage.setItem('kalshi_trade_history', JSON.stringify(tradeHistory)), [tradeHistory]);
 
@@ -2754,7 +2705,7 @@ const KalshiDashboard = () => {
 
   // Function to save current session to history
   const saveCurrentSession = useCallback(() => {
-      const sessionData = buildSessionData(tradeHistory, positions);
+      const sessionData = generateSessionData();
       const sessionMetrics = calculateSessionMetrics(positions, tradeHistory);
 
       const sessionRecord = {
@@ -2831,14 +2782,14 @@ const KalshiDashboard = () => {
       // Prevent overlapping requests that cause abort loops
       if (!force && isLoadingRef.current) return;
       if (!force && (now - lastFetchTimeRef.current < cooldown)) return;
-      
+
       if (abortControllerRef.current) abortControllerRef.current.abort();
       abortControllerRef.current = new AbortController();
 
       try {
           isLoadingRef.current = true;
           setErrorMsg('');
-          
+
           const selectedSportsList = sportsList.filter(s => config.selectedSports.includes(s.key));
           if (selectedSportsList.length === 0) {
               setMarkets([]);
@@ -2866,7 +2817,7 @@ const KalshiDashboard = () => {
           });
 
           const results = await Promise.all(requests);
-          
+
           // Update API usage from the last successful request
           const lastUsage = results.find(r => r.apiUsage)?.apiUsage;
           if (lastUsage) setApiUsage(lastUsage);
@@ -2889,14 +2840,14 @@ const KalshiDashboard = () => {
 
                   const refBookmaker = bookmakers[0];
                   const refOutcomes = refBookmaker.markets?.[0]?.outcomes;
-                  
+
                   if (!refOutcomes || refOutcomes.length < 2) return null;
 
                   const targetOutcome = refOutcomes.find(o => o.price < 0) || refOutcomes[0];
                   const targetName = targetOutcome.name;
-                  
+
                   const opposingOutcome = refOutcomes.find(o => o.name !== targetName);
-                  const oddsDisplay = opposingOutcome 
+                  const oddsDisplay = opposingOutcome
                     ? `${targetOutcome.price > 0 ? '+' : ''}${targetOutcome.price} / ${opposingOutcome.price > 0 ? '+' : ''}${opposingOutcome.price}`
                     : `${targetOutcome.price}`;
 
@@ -3057,7 +3008,7 @@ const KalshiDashboard = () => {
                   hasChanged = true;
                   return newMarket;
               }).filter(Boolean);
-              
+
               if (!hasChanged && processed.length === prev.length) return prev;
               return processed;
           });
@@ -3335,7 +3286,7 @@ const KalshiDashboard = () => {
           const settledPos = settledPosRes.ok ? await settledPosRes.json() : { market_positions: [] };
 
           if (bal?.balance) setBalance(bal.balance);
-          
+
           // Process fills
           (orders.orders || []).forEach(o => {
               const prev = lastOrdersRef.current[o.order_id];
@@ -3550,7 +3501,7 @@ const KalshiDashboard = () => {
       } catch (e) { console.error("Portfolio Error", e); }
   }, [walletKeys]);
 
-  useEffect(() => { 
+  useEffect(() => {
       if (walletKeys) { fetchPortfolio(); const i = setInterval(fetchPortfolio, 5000); return () => clearInterval(i); }
   }, [walletKeys, fetchPortfolio]);
 
@@ -3781,7 +3732,7 @@ const KalshiDashboard = () => {
     <TimeProvider>
     <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-4 md:p-8">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} portfolioValue={portfolioValue} isRunning={isRunning} setIsRunning={setIsRunning} onSaveSession={saveCurrentSession} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
+      <Header balance={balance} isRunning={isRunning} setIsRunning={setIsRunning} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
@@ -3793,15 +3744,15 @@ const KalshiDashboard = () => {
       <SessionReportModal isOpen={isExportOpen} onClose={() => setIsExportOpen(false)} tradeHistory={tradeHistory} positions={positions} sessionStart={sessionStart} sessionHistory={sessionHistory} />
 
       <AnalysisModal data={analysisModalData} onClose={() => setAnalysisModalData(null)} onSell={executeOrder} />
-      
-      <PositionDetailsModal 
-          position={selectedPosition} 
+
+      <PositionDetailsModal
+          position={selectedPosition}
           market={selectedPosition ? markets.find(m => m.realMarketId === selectedPosition.marketId) : null}
-          onClose={() => setSelectedPosition(null)} 
+          onClose={() => setSelectedPosition(null)}
       />
 
       <ActionToast action={activeAction} />
-      
+
       {errorMsg && <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded flex items-center gap-2"><AlertCircle size={16}/>{errorMsg}</div>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -3936,11 +3887,11 @@ const KalshiDashboard = () => {
                         </button>
                     ))}
                 </div>
-                
-                <PortfolioSection 
-                    activeTab={activeTab} 
-                    positions={activeContent} 
-                    markets={markets} 
+
+                <PortfolioSection
+                    activeTab={activeTab}
+                    positions={activeContent}
+                    markets={markets}
                     tradeHistory={tradeHistory}
                     onAnalysis={handleAnalysis}
                     onCancel={cancelOrder}
