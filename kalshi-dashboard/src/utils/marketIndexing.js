@@ -197,6 +197,11 @@ export const buildKalshiIndex = (kalshiMarkets, sport) => {
     let parseFailures = 0;
     let indexed = 0;
 
+    if (!Array.isArray(kalshiMarkets)) {
+        console.warn('[INDEX] kalshiMarkets is not an array:', kalshiMarkets);
+        return index;
+    }
+
     for (const market of kalshiMarkets) {
         const [away, home] = parseKalshiTitle(market.title);
 

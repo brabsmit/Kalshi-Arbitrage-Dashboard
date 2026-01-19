@@ -934,7 +934,7 @@ const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSessio
     return (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1 (2026-01-18)</span></h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1.1 (2026-01-24)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
@@ -2896,11 +2896,11 @@ const KalshiDashboard = () => {
                const seriesTicker = sportConfig.kalshiSeries || '';
                const [oddsRes, rawKalshiMarkets] = await Promise.all([
                   fetch(`https://api.the-odds-api.com/v4/sports/${sportConfig.key}/odds/?regions=us&markets=h2h&oddsFormat=american&apiKey=${oddsApiKey}`, { signal: abortControllerRef.current.signal }),
-                  fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => d.markets || []).catch(() => [])
+                  fetch(`/api/kalshi/markets?limit=300&status=open${seriesTicker ? `&series_ticker=${seriesTicker}` : ''}`, { signal: abortControllerRef.current.signal }).then(r => r.json()).then(d => Array.isArray(d.markets) ? d.markets : []).catch(() => [])
                ]);
 
                // NEW: Build index for O(1) lookup instead of O(N*M) matching
-               const kalshiIndex = buildKalshiIndex(rawKalshiMarkets, sportConfig.key);
+               const kalshiIndex = buildKalshiIndex(Array.isArray(rawKalshiMarkets) ? rawKalshiMarkets : [], sportConfig.key);
                logIndexStats(kalshiIndex);
 
                const used = oddsRes.headers.get('x-requests-used');
@@ -2957,7 +2957,7 @@ const KalshiDashboard = () => {
                       }
 
                       const outcomes = bm.markets?.[0]?.outcomes;
-                      if (!outcomes || outcomes.length < 2) continue;
+                      if (!outcomes || !Array.isArray(outcomes) || outcomes.length < 2) continue;
 
                       let totalImplied = 0;
                       let targetP = 0;
