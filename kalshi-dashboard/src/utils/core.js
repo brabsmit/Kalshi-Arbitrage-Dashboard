@@ -96,7 +96,25 @@ export const calculateStrategy = (market, marginPercent) => {
     // New approach: Use base margin only. Volatility is now tracked for informational purposes
     // but does not affect position sizing or bid prices.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+    let effectiveMargin = marginPercent;
+    let reasonSuffix = "";
+
+    // Alpha Strategy: "The Timer"
+    // Increase margin as event approaches to account for higher volatility/risk of ruin
+    // If we are wrong about the line, we have less time to recover or hedge.
+    if (market.commenceTime) {
+        const now = Date.now();
+        const start = new Date(market.commenceTime).getTime();
+        const hoursUntilStart = (start - now) / (1000 * 60 * 60);
+
+        if (hoursUntilStart < 1) {
+             effectiveMargin *= 1.5;
+             reasonSuffix = " (Timer: <1h)";
+        } else if (hoursUntilStart < 6) {
+             effectiveMargin *= 1.25;
+             reasonSuffix = " (Timer: <6h)";
+        }
+    }
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
@@ -112,7 +130,7 @@ export const calculateStrategy = (market, marginPercent) => {
     }
 
     let smartBid = currentBestBid + bidIncrement;
-    let reason = bidIncrement > 1 ? `Beat Market +${bidIncrement}¢` : "Beat Market";
+    let reason = (bidIncrement > 1 ? `Beat Market +${bidIncrement}¢` : "Beat Market") + reasonSuffix;
 
     // Alpha Strategy: Crossing the Spread (with Fee Protection)
     // If the Best Ask is significantly below our fair value, we take liquidity immediately
