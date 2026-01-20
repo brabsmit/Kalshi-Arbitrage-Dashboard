@@ -7,34 +7,55 @@ const PasswordAuth = ({ onAuthenticated }) => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const hashPassword = async (pwd) => {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(pwd);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        return hashHex;
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
 
-        // Get password from environment variable
-        const correctPassword = import.meta.env.VITE_APP_PASSWORD;
+        const passwordHash = import.meta.env.VITE_APP_PASSWORD_HASH;
+        const legacyPassword = import.meta.env.VITE_APP_PASSWORD;
 
-        // Debug: Log if password is undefined (remove in production)
-        if (!correctPassword) {
-            console.error('VITE_APP_PASSWORD is not set!');
-            setError('Configuration error: Password not set. Check Railway environment variables.');
+        if (!passwordHash) {
+            if (legacyPassword) {
+                 // Migration Guide
+                 setError('Security Update: Please update your .env to use VITE_APP_PASSWORD_HASH.');
+                 console.warn('Legacy VITE_APP_PASSWORD detected. Please migrate to VITE_APP_PASSWORD_HASH for improved security.');
+            } else {
+                 setError('Configuration error: Password not set. Check environment variables.');
+            }
             setIsLoading(false);
             return;
         }
 
-        // Simple check - in production, you might want to hash this
-        setTimeout(() => {
-            if (password === correctPassword) {
-                // Store auth token in sessionStorage (clears on browser close)
-                sessionStorage.setItem('authenticated', 'true');
-                onAuthenticated();
-            } else {
-                setError('Incorrect password. Please try again.');
-                setPassword('');
-            }
+        try {
+            const inputHash = await hashPassword(password);
+
+            // Artificial delay to prevent timing attacks / brute force
+            setTimeout(() => {
+                if (inputHash === passwordHash) {
+                    // Store auth token in sessionStorage (clears on browser close)
+                    sessionStorage.setItem('authenticated', 'true');
+                    onAuthenticated();
+                } else {
+                    setError('Incorrect password. Please try again.');
+                    setPassword('');
+                }
+                setIsLoading(false);
+            }, 500);
+        } catch (err) {
+            console.error('Hashing failed:', err);
+            setError('Authentication error occurred.');
             setIsLoading(false);
-        }, 500); // Small delay to prevent brute force
+        }
     };
 
     return (

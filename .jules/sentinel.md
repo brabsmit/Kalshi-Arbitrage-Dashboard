@@ -32,3 +32,8 @@
 **Vulnerability:** The Vite proxy was configured with `secure: false` for all connections, including the production Kalshi API. This disabled SSL certificate verification, allowing Man-in-the-Middle (MITM) attacks to intercept API keys and signed requests.
 **Learning:** Development tools often default to permissive security (like ignoring self-signed certs) for ease of use, but these configurations can expose users if the same config is used for production targets.
 **Prevention:** Conditionally enable `secure: false` only for `localhost` or specific dev environments. Default to `secure: true` for all other targets.
+
+## 2026-02-14 - Exposed Secrets in Client-Side Bundle
+**Vulnerability:** The application stored the authentication password in plaintext in `import.meta.env.VITE_APP_PASSWORD`, which is embedded directly into the JavaScript bundle during build. This allowed anyone with access to the source or the site to extract the password.
+**Learning:** `VITE_` variables are statically replaced at build time. Storing secrets in them is effectively the same as hardcoding them in the file.
+**Prevention:** Do not store secrets in client-side environment variables. If client-side authentication is necessary (e.g., for a static site with no backend), verify hashes of secrets rather than the secrets themselves, or use a proper backend auth system.
