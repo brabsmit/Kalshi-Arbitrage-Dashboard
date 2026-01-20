@@ -96,7 +96,24 @@ export const calculateStrategy = (market, marginPercent) => {
     // New approach: Use base margin only. Volatility is now tracked for informational purposes
     // but does not affect position sizing or bid prices.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+    let effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+
+    // Alpha Strategy: "The Timer" (Time Decay Risk Management)
+    // As the event approaches, the probability of adverse selection increases (breaking news, smart money).
+    // We increase our margin of safety to compensate for this higher risk.
+    // - Less than 1 hour: 1.5x margin
+    // - Less than 6 hours: 1.25x margin
+    let timeDecayReason = "";
+    if (market.commenceTime) {
+        const hoursUntilStart = (new Date(market.commenceTime).getTime() - Date.now()) / (1000 * 60 * 60);
+        if (hoursUntilStart < 1) {
+            effectiveMargin *= 1.5;
+            timeDecayReason = " (Time < 1h)";
+        } else if (hoursUntilStart < 6) {
+            effectiveMargin *= 1.25;
+            timeDecayReason = " (Time < 6h)";
+        }
+    }
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
@@ -112,7 +129,7 @@ export const calculateStrategy = (market, marginPercent) => {
     }
 
     let smartBid = currentBestBid + bidIncrement;
-    let reason = bidIncrement > 1 ? `Beat Market +${bidIncrement}¢` : "Beat Market";
+    let reason = (bidIncrement > 1 ? `Beat Market +${bidIncrement}¢` : "Beat Market") + timeDecayReason;
 
     // Alpha Strategy: Crossing the Spread (with Fee Protection)
     // If the Best Ask is significantly below our fair value, we take liquidity immediately
