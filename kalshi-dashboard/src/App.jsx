@@ -469,9 +469,15 @@ const SessionMetrics = React.memo(({ stats }) => {
 });
 SessionMetrics.displayName = 'SessionMetrics';
 
-const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
+// ⚡ Bolt Optimization: Extracted timer to separate component to prevent parent re-renders
+const SessionTimer = React.memo(({ sessionStart }) => {
     const now = React.useContext(TimeContext);
+    const elapsed = sessionStart ? now - sessionStart : 0;
+    return <>{sessionStart ? formatDuration(elapsed) : '0s'}</>;
+});
+SessionTimer.displayName = 'SessionTimer';
 
+const StatsBanner = React.memo(({ positions, tradeHistory, balance, sessionStart, isRunning }) => {
     // Optimization: Memoize expensive stats calculations to prevent re-computation on every timer tick
     const stats = useMemo(() => {
         let exposure = 0;
@@ -532,8 +538,6 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
         return { exposure, totalRealizedPnl, totalPotentialReturn, winRate, tStat, isSignificant, historyCount };
     }, [positions, tradeHistory]);
 
-    const elapsed = sessionStart ? now - sessionStart : 0;
-
     return (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
              <SessionMetrics stats={stats} />
@@ -543,7 +547,7 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
                     <Clock size={12} /> Session Time
                 </div>
                 <div className="text-2xl font-bold text-slate-800 mt-1 font-mono">
-                    {sessionStart ? formatDuration(elapsed || (Date.now() - sessionStart)) : '0s'}
+                    <SessionTimer sessionStart={sessionStart} />
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
                     {isRunning ? 'Bot is running' : 'Bot is paused'}
@@ -551,7 +555,8 @@ const StatsBanner = ({ positions, tradeHistory, balance, sessionStart, isRunning
             </div>
         </div>
     );
-};
+});
+StatsBanner.displayName = 'StatsBanner';
 
 const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorClass, accentClass, helpText }) => {
     return (
@@ -937,13 +942,13 @@ const LiquidityBadge = ({ volume, openInterest }) => {
     );
 };
 
-const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSession, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
+const Header = React.memo(({ balance, portfolioValue, isRunning, setIsRunning, onSaveSession, lastUpdated, isTurboMode, onConnect, connected, wsStatus, wsStats, onOpenSettings, onOpenExport, onOpenSchedule, apiUsage, isScheduled }) => {
     const wsTooltip = wsStats ? `Subscribed: ${wsStats.subscribed} | Confirmed: ${wsStats.confirmed} | Pending: ${wsStats.pending} | Failed: ${wsStats.failed}` : '';
 
     return (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1.1 (2026-01-24)</span></h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1.2 (2026-01-26)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
@@ -1027,7 +1032,8 @@ const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSessio
         </div>
     </header>
     );
-};
+});
+Header.displayName = 'Header';
 
 const ConnectModal = ({ isOpen, onClose, onConnect }) => {
     const backdropProps = useModalClose(isOpen, onClose);
@@ -2323,7 +2329,7 @@ const PortfolioRow = React.memo(({ item, activeTab, historyEntry, currentPrice, 
 }, arePortfolioPropsEqual);
 PortfolioRow.displayName = 'PortfolioRow';
 
-const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
+const PortfolioSection = React.memo(({ activeTab, positions, markets, tradeHistory, onAnalysis, onCancel, onExecute, sortConfig, onSort }) => {
     
     // Optimization: Create a map for O(1) market lookups
     const marketMap = useMemo(() => {
@@ -2518,7 +2524,8 @@ const PortfolioSection = ({ activeTab, positions, markets, tradeHistory, onAnaly
             </table>
         </div>
     );
-};
+});
+PortfolioSection.displayName = 'PortfolioSection';
 
 const EventLog = ({ logs }) => {
     const scrollRef = useRef(null);
@@ -3725,19 +3732,24 @@ const KalshiDashboard = () => {
       prevAutoBidActiveRef.current = isActive;
   }, [isAutoBidActive, positions, cancelOrder, fetchPortfolio]);
 
-  const handleSort = (key) => {
+  const handleSort = useCallback((key) => {
       setSortConfig(current => ({
           key,
           direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
       }));
-  };
+  }, []);
 
-  const handlePortfolioSort = (key) => {
+  const handlePortfolioSort = useCallback((key) => {
       setPortfolioSortConfig(current => ({
           key,
           direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc'
       }));
-  };
+  }, []);
+
+  const handleConnect = useCallback(() => setIsWalletOpen(true), []);
+  const handleOpenSettings = useCallback(() => setIsSettingsOpen(true), []);
+  const handleOpenExport = useCallback(() => setIsExportOpen(true), []);
+  const handleOpenSchedule = useCallback(() => setIsScheduleOpen(true), []);
 
   const handleAnalysis = useCallback((item, historyEntry) => {
     // Enrich with current market data for P&L calculation
@@ -3840,7 +3852,7 @@ const KalshiDashboard = () => {
     <TimeProvider>
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-200 font-sans p-4 md:p-8 transition-colors duration-200">
       <CancellationModal isOpen={isCancelling} progress={cancellationProgress} />
-      <Header balance={balance} portfolioValue={portfolioValue} isRunning={isRunning} setIsRunning={setIsRunning} onSaveSession={saveCurrentSession} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={() => setIsWalletOpen(true)} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={() => setIsSettingsOpen(true)} onOpenExport={() => setIsExportOpen(true)} onOpenSchedule={() => setIsScheduleOpen(true)} apiUsage={apiUsage} isScheduled={schedule.enabled} />
+      <Header balance={balance} portfolioValue={portfolioValue} isRunning={isRunning} setIsRunning={setIsRunning} onSaveSession={saveCurrentSession} lastUpdated={lastUpdated} isTurboMode={config.isTurboMode} onConnect={handleConnect} connected={!!walletKeys} wsStatus={wsStatus} wsStats={wsStats} onOpenSettings={handleOpenSettings} onOpenExport={handleOpenExport} onOpenSchedule={handleOpenSchedule} apiUsage={apiUsage} isScheduled={schedule.enabled} />
 
       <StatsBanner positions={positions} tradeHistory={tradeHistory} balance={balance} sessionStart={sessionStart} isRunning={isRunning} />
 
