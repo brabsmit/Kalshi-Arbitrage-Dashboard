@@ -1,7 +1,7 @@
 // bot/autoClose.js
 // Auto-close bot logic extracted from App.jsx
 
-import { calculateKalshiFees } from '../utils/core.js';
+import KalshiMath from '../utils/KalshiMath.js';
 import { processBailOuts } from './bailOut.js';
 
 /**
@@ -73,16 +73,10 @@ export async function runAutoClose(params) {
 
         // Calculate Break-Even Price including Fees
         const buyPrice = pos.avgPrice || 0;
-        let minSellPrice = Math.floor(buyPrice) + 1;
+        const totalEntryCost = buyPrice * pos.quantity;
 
-        // Find minimum price where (Price * Qty) - (Cost) - Fees > 0
-        while (minSellPrice < 100) {
-            const estimatedFees = calculateKalshiFees(minSellPrice, pos.quantity);
-            const revenue = minSellPrice * pos.quantity;
-            const cost = buyPrice * pos.quantity;
-            if (revenue - cost - estimatedFees > 0) break;
-            minSellPrice++;
-        }
+        // Use KalshiMath to find break-even price (assumes Taker fees for safety)
+        const minSellPrice = KalshiMath.calculateBreakEvenSellPrice(totalEntryCost, pos.quantity, true);
 
         // Set Target Price: Must be at least minSellPrice (to ensure profit)
         // But if Fair Value is higher, take the extra profit.
