@@ -84,6 +84,19 @@ export const calculateVolatility = (history) => {
 export const calculateStrategy = (market, marginPercent) => {
     if (!market.isMatchFound) return { smartBid: null, reason: "No Market", edge: -100, maxWillingToPay: 0 };
 
+    // Alpha Strategy: Liquidity Filter
+    // Markets with excessive spreads (e.g. > 30 cents) indicate low liquidity or high uncertainty.
+    // "Liquidity is King: A theoretical profit you can't exit is a loss waiting to happen."
+    // If we enter these markets, we risk being trapped or facing massive slippage on exit.
+    const spreadBid = market.bestBid || 0;
+    const spreadAsk = market.bestAsk || 100;
+    const spread = spreadAsk - spreadBid;
+    const MAX_SPREAD = 30;
+
+    if (spread > MAX_SPREAD) {
+        return { smartBid: null, reason: `Wide Spread (${spread}¢)`, edge: 0, maxWillingToPay: 0 };
+    }
+
     const fairValue = market.fairValue;
 
     // STRATEGY FIX: Volatility padding has been removed.

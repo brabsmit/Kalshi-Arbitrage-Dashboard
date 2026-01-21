@@ -27,3 +27,16 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-22 - Liquidity Filter (Spread Check)
+
+**Hypothesis:** Markets with excessive spreads (e.g., > 30 cents) indicate low liquidity or high uncertainty. Bidding into these markets creates positions that are difficult to exit ("Liquidity Trap"). Even if the Fair Value suggests an edge, the wide spread makes realizing that edge risky due to slippage and lack of counter-parties.
+
+**Change:**
+Old: Bid regardless of spread width.
+New: If `bestAsk - bestBid > 30 cents` (or if Ask is missing), do not trade (`smartBid: null`).
+
+**Expected Result:**
+- Avoid "Toxic Flow" and illiquid markets.
+- Protect capital for markets where exit liquidity exists.
+- Reduce "Unrealized PnL" volatility caused by mark-to-market on wide spreads.
