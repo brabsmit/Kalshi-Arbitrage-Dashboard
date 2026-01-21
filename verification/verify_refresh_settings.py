@@ -18,6 +18,9 @@ def verify_refresh_settings():
         context = browser.new_context(ignore_https_errors=True)
         page = context.new_page()
 
+        page.on("console", lambda msg: print(f"BROWSER CONSOLE: {msg.text}"))
+        page.on("pageerror", lambda err: print(f"BROWSER ERROR: {err}"))
+
         try:
             # Inject authenticated status to bypass auth
             context.add_init_script("""
