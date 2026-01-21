@@ -7,25 +7,52 @@ const PasswordAuth = ({ onAuthenticated }) => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
 
         // Get password from environment variable
-        const correctPassword = import.meta.env.VITE_APP_PASSWORD;
+        const storedSecret = import.meta.env.VITE_APP_PASSWORD;
 
         // Debug: Log if password is undefined (remove in production)
-        if (!correctPassword) {
+        if (!storedSecret) {
             console.error('VITE_APP_PASSWORD is not set!');
             setError('Configuration error: Password not set. Check Railway environment variables.');
             setIsLoading(false);
             return;
         }
 
-        // Simple check - in production, you might want to hash this
-        setTimeout(() => {
-            if (password === correctPassword) {
+        try {
+            // Helper to hash input
+            const hashPassword = async (pwd) => {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(pwd);
+                const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+                const hashArray = Array.from(new Uint8Array(hashBuffer));
+                return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            };
+
+            // Check if stored secret is a SHA-256 hash (64 hex chars)
+            // Sentinel: Detect hash vs plaintext to allow secure storage
+            const isHash = /^[a-f0-9]{64}$/i.test(storedSecret);
+            let isValid = false;
+
+            if (isHash) {
+                const inputHash = await hashPassword(password);
+                isValid = (inputHash.toLowerCase() === storedSecret.toLowerCase());
+            } else {
+                // Legacy plaintext check
+                isValid = (password === storedSecret);
+                if (isValid) {
+                    console.warn("SECURITY WARNING: VITE_APP_PASSWORD is stored in plaintext. Consider hashing it with SHA-256.");
+                }
+            }
+
+            // Artificial delay to prevent timing attacks / brute force
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            if (isValid) {
                 // Store auth token in sessionStorage (clears on browser close)
                 sessionStorage.setItem('authenticated', 'true');
                 onAuthenticated();
@@ -33,8 +60,12 @@ const PasswordAuth = ({ onAuthenticated }) => {
                 setError('Incorrect password. Please try again.');
                 setPassword('');
             }
+        } catch (err) {
+            console.error("Auth error", err);
+            setError('Authentication failed due to an internal error.');
+        } finally {
             setIsLoading(false);
-        }, 500); // Small delay to prevent brute force
+        }
     };
 
     return (

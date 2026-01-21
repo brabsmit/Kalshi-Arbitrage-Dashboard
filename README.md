@@ -48,7 +48,7 @@ Quick steps:
 ## Environment Variables
 
 Required:
-- `VITE_APP_PASSWORD` - Dashboard access password
+- `VITE_APP_PASSWORD` - Dashboard access password. Supports plaintext or SHA-256 hash (recommended).
 - `VITE_ODDS_API_KEY` - The Odds API key
 
 Optional:
@@ -60,6 +60,25 @@ Optional:
 - API keys stored as environment variables
 - Server-side proxy prevents credential exposure
 - Session-based authentication (clears on browser close)
+
+### Hashing your Password (Recommended)
+
+To avoid storing your password in plaintext in `VITE_APP_PASSWORD`, you can store the SHA-256 hash instead.
+The application automatically detects if the value is a 64-character hex string and treats it as a hash.
+
+**Linux/Mac:**
+```bash
+echo -n "your-password" | sha256sum | awk '{print $1}'
+```
+
+**Windows (PowerShell):**
+```powershell
+$hash = [System.Security.Cryptography.SHA256]::Create()
+$bytes = [System.Text.Encoding]::UTF8.GetBytes("your-password")
+[System.BitConverter]::ToString($hash.ComputeHash($bytes)).Replace("-", "").ToLower()
+```
+
+Copy the output and paste it as the value for `VITE_APP_PASSWORD` in your `.env` file or Vercel config.
 
 ## Tech Stack
 
