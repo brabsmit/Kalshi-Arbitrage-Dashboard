@@ -591,7 +591,27 @@ const RangeSetting = ({ id, label, value, onChange, min, max, unit = '', colorCl
 };
 
 const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOddsApiKey, sportsList, theme, setTheme }) => {
-    const backdropProps = useModalClose(isOpen, onClose);
+    // ⚡ Bolt Optimization: Use local state to prevent dashboard re-renders while dragging sliders
+    const [localConfig, setLocalConfig] = useState(config);
+    const [localOddsApiKey, setLocalOddsApiKey] = useState(oddsApiKey);
+
+    // Sync local state when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            setLocalConfig(config);
+            setLocalOddsApiKey(oddsApiKey);
+        }
+    }, [isOpen, config, oddsApiKey]);
+
+    // Save changes when closing
+    const handleSaveAndClose = useCallback(() => {
+        setConfig(localConfig);
+        setOddsApiKey(localOddsApiKey);
+        sessionStorage.setItem('odds_api_key', localOddsApiKey);
+        onClose();
+    }, [localConfig, localOddsApiKey, setConfig, setOddsApiKey, onClose]);
+
+    const backdropProps = useModalClose(isOpen, handleSaveAndClose);
     const bidMarginId = useId();
     const closeMarginId = useId();
     const refreshRateId = useId();
@@ -605,7 +625,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
             <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
                 <div className="flex justify-between items-center p-4 border-b border-slate-100 flex-shrink-0">
                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Settings size={18}/> Bot Configuration</h3>
-                    <button aria-label="Close" onClick={onClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+                    <button aria-label="Close" onClick={handleSaveAndClose}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
                 </div>
                 <div className="p-6 space-y-6 overflow-y-auto flex-1">
                     <div className="flex flex-col gap-2 mb-6">
@@ -630,8 +650,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <RangeSetting
                         id={refreshRateId}
                         label="API Refresh Rate"
-                        value={config.refreshInterval || 15}
-                        onChange={v => setConfig({...config, refreshInterval: v})}
+                        value={localConfig.refreshInterval || 15}
+                        onChange={v => setLocalConfig({...localConfig, refreshInterval: v})}
                         min={5}
                         max={60}
                         unit="s"
@@ -643,8 +663,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <RangeSetting
                         id={bidMarginId}
                         label="Auto-Bid Margin"
-                        value={config.marginPercent}
-                        onChange={v => setConfig({...config, marginPercent: v})}
+                        value={localConfig.marginPercent}
+                        onChange={v => setLocalConfig({...localConfig, marginPercent: v})}
                         min={1}
                         max={30}
                         unit="%"
@@ -656,8 +676,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <RangeSetting
                         id={closeMarginId}
                         label="Auto-Close Margin"
-                        value={config.autoCloseMarginPercent}
-                        onChange={v => setConfig({...config, autoCloseMarginPercent: v})}
+                        value={localConfig.autoCloseMarginPercent}
+                        onChange={v => setLocalConfig({...localConfig, autoCloseMarginPercent: v})}
                         min={1}
                         max={50}
                         unit="%"
@@ -669,8 +689,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <RangeSetting
                         id={minFvId}
                         label="Min Fair Value"
-                        value={config.minFairValue}
-                        onChange={v => setConfig({...config, minFairValue: v})}
+                        value={localConfig.minFairValue}
+                        onChange={v => setLocalConfig({...localConfig, minFairValue: v})}
                         min={1}
                         max={80}
                         unit="¢"
@@ -682,8 +702,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <RangeSetting
                         id={maxPosId}
                         label="Max Positions"
-                        value={config.maxPositions}
-                        onChange={v => setConfig({...config, maxPositions: v})}
+                        value={localConfig.maxPositions}
+                        onChange={v => setLocalConfig({...localConfig, maxPositions: v})}
                         min={1}
                         max={20}
                         colorClass="text-rose-600"
@@ -693,7 +713,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="trade-size" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Trade Size (Contracts)</label>
-                            <input id="trade-size" type="number" value={config.tradeSize} onChange={e => setConfig({...config, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
+                            <input id="trade-size" type="number" value={localConfig.tradeSize} onChange={e => setLocalConfig({...localConfig, tradeSize: parseInt(e.target.value) || 1})} className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"/>
                         </div>
                     </div>
 
@@ -714,22 +734,22 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 <input
                                     id="enable-sport-div"
                                     type="checkbox"
-                                    checked={config.enableSportDiversification}
-                                    onChange={e => setConfig({...config, enableSportDiversification: e.target.checked})}
+                                    checked={localConfig.enableSportDiversification}
+                                    onChange={e => setLocalConfig({...localConfig, enableSportDiversification: e.target.checked})}
                                     className="w-4 h-4 accent-blue-600"
                                 />
                             </div>
 
-                            {config.enableSportDiversification && (
+                            {localConfig.enableSportDiversification && (
                                 <div className="ml-4">
                                     <label htmlFor="max-per-sport" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Max Per Sport</label>
                                     <input
                                         id="max-per-sport"
                                         type="number"
-                                        value={config.maxPositionsPerSport}
-                                        onChange={e => setConfig({...config, maxPositionsPerSport: parseInt(e.target.value) || 1})}
+                                        value={localConfig.maxPositionsPerSport}
+                                        onChange={e => setLocalConfig({...localConfig, maxPositionsPerSport: parseInt(e.target.value) || 1})}
                                         min={1}
-                                        max={config.maxPositions}
+                                        max={localConfig.maxPositions}
                                         className="w-24 p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
                                     />
                                 </div>
@@ -744,21 +764,21 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 <input
                                     id="enable-liquidity"
                                     type="checkbox"
-                                    checked={config.enableLiquidityChecks}
-                                    onChange={e => setConfig({...config, enableLiquidityChecks: e.target.checked})}
+                                    checked={localConfig.enableLiquidityChecks}
+                                    onChange={e => setLocalConfig({...localConfig, enableLiquidityChecks: e.target.checked})}
                                     className="w-4 h-4 accent-blue-600"
                                 />
                             </div>
 
-                            {config.enableLiquidityChecks && (
+                            {localConfig.enableLiquidityChecks && (
                                 <div className="ml-4 grid grid-cols-2 gap-4">
                                     <div>
                                         <label htmlFor="min-liquidity" className="text-[10px] font-bold text-slate-400 uppercase mb-1 block">Min Volume</label>
                                         <input
                                             id="min-liquidity"
                                             type="number"
-                                            value={config.minLiquidity}
-                                            onChange={e => setConfig({...config, minLiquidity: parseInt(e.target.value) || 0})}
+                                            value={localConfig.minLiquidity}
+                                            onChange={e => setLocalConfig({...localConfig, minLiquidity: parseInt(e.target.value) || 0})}
                                             min={0}
                                             className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
                                         />
@@ -768,8 +788,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                         <input
                                             id="max-spread"
                                             type="number"
-                                            value={config.maxBidAskSpread}
-                                            onChange={e => setConfig({...config, maxBidAskSpread: parseInt(e.target.value) || 1})}
+                                            value={localConfig.maxBidAskSpread}
+                                            onChange={e => setLocalConfig({...localConfig, maxBidAskSpread: parseInt(e.target.value) || 1})}
                                             min={1}
                                             max={20}
                                             className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none"
@@ -796,19 +816,19 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                 <input
                                     id="enable-bailout"
                                     type="checkbox"
-                                    checked={config.isBailOutEnabled}
-                                    onChange={e => setConfig({...config, isBailOutEnabled: e.target.checked})}
+                                    checked={localConfig.isBailOutEnabled}
+                                    onChange={e => setLocalConfig({...localConfig, isBailOutEnabled: e.target.checked})}
                                     className="w-4 h-4 accent-blue-600"
                                 />
                             </div>
 
-                            {config.isBailOutEnabled && (
+                            {localConfig.isBailOutEnabled && (
                                 <>
                                     <RangeSetting
                                         id="bailout-hours"
                                         label="Trigger Window"
-                                        value={config.bailOutHoursBeforeExpiry}
-                                        onChange={v => setConfig({...config, bailOutHoursBeforeExpiry: v})}
+                                        value={localConfig.bailOutHoursBeforeExpiry}
+                                        onChange={v => setLocalConfig({...localConfig, bailOutHoursBeforeExpiry: v})}
                                         min={1}
                                         max={72}
                                         unit="h"
@@ -820,8 +840,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                                     <RangeSetting
                                         id="bailout-percent"
                                         label="Loss Trigger %"
-                                        value={config.bailOutTriggerPercent}
-                                        onChange={v => setConfig({...config, bailOutTriggerPercent: v})}
+                                        value={localConfig.bailOutTriggerPercent}
+                                        onChange={v => setLocalConfig({...localConfig, bailOutTriggerPercent: v})}
                                         min={5}
                                         max={90}
                                         unit="%"
@@ -840,8 +860,8 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                             <input
                                 id="odds-api-key"
                                 type={showApiKey ? "text" : "password"}
-                                value={oddsApiKey}
-                                onChange={e => {setOddsApiKey(e.target.value); sessionStorage.setItem('odds_api_key', e.target.value)}}
+                                value={localOddsApiKey}
+                                onChange={e => setLocalOddsApiKey(e.target.value)}
                                 maxLength={100}
                                 className="w-full p-2 border rounded text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none pr-10"
                             />
@@ -884,7 +904,7 @@ const SettingsModal = ({ isOpen, onClose, config, setConfig, oddsApiKey, setOdds
                     </div>
                 </div>
                 <div className="p-4 bg-slate-50 border-t border-slate-100 text-right flex-shrink-0">
-                    <button onClick={onClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800">Done</button>
+                    <button onClick={handleSaveAndClose} className="px-6 py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800">Done</button>
                 </div>
             </div>
         </div>
@@ -1382,7 +1402,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     const [activeTab, setActiveTab] = useState('summary');
 
     const sessionMetrics = useMemo(() => {
-        if (!isOpen) return calculateSessionMetrics({}, {}); // dummy return to keep hook order
+        if (!isOpen) return calculateSessionMetrics([], {}); // dummy return to keep hook order
         return calculateSessionMetrics(positions, tradeHistory);
     }, [isOpen, positions, tradeHistory]);
 
