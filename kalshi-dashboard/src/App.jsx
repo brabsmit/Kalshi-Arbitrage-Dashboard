@@ -943,7 +943,7 @@ const Header = ({ balance, portfolioValue, isRunning, setIsRunning, onSaveSessio
     return (
     <header className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 transition-colors duration-200">
         <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1.1 (2026-01-24)</span></h1>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2"><TrendingUp className="text-blue-600" /> Kalshi ArbBot <span className="text-xs font-mono text-slate-400">v1.1.2 (2026-01-22)</span></h1>
             <div className="flex items-center gap-2 mt-1">
                 <span
                     className={`text-[10px] font-bold px-2 py-0.5 rounded border flex items-center gap-1 cursor-help ${
@@ -1382,7 +1382,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     const [activeTab, setActiveTab] = useState('summary');
 
     const sessionMetrics = useMemo(() => {
-        if (!isOpen) return calculateSessionMetrics({}, {}); // dummy return to keep hook order
+        if (!isOpen) return calculateSessionMetrics([], {}); // dummy return to keep hook order
         return calculateSessionMetrics(positions, tradeHistory);
     }, [isOpen, positions, tradeHistory]);
 
@@ -3756,7 +3756,8 @@ const KalshiDashboard = () => {
 
   // Filtering Logic: Implement a useMemo hook to filter the raw markets array based on marketType.
   const filteredMarkets = useMemo(() => {
-      return markets.filter(m => detectMarketType(m.realMarketId) === marketType);
+      // ⚡ Bolt Optimization: Use pre-computed marketType
+      return markets.filter(m => m.marketType === marketType);
   }, [markets, marketType]);
 
   // OPTIMIZATION: Cache enriched markets to preserve object identity for React.memo
