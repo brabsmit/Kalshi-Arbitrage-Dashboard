@@ -1,5 +1,3 @@
-// src/utils/core.js
-
 // ==========================================
 // FORMATTERS & ESCAPING
 // ==========================================
@@ -453,36 +451,80 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
 // ==========================================
 
 let cachedKeyPem = null;
-let cachedForgeKey = null;
+let cachedCryptoKey = null;
+
+// Helper to convert PEM to binary ArrayBuffer
+// Supports both PKCS#8 (preferred) and tries to handle PKCS#1 by simple stripping
+// Note: WebCrypto strictly requires PKCS#8. If a user provides PKCS#1, this will fail
+// unless we manually wrap it, which we are choosing not to do to keep code simple.
+// We assume keys are provided in PKCS#8 format (standard "BEGIN PRIVATE KEY").
+const pemToArrayBuffer = (pem) => {
+    const b64 = pem.replace(/(-----(BEGIN|END) ([A-Z ]+)-----|\n)/g, '');
+    const str = atob(b64);
+    const buf = new ArrayBuffer(str.length);
+    const arr = new Uint8Array(buf);
+    for (let i = 0; i < str.length; i++) {
+        arr[i] = str.charCodeAt(i);
+    }
+    return buf;
+};
 
 export const signRequest = async (privateKeyPem, method, path, timestamp) => {
     try {
-        const forge = window.forge;
-        if (!forge) throw new Error("Forge library not loaded");
-
-        // Simple cache to avoid parsing PEM on every request
-        let privateKey;
-        if (cachedKeyPem === privateKeyPem && cachedForgeKey) {
-            privateKey = cachedForgeKey;
-        } else {
-            privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-            cachedKeyPem = privateKeyPem;
-            cachedForgeKey = privateKey;
+        if (!window.crypto || !window.crypto.subtle) {
+            throw new Error("WebCrypto API not supported in this environment");
         }
 
-        const md = forge.md.sha256.create();
+        // Cache the imported key to avoid re-parsing on every request
+        let privateKey;
+        if (cachedKeyPem === privateKeyPem && cachedCryptoKey) {
+            privateKey = cachedCryptoKey;
+        } else {
+            const keyData = pemToArrayBuffer(privateKeyPem);
+            // We only support PKCS#8. If this fails, the user likely has a PKCS#1 key.
+            try {
+                privateKey = await window.crypto.subtle.importKey(
+                    "pkcs8",
+                    keyData,
+                    {
+                        name: "RSA-PSS",
+                        hash: "SHA-256"
+                    },
+                    false,
+                    ["sign"]
+                );
+            } catch (importError) {
+                console.error("Key import failed. Ensure your key is in PKCS#8 format (starts with 'BEGIN PRIVATE KEY', not 'BEGIN RSA PRIVATE KEY').");
+                throw importError;
+            }
+            cachedKeyPem = privateKeyPem;
+            cachedCryptoKey = privateKey;
+        }
+
         const cleanPath = path.split('?')[0];
         const message = `${timestamp}${method}${cleanPath}`;
-        md.update(message, 'utf8');
-        const pss = forge.pss.create({
-            md: forge.md.sha256.create(),
-            mgf: forge.mgf.mgf1.create(forge.md.sha256.create()),
-            saltLength: 32
-        });
-        const signature = privateKey.sign(md, pss);
-        return forge.util.encode64(signature);
+        const encoder = new TextEncoder();
+        const data = encoder.encode(message);
+
+        const signature = await window.crypto.subtle.sign(
+            {
+                name: "RSA-PSS",
+                saltLength: 32
+            },
+            privateKey,
+            data
+        );
+
+        // Convert signature ArrayBuffer to Base64 string
+        const signatureArray = new Uint8Array(signature);
+        let binaryString = '';
+        for (let i = 0; i < signatureArray.length; i++) {
+            binaryString += String.fromCharCode(signatureArray[i]);
+        }
+        return btoa(binaryString);
+
     } catch (e) {
         console.error("Signing failed:", e);
-        throw new Error("Failed to sign request. Check your private key.");
+        throw new Error("Failed to sign request. Check your private key format (PKCS#8 required).");
     }
 };
