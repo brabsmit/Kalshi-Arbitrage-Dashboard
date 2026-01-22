@@ -7,7 +7,15 @@ const PasswordAuth = ({ onAuthenticated }) => {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = (e) => {
+    const hashPassword = async (pwd) => {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(pwd);
+        const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    };
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
@@ -23,18 +31,37 @@ const PasswordAuth = ({ onAuthenticated }) => {
             return;
         }
 
-        // Simple check - in production, you might want to hash this
-        setTimeout(() => {
-            if (password === correctPassword) {
+        // Check if correctPassword is a SHA-256 hash (64 hex characters)
+        const isHash = /^[a-f0-9]{64}$/i.test(correctPassword);
+
+        // Security: Use hashing if available, fallback to simple check for backward compatibility
+        try {
+            let isValid = false;
+
+            if (isHash) {
+                const hashedPassword = await hashPassword(password);
+                isValid = (hashedPassword === correctPassword.toLowerCase());
+            } else {
+                // Legacy plaintext check
+                isValid = (password === correctPassword);
+            }
+
+            if (isValid) {
                 // Store auth token in sessionStorage (clears on browser close)
                 sessionStorage.setItem('authenticated', 'true');
                 onAuthenticated();
             } else {
+                // Small delay to prevent timing attacks / brute force
+                await new Promise(resolve => setTimeout(resolve, 500));
                 setError('Incorrect password. Please try again.');
                 setPassword('');
             }
+        } catch (err) {
+            console.error('Authentication error:', err);
+            setError('An error occurred during authentication.');
+        } finally {
             setIsLoading(false);
-        }, 500); // Small delay to prevent brute force
+        }
     };
 
     return (
