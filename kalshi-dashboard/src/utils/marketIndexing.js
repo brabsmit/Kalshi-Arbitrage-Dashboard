@@ -23,7 +23,49 @@ export const SPORT_MAPPING = [
  * - "North Carolina Tar Heels" → "NORTHCAROLINA"
  * - "New York Giants" → "NEWYORK"
  */
-const normalizeTeamName = (teamName) => {
+
+// Strategy: Take all words BEFORE a known mascot/suffix
+// This captures multi-word locations like "Los Angeles", "North Carolina", "Oklahoma City"
+const COMMON_SUFFIXES = [
+    // Pro sports mascots
+    'MAVERICKS', 'JAZZ', 'HAWKS', 'CELTICS', 'PISTONS', 'PACERS', 'HEAT', 'THUNDER',
+    'WARRIORS', 'SUNS', 'LAKERS', 'CLIPPERS', 'BLAZERS', 'KINGS', 'SPURS', 'GRIZZLIES',
+    'PELICANS', 'ROCKETS', 'TIMBERWOLVES', 'NUGGETS', 'BUCKS', 'BULLS', 'CAVALIERS',
+    'RAPTORS', 'NETS', 'KNICKS', 'WIZARDS', 'HORNETS', 'MAGIC', 'TRAIL BLAZERS',
+    // NFL
+    'PACKERS', 'BEARS', 'LIONS', 'VIKINGS', 'COWBOYS', 'GIANTS', 'EAGLES', 'COMMANDERS',
+    'REDSKINS', 'BUCCANEERS', 'SAINTS', 'FALCONS', 'PANTHERS', 'RAMS', 'SEAHAWKS',
+    '49ERS', 'NINERS', 'CARDINALS', 'RAVENS', 'BENGALS', 'BROWNS', 'STEELERS',
+    'TEXANS', 'COLTS', 'JAGUARS', 'TITANS', 'BRONCOS', 'CHIEFS', 'RAIDERS', 'CHARGERS',
+    'BILLS', 'DOLPHINS', 'PATRIOTS', 'JETS',
+    // NHL
+    'BRUINS', 'SABRES', 'RED WINGS', 'BLACKHAWKS', 'AVALANCHE', 'BLUE JACKETS',
+    'WILD', 'PREDATORS', 'BLUES', 'JETS', 'FLAMES', 'OILERS', 'CANUCKS',
+    'DUCKS', 'COYOTES', 'GOLDEN KNIGHTS', 'KRAKEN', 'SHARKS', 'HURRICANES',
+    'PANTHERS', 'LIGHTNING', 'CAPITALS', 'FLYERS', 'PENGUINS', 'RANGERS', 'ISLANDERS',
+    'DEVILS', 'MAPLE LEAFS', 'SENATORS', 'CANADIENS',
+    // MLB
+    'RED SOX', 'YANKEES', 'ORIOLES', 'RAYS', 'WHITE SOX', 'INDIANS', 'GUARDIANS',
+    'TIGERS', 'ROYALS', 'TWINS', 'ASTROS', 'ANGELS', 'ATHLETICS', 'MARINERS',
+    'RANGERS', 'BRAVES', 'MARLINS', 'METS', 'PHILLIES', 'NATIONALS', 'CUBS',
+    'REDS', 'BREWERS', 'PIRATES', 'CARDINALS', 'DIAMONDBACKS', 'ROCKIES', 'DODGERS',
+    'PADRES', 'GIANTS',
+    // College generic terms
+    'AGGIES', 'WILDCATS', 'BULLDOGS', 'TIGERS', 'CRIMSON TIDE', 'VOLUNTEERS',
+    'GATORS', 'GAMECOCKS', 'RAZORBACKS', 'LONGHORNS', 'SOONERS', 'JAYHAWKS',
+    'CYCLONES', 'MOUNTAINEERS', 'HUSKIES', 'DUCKS', 'TROJANS', 'BRUINS',
+    'CARDINAL', 'SUN DEVILS', 'GOLDEN BEARS', 'BEAVERS', 'COUGARS', 'UTES',
+    'BUFFALOES', 'CORNHUSKERS', 'BADGERS', 'HAWKEYES', 'SPARTANS', 'WOLVERINES',
+    'BUCKEYES', 'NITTANY LIONS', 'TERRAPINS', 'SCARLET KNIGHTS', 'HOOSIERS',
+    'FIGHTING IRISH', 'BLUE DEVILS', 'TAR HEELS', 'ORANGE', 'EAGLES', 'DEMON DEACONS',
+    'CAVALIERS', 'YELLOW JACKETS', 'SEMINOLES', 'HURRICANES', 'ORANGEMEN',
+    '76ERS', 'SIXERS', 'CAVS'  // Common abbreviations
+];
+
+// Pre-compiled regex for O(1) matching of suffixes
+const SUFFIX_REGEX = new RegExp(`\\s+(${COMMON_SUFFIXES.join('|')})$`);
+
+export const normalizeTeamName = (teamName) => {
     if (!teamName) return '';
 
     let normalized = teamName.toUpperCase().trim();
@@ -35,52 +77,8 @@ const normalizeTeamName = (teamName) => {
         .replace(/\./g, '')                   // St. → ST
         .replace(/\s+/g, ' ');                // Normalize whitespace
 
-    // Strategy: Take all words BEFORE a known mascot/suffix
-    // This captures multi-word locations like "Los Angeles", "North Carolina", "Oklahoma City"
-    const commonSuffixes = [
-        // Pro sports mascots
-        'MAVERICKS', 'JAZZ', 'HAWKS', 'CELTICS', 'PISTONS', 'PACERS', 'HEAT', 'THUNDER',
-        'WARRIORS', 'SUNS', 'LAKERS', 'CLIPPERS', 'BLAZERS', 'KINGS', 'SPURS', 'GRIZZLIES',
-        'PELICANS', 'ROCKETS', 'TIMBERWOLVES', 'NUGGETS', 'BUCKS', 'BULLS', 'CAVALIERS',
-        'RAPTORS', 'NETS', 'KNICKS', 'WIZARDS', 'HORNETS', 'MAGIC', 'TRAIL BLAZERS',
-        // NFL
-        'PACKERS', 'BEARS', 'LIONS', 'VIKINGS', 'COWBOYS', 'GIANTS', 'EAGLES', 'COMMANDERS',
-        'REDSKINS', 'BUCCANEERS', 'SAINTS', 'FALCONS', 'PANTHERS', 'RAMS', 'SEAHAWKS',
-        '49ERS', 'NINERS', 'CARDINALS', 'RAVENS', 'BENGALS', 'BROWNS', 'STEELERS',
-        'TEXANS', 'COLTS', 'JAGUARS', 'TITANS', 'BRONCOS', 'CHIEFS', 'RAIDERS', 'CHARGERS',
-        'BILLS', 'DOLPHINS', 'PATRIOTS', 'JETS',
-        // NHL
-        'BRUINS', 'SABRES', 'RED WINGS', 'BLACKHAWKS', 'AVALANCHE', 'BLUE JACKETS',
-        'WILD', 'PREDATORS', 'BLUES', 'JETS', 'FLAMES', 'OILERS', 'CANUCKS',
-        'DUCKS', 'COYOTES', 'GOLDEN KNIGHTS', 'KRAKEN', 'SHARKS', 'HURRICANES',
-        'PANTHERS', 'LIGHTNING', 'CAPITALS', 'FLYERS', 'PENGUINS', 'RANGERS', 'ISLANDERS',
-        'DEVILS', 'MAPLE LEAFS', 'SENATORS', 'CANADIENS',
-        // MLB
-        'RED SOX', 'YANKEES', 'ORIOLES', 'RAYS', 'WHITE SOX', 'INDIANS', 'GUARDIANS',
-        'TIGERS', 'ROYALS', 'TWINS', 'ASTROS', 'ANGELS', 'ATHLETICS', 'MARINERS',
-        'RANGERS', 'BRAVES', 'MARLINS', 'METS', 'PHILLIES', 'NATIONALS', 'CUBS',
-        'REDS', 'BREWERS', 'PIRATES', 'CARDINALS', 'DIAMONDBACKS', 'ROCKIES', 'DODGERS',
-        'PADRES', 'GIANTS',
-        // College generic terms
-        'AGGIES', 'WILDCATS', 'BULLDOGS', 'TIGERS', 'CRIMSON TIDE', 'VOLUNTEERS',
-        'GATORS', 'GAMECOCKS', 'RAZORBACKS', 'LONGHORNS', 'SOONERS', 'JAYHAWKS',
-        'CYCLONES', 'MOUNTAINEERS', 'HUSKIES', 'DUCKS', 'TROJANS', 'BRUINS',
-        'CARDINAL', 'SUN DEVILS', 'GOLDEN BEARS', 'BEAVERS', 'COUGARS', 'UTES',
-        'BUFFALOES', 'CORNHUSKERS', 'BADGERS', 'HAWKEYES', 'SPARTANS', 'WOLVERINES',
-        'BUCKEYES', 'NITTANY LIONS', 'TERRAPINS', 'SCARLET KNIGHTS', 'HOOSIERS',
-        'FIGHTING IRISH', 'BLUE DEVILS', 'TAR HEELS', 'ORANGE', 'EAGLES', 'DEMON DEACONS',
-        'CAVALIERS', 'YELLOW JACKETS', 'SEMINOLES', 'HURRICANES', 'ORANGEMEN',
-        '76ERS', 'SIXERS', 'CAVS'  // Common abbreviations
-    ];
-
-    // Find the first matching suffix and take everything before it
-    for (const suffix of commonSuffixes) {
-        const regex = new RegExp(`\\s+${suffix}$`);
-        if (regex.test(normalized)) {
-            normalized = normalized.replace(regex, '');
-            break;
-        }
-    }
+    // Optimized suffix removal: Single regex replace instead of looping through 100+ items
+    normalized = normalized.replace(SUFFIX_REGEX, '');
 
     // Remove all remaining spaces and special chars
     normalized = normalized
