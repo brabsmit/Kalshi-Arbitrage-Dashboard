@@ -27,3 +27,19 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2026-01-24 - The Timer (Time Decay Risk Adjustment)
+
+**Hypothesis:** As an event approaches its start time ("commence time"), volatility increases due to late-breaking news (injuries, lineup changes, weather). The risk of adverse selection increases significantly in the final hours. We need to widen our margin of safety to account for this uncertainty.
+
+**Change:**
+Old: `margin = marginPercent` (Constant)
+New:
+- If `hoursUntilCommence < 1`: `margin = marginPercent * 1.5`
+- If `hoursUntilCommence < 6`: `margin = marginPercent * 1.25`
+- Else: `margin = marginPercent`
+
+**Expected Result:**
+- Lower fill rate on games starting soon (avoiding "trap" bets).
+- Protection against last-minute line movements.
+- Higher expected value on filled trades by demanding a larger edge during high-risk windows.
