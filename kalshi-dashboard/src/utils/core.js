@@ -96,7 +96,24 @@ export const calculateStrategy = (market, marginPercent) => {
     // New approach: Use base margin only. Volatility is now tracked for informational purposes
     // but does not affect position sizing or bid prices.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+
+    // Alpha Strategy: "The Timer" (Time Decay Risk Adjustment)
+    // As the event approaches, volatility and risk of adverse selection increase.
+    // We increase our margin of safety to compensate.
+    let timeMultiplier = 1.0;
+    if (market.commenceTime) {
+        const now = Date.now();
+        const commence = new Date(market.commenceTime).getTime();
+        const hoursUntilCommence = (commence - now) / (1000 * 60 * 60);
+
+        if (hoursUntilCommence < 1) {
+            timeMultiplier = 1.5; // High Risk: < 1 hour
+        } else if (hoursUntilCommence < 6) {
+            timeMultiplier = 1.25; // Medium Risk: < 6 hours
+        }
+    }
+
+    const effectiveMargin = marginPercent * timeMultiplier;
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
