@@ -453,36 +453,71 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
 // ==========================================
 
 let cachedKeyPem = null;
-let cachedForgeKey = null;
+let cachedCryptoKey = null;
+
+const pemToArrayBuffer = (pem) => {
+    const b64Lines = pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+    const b64Prefix = b64Lines.replace(/-/g, '+').replace(/_/g, '/');
+    const str = window.atob(b64Prefix);
+    const buffer = new ArrayBuffer(str.length);
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < str.length; i++) {
+        view[i] = str.charCodeAt(i);
+    }
+    return buffer;
+};
 
 export const signRequest = async (privateKeyPem, method, path, timestamp) => {
     try {
-        const forge = window.forge;
-        if (!forge) throw new Error("Forge library not loaded");
-
-        // Simple cache to avoid parsing PEM on every request
-        let privateKey;
-        if (cachedKeyPem === privateKeyPem && cachedForgeKey) {
-            privateKey = cachedForgeKey;
-        } else {
-            privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
-            cachedKeyPem = privateKeyPem;
-            cachedForgeKey = privateKey;
+        // Native Crypto Implementation
+        if (privateKeyPem.includes("BEGIN RSA PRIVATE KEY")) {
+            throw new Error("PKCS#1 keys not supported. Convert to PKCS#8: openssl pkcs8 -topk8 -inform PEM -outform PEM -nocrypt -in private_key.pem -out private_key_pkcs8.pem");
         }
 
-        const md = forge.md.sha256.create();
+        let privateKey;
+        if (cachedKeyPem === privateKeyPem && cachedCryptoKey) {
+            privateKey = cachedCryptoKey;
+        } else {
+            const binaryKey = pemToArrayBuffer(privateKeyPem);
+            privateKey = await window.crypto.subtle.importKey(
+                "pkcs8",
+                binaryKey,
+                {
+                    name: "RSA-PSS",
+                    hash: "SHA-256",
+                },
+                false,
+                ["sign"]
+            );
+            cachedKeyPem = privateKeyPem;
+            cachedCryptoKey = privateKey;
+        }
+
         const cleanPath = path.split('?')[0];
         const message = `${timestamp}${method}${cleanPath}`;
-        md.update(message, 'utf8');
-        const pss = forge.pss.create({
-            md: forge.md.sha256.create(),
-            mgf: forge.mgf.mgf1.create(forge.md.sha256.create()),
-            saltLength: 32
-        });
-        const signature = privateKey.sign(md, pss);
-        return forge.util.encode64(signature);
+        const encoder = new TextEncoder();
+        const data = encoder.encode(message);
+
+        const signature = await window.crypto.subtle.sign(
+            {
+                name: "RSA-PSS",
+                saltLength: 32,
+            },
+            privateKey,
+            data
+        );
+
+        // Convert ArrayBuffer to Base64
+        const signatureArray = new Uint8Array(signature);
+        let binaryString = "";
+        for (let i = 0; i < signatureArray.length; i++) {
+            binaryString += String.fromCharCode(signatureArray[i]);
+        }
+        return window.btoa(binaryString);
+
     } catch (e) {
         console.error("Signing failed:", e);
-        throw new Error("Failed to sign request. Check your private key.");
+        if (e.message.includes("PKCS#1")) throw e;
+        throw new Error("Failed to sign request. Check your private key (must be PKCS#8).");
     }
 };

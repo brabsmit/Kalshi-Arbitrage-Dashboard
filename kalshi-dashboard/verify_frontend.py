@@ -8,16 +8,11 @@ def verify_frontend():
         context = browser.new_context(ignore_https_errors=True)
         page = context.new_page()
 
-        # Mock window.forge to prevent blocking
-        page.add_init_script("""
-            window.forge = {
-                md: { sha256: { create: () => ({ update: () => {}, digest: () => {} }) } },
-                pki: { privateKeyFromPem: () => ({ sign: () => {} }) },
-                pss: { create: () => {} },
-                mgf: { mgf1: { create: () => {} } },
-                util: { encode64: () => 'mock_signature' }
-            };
-        """)
+        page.on("console", lambda msg: print(f"CONSOLE: {msg.text}"))
+        page.on("pageerror", lambda err: print(f"PAGE ERROR: {err}"))
+
+        # Bypass authentication
+        page.add_init_script("sessionStorage.setItem('authenticated', 'true');")
 
         print("Navigating to app...")
         # Port changed to 3000 according to logs, and HTTPS is enabled
@@ -26,6 +21,40 @@ def verify_frontend():
         # Wait for app to load
         print("Waiting for app to load...")
         page.wait_for_selector("text=Kalshi ArbBot", timeout=10000)
+
+        # Verify signRequest works with native crypto
+        print("Verifying signRequest logic...")
+        # Generate a test key (PKCS#8)
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        pem = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption()
+        ).decode('utf-8')
+
+        # We need to escape newlines for JS string
+        pem_js = pem.replace('\n', '\\n')
+
+        signature = page.evaluate(f"""async () => {{
+            const {{ signRequest }} = await import('/src/utils/core.js');
+            try {{
+                return await signRequest(`{pem_js}`, "GET", "/test", 1234567890);
+            }} catch (e) {{
+                return "ERROR: " + e.message;
+            }}
+        }}""")
+
+        if str(signature).startswith("ERROR:"):
+             print(f"FAILED: signRequest returned error: {signature}")
+             exit(1)
+
+        if not signature or len(signature) < 10:
+             print(f"FAILED: Invalid signature length: {signature}")
+             exit(1)
+
+        print(f"SUCCESS: Generated signature: {signature[:20]}...")
 
         # Check for Market Scanner
         print("Checking Market Scanner...")
