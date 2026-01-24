@@ -32,3 +32,13 @@
 **Vulnerability:** The Vite proxy was configured with `secure: false` for all connections, including the production Kalshi API. This disabled SSL certificate verification, allowing Man-in-the-Middle (MITM) attacks to intercept API keys and signed requests.
 **Learning:** Development tools often default to permissive security (like ignoring self-signed certs) for ease of use, but these configurations can expose users if the same config is used for production targets.
 **Prevention:** Conditionally enable `secure: false` only for `localhost` or specific dev environments. Default to `secure: true` for all other targets.
+
+## 2025-05-22 - Replacing node-forge with Web Crypto API
+**Vulnerability:** Use of large, third-party cryptography libraries () increases supply chain attack surface and bundle size when native browser APIs () are available and more secure.
+**Learning:**  is strictly typed and requires PKCS#8 format for private keys (), whereas  was permissive with PKCS#1 (). Migration requires ensuring keys are in the correct format.
+**Prevention:** Prefer  for all standard cryptographic operations (RSA-PSS, SHA-256). Ensure private keys are generated/stored in PKCS#8 format.
+
+## 2026-01-24 - Replacing node-forge with Web Crypto API
+**Vulnerability:** Use of large, third-party cryptography libraries (`node-forge`) increases supply chain attack surface and bundle size when native browser APIs (`window.crypto.subtle`) are available and more secure.
+**Learning:** `window.crypto.subtle` is strictly typed and requires PKCS#8 format for private keys (`-----BEGIN PRIVATE KEY-----`), whereas `forge` was permissive with PKCS#1 (`-----BEGIN RSA PRIVATE KEY-----`). Migration requires ensuring keys are in the correct format.
+**Prevention:** Prefer `window.crypto.subtle` for all standard cryptographic operations (RSA-PSS, SHA-256). Ensure private keys are generated/stored in PKCS#8 format.

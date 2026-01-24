@@ -453,34 +453,64 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
 // ==========================================
 
 let cachedKeyPem = null;
-let cachedForgeKey = null;
+let cachedCryptoKey = null;
 
 export const signRequest = async (privateKeyPem, method, path, timestamp) => {
     try {
-        const forge = window.forge;
-        if (!forge) throw new Error("Forge library not loaded");
-
-        // Simple cache to avoid parsing PEM on every request
         let privateKey;
-        if (cachedKeyPem === privateKeyPem && cachedForgeKey) {
-            privateKey = cachedForgeKey;
+        if (cachedKeyPem === privateKeyPem && cachedCryptoKey) {
+            privateKey = cachedCryptoKey;
         } else {
-            privateKey = forge.pki.privateKeyFromPem(privateKeyPem);
+            // PEM to ArrayBuffer
+            const b64 = privateKeyPem
+                .replace(/-----BEGIN [^-]+-----/, '')
+                .replace(/-----END [^-]+-----/, '')
+                .replace(/\s/g, '');
+
+            const binaryStr = window.atob(b64);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+                bytes[i] = binaryStr.charCodeAt(i);
+            }
+            const keyBuffer = bytes.buffer;
+
+            // Import Key
+            privateKey = await window.crypto.subtle.importKey(
+                "pkcs8",
+                keyBuffer,
+                {
+                    name: "RSA-PSS",
+                    hash: "SHA-256"
+                },
+                false,
+                ["sign"]
+            );
+
             cachedKeyPem = privateKeyPem;
-            cachedForgeKey = privateKey;
+            cachedCryptoKey = privateKey;
         }
 
-        const md = forge.md.sha256.create();
         const cleanPath = path.split('?')[0];
         const message = `${timestamp}${method}${cleanPath}`;
-        md.update(message, 'utf8');
-        const pss = forge.pss.create({
-            md: forge.md.sha256.create(),
-            mgf: forge.mgf.mgf1.create(forge.md.sha256.create()),
-            saltLength: 32
-        });
-        const signature = privateKey.sign(md, pss);
-        return forge.util.encode64(signature);
+        const encoder = new TextEncoder();
+        const data = encoder.encode(message);
+
+        const signature = await window.crypto.subtle.sign(
+            {
+                name: "RSA-PSS",
+                saltLength: 32
+            },
+            privateKey,
+            data
+        );
+
+        // ArrayBuffer to Base64
+        let binary = '';
+        const sigBytes = new Uint8Array(signature);
+        for (let i = 0; i < sigBytes.byteLength; i++) {
+            binary += String.fromCharCode(sigBytes[i]);
+        }
+        return window.btoa(binary);
     } catch (e) {
         console.error("Signing failed:", e);
         throw new Error("Failed to sign request. Check your private key.");
