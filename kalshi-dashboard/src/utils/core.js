@@ -96,7 +96,21 @@ export const calculateStrategy = (market, marginPercent) => {
     // New approach: Use base margin only. Volatility is now tracked for informational purposes
     // but does not affect position sizing or bid prices.
     const volatility = market.volatility || 0;
-    const effectiveMargin = marginPercent; // Removed volatility padding: was marginPercent + (volatility * 0.25)
+
+    // Alpha Strategy: The Timer
+    // Increase margin requirements as the event start time approaches.
+    // Hypothesis: Closer to game start = higher volatility = higher required margin.
+    let timeMultiplier = 1.0;
+    if (market.commenceTime) {
+        const hoursUntilStart = (new Date(market.commenceTime) - Date.now()) / (1000 * 60 * 60);
+        if (hoursUntilStart < 1) {
+            timeMultiplier = 1.5;
+        } else if (hoursUntilStart < 6) {
+            timeMultiplier = 1.25;
+        }
+    }
+
+    const effectiveMargin = marginPercent * timeMultiplier; // Adjusted for time decay
 
     const maxWillingToPay = Math.floor(fairValue * (1 - effectiveMargin / 100));
     const currentBestBid = market.bestBid || 0;
