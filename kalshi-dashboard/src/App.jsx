@@ -1382,7 +1382,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     const [activeTab, setActiveTab] = useState('summary');
 
     const sessionMetrics = useMemo(() => {
-        if (!isOpen) return calculateSessionMetrics({}, {}); // dummy return to keep hook order
+        if (!isOpen) return calculateSessionMetrics([], {}); // dummy return to keep hook order
         return calculateSessionMetrics(positions, tradeHistory);
     }, [isOpen, positions, tradeHistory]);
 
@@ -2031,8 +2031,7 @@ const MarketRow = React.memo(({ market, onExecute, marginPercent, tradeSize, isS
         }
     };
 
-    const marketType = detectMarketType(market.realMarketId);
-    const line = extractLine(market.realMarketId);
+    const { marketType, line } = market;
 
     return (
         <>
@@ -3063,6 +3062,11 @@ const KalshiDashboard = () => {
                   const volume = realMatch?.volume || 0;
                   const openInterest = realMatch?.open_interest || 0;
 
+                  // Pre-calculate marketType and line to avoid regex in render loop
+                  const realMarketId = realMatch?.ticker;
+                  const marketType = detectMarketType(realMarketId);
+                  const line = extractLine(realMarketId);
+
                   const newMarket = {
                       id: game.id,
                       event: `${targetOutcome.name} vs ${targetOutcome.name === game.home_team ? game.away_team : game.home_team}`,
@@ -3076,7 +3080,9 @@ const KalshiDashboard = () => {
                       bestBid: bestBid || 0,
                       bestAsk: bestAsk || 0,
                       isMatchFound: !!realMatch,
-                      realMarketId: realMatch?.ticker,
+                      realMarketId: realMarketId,
+                      marketType,
+                      line,
                       volume: volume,
                       openInterest: openInterest,
                       lastChange: processingTime,
@@ -3104,6 +3110,7 @@ const KalshiDashboard = () => {
                         prevMarket.volume === newMarket.volume &&
                         prevMarket.openInterest === newMarket.openInterest &&
                         prevMarket.isMatchFound === newMarket.isMatchFound &&
+                        prevMarket.realMarketId === newMarket.realMarketId && // Check realMarketId for marketType/line consistency
                         prevMarket.priceSource === newMarket.priceSource &&
                         prevMarket.isWsSubscribed === newMarket.isWsSubscribed &&
                         prevMarket.oddsDisplay === newMarket.oddsDisplay &&
@@ -3756,7 +3763,7 @@ const KalshiDashboard = () => {
 
   // Filtering Logic: Implement a useMemo hook to filter the raw markets array based on marketType.
   const filteredMarkets = useMemo(() => {
-      return markets.filter(m => detectMarketType(m.realMarketId) === marketType);
+      return markets.filter(m => m.marketType === marketType);
   }, [markets, marketType]);
 
   // OPTIMIZATION: Cache enriched markets to preserve object identity for React.memo
