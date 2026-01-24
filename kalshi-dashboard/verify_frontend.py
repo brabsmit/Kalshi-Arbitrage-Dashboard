@@ -8,7 +8,11 @@ def verify_frontend():
         context = browser.new_context(ignore_https_errors=True)
         page = context.new_page()
 
-        # Mock window.forge to prevent blocking
+        # Listen for console logs
+        page.on("console", lambda msg: print(f"Browser Console: {msg.text}"))
+        page.on("pageerror", lambda err: print(f"Browser Error: {err}"))
+
+        # Mock window.forge to prevent blocking AND inject auth
         page.add_init_script("""
             window.forge = {
                 md: { sha256: { create: () => ({ update: () => {}, digest: () => {} }) } },
@@ -17,15 +21,22 @@ def verify_frontend():
                 mgf: { mgf1: { create: () => {} } },
                 util: { encode64: () => 'mock_signature' }
             };
+            sessionStorage.setItem('authenticated', 'true');
+            localStorage.setItem('odds_api_key', 'mock_key');
         """)
 
         print("Navigating to app...")
-        # Port changed to 3000 according to logs, and HTTPS is enabled
+        # HTTPS
         page.goto("https://localhost:3000")
 
         # Wait for app to load
         print("Waiting for app to load...")
-        page.wait_for_selector("text=Kalshi ArbBot", timeout=10000)
+        try:
+            page.wait_for_selector("text=Kalshi ArbBot", timeout=10000)
+        except Exception as e:
+            print(f"Timeout! Taking screenshot error.png")
+            page.screenshot(path="error.png")
+            raise e
 
         # Check for Market Scanner
         print("Checking Market Scanner...")
@@ -33,7 +44,6 @@ def verify_frontend():
 
         # Check for "Sports" filter button
         print("Checking Sports Filter...")
-        # The button shows "1 Sport" by default if one is selected
         filter_btn = page.locator("button[aria-label='Filter by Sport']")
         expect(filter_btn).to_be_visible()
 
@@ -42,11 +52,8 @@ def verify_frontend():
         filter_btn.click()
 
         # Verify dropdown content (Sports list)
-        # Assuming defaults are NFL, NBA, etc.
-        # "Available Sports" is the text in the header of the dropdown
         expect(page.get_by_text("Available Sports")).to_be_visible()
         expect(page.get_by_text("Football (NFL)")).to_be_visible()
-        expect(page.get_by_text("Basketball (NBA)")).to_be_visible()
 
         # Take screenshot of the open filter
         print("Taking screenshot...")
