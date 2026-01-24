@@ -27,3 +27,19 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2024-05-23 - The Timer (Time-Decay Risk Adjustment)
+
+**Hypothesis:** As an event approaches its start time, volatility increases and the probability of adverse selection rises (late-breaking news, injuries). We should increase our margin of safety to compensate for this higher risk.
+
+**Change:**
+Old: `effectiveMargin = marginPercent`
+New:
+- If < 1 hour to start: `effectiveMargin = marginPercent * 1.5`
+- If < 6 hours to start: `effectiveMargin = marginPercent * 1.25`
+- Else: `effectiveMargin = marginPercent`
+
+**Expected Result:**
+- Lower exposure to pre-game volatility spikes.
+- Reduced "bag holding" of positions entered right before news breaks.
+- More conservative bidding as the deadline approaches.
