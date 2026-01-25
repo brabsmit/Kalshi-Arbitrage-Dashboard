@@ -81,6 +81,14 @@ export const calculateVolatility = (history) => {
     return Math.sqrt(Math.max(0, variance));
 };
 
+export const calculateKalshiFees = (priceCents, quantity) => {
+    // Formula from Fee Schedule (Taker): fees = ceil(0.07 * count * price_dollar * (1 - price_dollar))
+    if (quantity <= 0) return 0;
+    const p = priceCents / 100;
+    const rawFee = 0.07 * quantity * p * (1 - p);
+    return Math.ceil(rawFee * 100);
+};
+
 export const calculateStrategy = (market, marginPercent) => {
     if (!market.isMatchFound) return { smartBid: null, reason: "No Market", edge: -100, maxWillingToPay: 0 };
 
@@ -121,14 +129,15 @@ export const calculateStrategy = (market, marginPercent) => {
     // Kalshi Taker Fee: ~7% of payout = ceil(0.07 * qty * price * (1-price))
     // Example: Buying 10 contracts at 50¢ = ~$1.75 in fees = ~1.75¢ per contract
     //
-    // STRATEGY UPDATE: Reduced buffer from 3¢ to 1¢ for more aggressive spread crossing.
-    // - At 3¢ buffer: Too conservative, missed many profitable opportunities
-    // - At 1¢ buffer: Still protects against fees while capturing more edges
-    // - Allows more aggressive taker behavior when edge is clear
-    const TAKER_FEE_BUFFER = 1;
+    // STRATEGY UPDATE: Dynamic Fee Calculation
+    // - Old: Static 1¢ buffer. Failed near 50¢ (fees ~1.75¢).
+    // - New: Dynamic fee calculation based on Best Ask price.
+    // - Logic: If (Ask + Fee) <= MaxWillingToPay, take the trade.
+    // - Fee calculated for 1 contract (marginal cost).
+    const takerFee = calculateKalshiFees(market.bestAsk, 1);
 
     // Check if we can buy immediately at a significant discount (after accounting for fees)
-    if (market.bestAsk > 0 && market.bestAsk <= (maxWillingToPay - TAKER_FEE_BUFFER)) {
+    if (market.bestAsk > 0 && (market.bestAsk + takerFee) <= maxWillingToPay) {
         smartBid = market.bestAsk;
         reason = "Take Ask";
     }
@@ -141,14 +150,6 @@ export const calculateStrategy = (market, marginPercent) => {
     if (smartBid > 99) smartBid = 99;
 
     return { smartBid, maxWillingToPay, edge, reason };
-};
-
-export const calculateKalshiFees = (priceCents, quantity) => {
-    // Formula from Fee Schedule (Taker): fees = ceil(0.07 * count * price_dollar * (1 - price_dollar))
-    if (quantity <= 0) return 0;
-    const p = priceCents / 100;
-    const rawFee = 0.07 * quantity * p * (1 - p);
-    return Math.ceil(rawFee * 100);
 };
 
 // ==========================================

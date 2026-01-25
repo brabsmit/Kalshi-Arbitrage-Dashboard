@@ -27,3 +27,15 @@ New: If `bestAsk <= maxWillingToPay - 2¢` (buffer for fees), set `smartBid = be
 - Higher fill rate on high-edge opportunities.
 - Captures value immediately instead of waiting for a seller to cross the spread.
 - Accepts Taker fees (approx 1-2¢) in exchange for guaranteed execution.
+
+## 2026-01-25 - Dynamic Fee Protection
+
+**Hypothesis:** The static 1¢ fee buffer was underestimating costs for contracts priced near 50¢ (where fees are ~1.75¢), leading to negative EV trades when crossing the spread.
+
+**Change:**
+Old: `buffer = 1`
+New: `buffer = calculateKalshiFees(bestAsk, 1)`
+
+**Expected Result:**
+- Eliminates "Fake Edge" trades where fees consume the entire profit margin.
+- Maintains aggressive behavior on cheap/expensive contracts (where fees are low) while protecting the mid-curve.
