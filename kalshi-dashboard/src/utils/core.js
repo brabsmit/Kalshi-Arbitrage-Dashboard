@@ -282,12 +282,16 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
         avgQueueTime: 0
     };
 
-    const settledPositions = [];
-    const activePositions = [];
-    const pnlArray = [];
-    const holdTimes = [];
-    const entryEdges = [];
-    const exitEdges = [];
+    // ⚡ Bolt Optimization: Removed all intermediate arrays (O(1) memory usage)
+    let sumSqPnl = 0;
+    let cumulativePnL = 0;
+    let peakPnL = 0;
+    let totalSettledCost = 0;
+
+    let entryEdgeCount = 0;
+    let exitEdgeCount = 0;
+    let holdTimeCount = 0;
+
     const markets = new Set();
     const sports = {};
 
@@ -306,16 +310,27 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
             // Entry edge
             if (historyEntry.fairValue && p.avgPrice) {
                 const entryEdge = historyEntry.fairValue - p.avgPrice;
-                entryEdges.push(entryEdge);
                 metrics.totalEntryEdge += entryEdge;
+                entryEdgeCount++;
             }
 
             if (p.settlementStatus === 'settled' || p.realizedPnl !== undefined) {
                 // Settled trade
                 metrics.settledTrades++;
                 const pnl = p.realizedPnl || 0;
-                pnlArray.push(pnl);
                 metrics.totalRealizedPnL += pnl;
+
+                // ⚡ Bolt Optimization: Single-pass Variance and Drawdown calculation
+                sumSqPnl += pnl * pnl;
+
+                cumulativePnL += pnl;
+                if (cumulativePnL > peakPnL) {
+                    peakPnL = cumulativePnL;
+                }
+                const drawdown = peakPnL - cumulativePnL;
+                if (drawdown > metrics.maxDrawdown) {
+                    metrics.maxDrawdown = drawdown;
+                }
 
                 if (pnl > 0) {
                     metrics.wins++;
@@ -338,8 +353,8 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
                 // Hold time
                 if (historyEntry.orderPlacedAt && p.settled) {
                     const holdTime = p.settled - historyEntry.orderPlacedAt;
-                    holdTimes.push(holdTime);
                     metrics.totalHoldTime += holdTime;
+                    holdTimeCount++;
                     metrics.minHoldTime = Math.min(metrics.minHoldTime, holdTime);
                     metrics.maxHoldTime = Math.max(metrics.maxHoldTime, holdTime);
                 }
@@ -350,8 +365,8 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
                     const exitFV = historyEntry.fairValue; // Approximate, should track actual FV at exit
                     if (exitFV) {
                         const exitEdge = exitPrice - exitFV;
-                        exitEdges.push(exitEdge);
                         metrics.totalExitEdge += exitEdge;
+                        exitEdgeCount++;
                     }
                 }
 
@@ -360,11 +375,11 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
                     metrics.totalFees += p.fees;
                 }
 
-                settledPositions.push(p);
+                totalSettledCost += (p.cost || 0);
             } else {
                 // Active/pending trade
                 metrics.pendingTrades++;
-                activePositions.push(p);
+                // activePositions not used
 
                 // Current exposure
                 if (p.cost) {
@@ -375,16 +390,16 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
     }
 
     // Calculate averages
-    if (metrics.totalTrades > 0) {
-        metrics.avgEntryEdge = metrics.totalEntryEdge / entryEdges.length || 0;
+    if (entryEdgeCount > 0) {
+        metrics.avgEntryEdge = metrics.totalEntryEdge / entryEdgeCount || 0;
     }
 
-    if (exitEdges.length > 0) {
-        metrics.avgExitEdge = metrics.totalExitEdge / exitEdges.length;
+    if (exitEdgeCount > 0) {
+        metrics.avgExitEdge = metrics.totalExitEdge / exitEdgeCount;
     }
 
-    if (holdTimes.length > 0) {
-        metrics.avgHoldTime = metrics.totalHoldTime / holdTimes.length;
+    if (holdTimeCount > 0) {
+        metrics.avgHoldTime = metrics.totalHoldTime / holdTimeCount;
     }
 
     if (metrics.minHoldTime === Infinity) {
@@ -406,10 +421,13 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
     metrics.netPnL = metrics.totalRealizedPnL - metrics.totalFees;
 
     // Sharpe Ratio (annualized, assuming independent trades)
-    if (pnlArray.length >= 2) {
-        const mean = metrics.totalRealizedPnL / pnlArray.length;
-        const variance = pnlArray.reduce((sum, pnl) => sum + Math.pow(pnl - mean, 2), 0) / (pnlArray.length - 1);
-        const stdDev = Math.sqrt(variance);
+    if (metrics.settledTrades >= 2) {
+        const n = metrics.settledTrades;
+        const mean = metrics.totalRealizedPnL / n;
+
+        // Variance = (SumSq - (Sum*Sum)/N) / (N - 1)
+        const variance = (sumSqPnl - (metrics.totalRealizedPnL * metrics.totalRealizedPnL) / n) / (n - 1);
+        const stdDev = Math.sqrt(Math.max(0, variance)); // Clamp to 0 to avoid NaN
         metrics.volatility = stdDev;
 
         if (stdDev > 0) {
@@ -420,30 +438,12 @@ export const calculateSessionMetrics = (positions, tradeHistory) => {
         }
     }
 
-    // Max drawdown (simplified - track worst cumulative loss)
-    let cumulativePnL = 0;
-    let peak = 0;
-    let maxDD = 0;
-
-    for (const pnl of pnlArray) {
-        cumulativePnL += pnl;
-        if (cumulativePnL > peak) {
-            peak = cumulativePnL;
-        }
-        const drawdown = peak - cumulativePnL;
-        if (drawdown > maxDD) {
-            maxDD = drawdown;
-        }
-    }
-    metrics.maxDrawdown = maxDD;
-
     // Unique markets and sports
     metrics.uniqueMarkets = markets.size;
     metrics.sportBreakdown = sports;
 
     // ROI
-    const totalCost = settledPositions.reduce((sum, p) => sum + (p.cost || 0), 0);
-    metrics.roi = totalCost > 0 ? (metrics.totalRealizedPnL / totalCost) * 100 : 0;
+    metrics.roi = totalSettledCost > 0 ? (metrics.totalRealizedPnL / totalSettledCost) * 100 : 0;
 
     return metrics;
 };
