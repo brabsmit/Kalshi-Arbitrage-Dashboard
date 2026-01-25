@@ -23,9 +23,30 @@ const PasswordAuth = ({ onAuthenticated }) => {
             return;
         }
 
-        // Simple check - in production, you might want to hash this
-        setTimeout(() => {
-            if (password === correctPassword) {
+        // Sentinel Security: Support SHA-256 hashed passwords to avoid exposing plaintext
+        // If VITE_APP_PASSWORD is a 64-char hex string, treat it as a hash.
+        setTimeout(async () => {
+            let isAuthenticated = false;
+
+            try {
+                const isHash = /^[a-f0-9]{64}$/i.test(correctPassword);
+
+                if (isHash) {
+                    const encoder = new TextEncoder();
+                    const data = encoder.encode(password);
+                    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+                    const hashArray = Array.from(new Uint8Array(hashBuffer));
+                    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                    isAuthenticated = hashHex === correctPassword.toLowerCase();
+                } else {
+                    // Legacy Plaintext Fallback
+                    isAuthenticated = password === correctPassword;
+                }
+            } catch (e) {
+                console.error('Auth Error', e);
+            }
+
+            if (isAuthenticated) {
                 // Store auth token in sessionStorage (clears on browser close)
                 sessionStorage.setItem('authenticated', 'true');
                 onAuthenticated();

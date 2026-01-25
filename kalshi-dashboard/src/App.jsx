@@ -1382,7 +1382,7 @@ const SessionReportModal = ({ isOpen, onClose, tradeHistory, positions, sessionS
     const [activeTab, setActiveTab] = useState('summary');
 
     const sessionMetrics = useMemo(() => {
-        if (!isOpen) return calculateSessionMetrics({}, {}); // dummy return to keep hook order
+        if (!isOpen) return calculateSessionMetrics([], {}); // dummy return to keep hook order
         return calculateSessionMetrics(positions, tradeHistory);
     }, [isOpen, positions, tradeHistory]);
 
