@@ -155,6 +155,7 @@ def authenticated_page(page):
             privateKey: `{private_key_js}`
         }}));
         localStorage.setItem('odds_api_key', '{odds_key}');
+        sessionStorage.setItem('authenticated', 'true');
     }}""")
 
     page.reload()
