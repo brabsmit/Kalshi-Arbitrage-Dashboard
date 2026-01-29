@@ -1,0 +1,142 @@
+use super::auth::KalshiAuth;
+use super::types::{OrderbookDelta, OrderbookSnapshot, WsMessage};
+use anyhow::{Context, Result};
+use futures_util::{SinkExt, StreamExt};
+use std::sync::Arc;
+use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::Message;
+
+/// Events emitted by the Kalshi WebSocket connection.
+#[derive(Debug, Clone)]
+pub enum KalshiWsEvent {
+    Snapshot(OrderbookSnapshot),
+    Delta(OrderbookDelta),
+    Connected,
+    Disconnected(String),
+}
+
+pub struct KalshiWs {
+    auth: Arc<KalshiAuth>,
+    ws_url: String,
+}
+
+impl KalshiWs {
+    pub fn new(auth: Arc<KalshiAuth>, ws_url: &str) -> Self {
+        Self {
+            auth,
+            ws_url: ws_url.to_string(),
+        }
+    }
+
+    /// Connect and run the WebSocket loop. Sends events on `tx`.
+    /// `tickers` are subscribed immediately after connect.
+    pub async fn run(
+        &self,
+        tickers: Vec<String>,
+        tx: mpsc::Sender<KalshiWsEvent>,
+    ) -> Result<()> {
+        loop {
+            match self.connect_and_listen(&tickers, &tx).await {
+                Ok(()) => {
+                    tracing::warn!("kalshi WS closed cleanly, reconnecting...");
+                }
+                Err(e) => {
+                    tracing::error!("kalshi WS error: {:#}, reconnecting in 2s...", e);
+                    let _ = tx.send(KalshiWsEvent::Disconnected(format!("{:#}", e))).await;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        }
+    }
+
+    async fn connect_and_listen(
+        &self,
+        tickers: &[String],
+        tx: &mpsc::Sender<KalshiWsEvent>,
+    ) -> Result<()> {
+        // Build auth for WS handshake
+        let path = "/trade-api/ws/v2";
+        let headers = self.auth.headers("GET", path)?;
+
+        let mut request = url::Url::parse(&self.ws_url)?;
+        // Pass auth as query params (Kalshi WS auth method)
+        for (k, v) in &headers {
+            request.query_pairs_mut().append_pair(k, v);
+        }
+
+        let (ws_stream, _) = tokio_tungstenite::connect_async(request.as_str())
+            .await
+            .context("WS connection failed")?;
+
+        let (mut write, mut read) = ws_stream.split();
+        tracing::info!("kalshi WS connected");
+        let _ = tx.send(KalshiWsEvent::Connected).await;
+
+        // Subscribe to orderbook_delta for all tickers (batch in groups of 50)
+        for chunk in tickers.chunks(50) {
+            let sub = serde_json::json!({
+                "id": 1,
+                "cmd": "subscribe",
+                "params": {
+                    "channels": ["orderbook_delta"],
+                    "market_tickers": chunk,
+                }
+            });
+            write
+                .send(Message::Text(sub.to_string().into()))
+                .await
+                .context("WS subscribe failed")?;
+        }
+
+        tracing::info!(count = tickers.len(), "subscribed to tickers");
+
+        // Read loop
+        while let Some(msg) = read.next().await {
+            let msg = msg.context("WS read error")?;
+            match msg {
+                Message::Text(text) => {
+                    if let Err(e) = self.handle_message(&text, tx).await {
+                        tracing::warn!("WS message parse error: {:#}", e);
+                    }
+                }
+                Message::Ping(data) => {
+                    write.send(Message::Pong(data)).await?;
+                }
+                Message::Close(_) => {
+                    tracing::info!("kalshi WS received close frame");
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_message(
+        &self,
+        text: &str,
+        tx: &mpsc::Sender<KalshiWsEvent>,
+    ) -> Result<()> {
+        let ws_msg: WsMessage = serde_json::from_str(text)
+            .context("failed to parse WS message")?;
+
+        match ws_msg.msg_type.as_str() {
+            "orderbook_snapshot" => {
+                let snapshot: OrderbookSnapshot = serde_json::from_value(ws_msg.msg)?;
+                let _ = tx.send(KalshiWsEvent::Snapshot(snapshot)).await;
+            }
+            "orderbook_delta" => {
+                let delta: OrderbookDelta = serde_json::from_value(ws_msg.msg)?;
+                let _ = tx.send(KalshiWsEvent::Delta(delta)).await;
+            }
+            "error" => {
+                tracing::warn!("kalshi WS error: {:?}", ws_msg.msg);
+            }
+            _ => {
+                tracing::trace!(msg_type = ws_msg.msg_type, "unhandled WS message type");
+            }
+        }
+        Ok(())
+    }
+}

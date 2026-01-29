@@ -1,4 +1,5 @@
 mod config;
+mod feed;
 mod kalshi;
 
 use anyhow::Result;
