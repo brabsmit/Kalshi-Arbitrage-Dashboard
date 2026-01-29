@@ -1,0 +1,22 @@
+[strategy]
+taker_edge_threshold = 5
+maker_edge_threshold = 2
+min_edge_after_fees = 1
+
+[risk]
+max_contracts_per_market = 10
+max_total_exposure_cents = 50000
+max_concurrent_markets = 5
+
+[execution]
+maker_timeout_ms = 500
+stale_odds_threshold_ms = 5000
+
+[kalshi]
+api_base = "https://api.elections.kalshi.com"
+ws_url = "wss://api.elections.kalshi.com/trade-api/ws/v2"
+
+[odds_feed]
+provider = "odds-api-io"
+sports = ["americanfootball_nfl", "basketball_nba", "baseball_mlb", "icehockey_nhl"]
+base_url = "https://api.odds-api.io/v3"
