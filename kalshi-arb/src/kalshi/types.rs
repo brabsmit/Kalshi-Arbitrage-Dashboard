@@ -17,11 +17,13 @@ pub struct CreateOrderRequest {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct OrderResponse {
     pub order: Order,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct Order {
     pub order_id: String,
     pub ticker: String,
@@ -43,6 +45,7 @@ pub struct MarketsResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct Market {
     pub ticker: String,
     pub event_ticker: String,
@@ -65,16 +68,19 @@ pub struct Market {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct BalanceResponse {
     pub balance: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct PortfolioPositionsResponse {
     pub market_positions: Vec<MarketPosition>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct MarketPosition {
     pub ticker: String,
     pub market_exposure: i64,
@@ -85,6 +91,7 @@ pub struct MarketPosition {
 
 /// WebSocket orderbook snapshot message
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct OrderbookSnapshot {
     pub market_ticker: String,
     /// Each entry is [price_cents, quantity]
@@ -103,6 +110,7 @@ pub struct OrderbookDelta {
 
 /// Wrapper for WS messages
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct WsMessage {
     #[serde(rename = "type")]
     pub msg_type: String,

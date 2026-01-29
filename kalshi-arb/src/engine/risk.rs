@@ -37,6 +37,7 @@ impl RiskManager {
         *self.positions.entry(ticker.to_string()).or_insert(0) += quantity;
     }
 
+    #[allow(dead_code)]
     pub fn record_sell(&mut self, ticker: &str, quantity: u32) {
         if let Some(pos) = self.positions.get_mut(ticker) {
             *pos = pos.saturating_sub(quantity);
@@ -46,10 +47,12 @@ impl RiskManager {
         }
     }
 
+    #[allow(dead_code)]
     pub fn position_count(&self, ticker: &str) -> u32 {
         self.positions.get(ticker).copied().unwrap_or(0)
     }
 
+    #[allow(dead_code)]
     pub fn total_markets(&self) -> usize {
         self.positions.len()
     }

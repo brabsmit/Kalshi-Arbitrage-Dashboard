@@ -9,6 +9,7 @@ pub struct MarketKey {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct IndexedMarket {
     pub ticker: String,
     pub title: String,

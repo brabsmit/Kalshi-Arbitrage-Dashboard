@@ -2,6 +2,7 @@ use super::fees::calculate_fee;
 
 /// Result of strategy evaluation for a single market.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct StrategySignal {
     pub action: TradeAction,
     pub price: u32,

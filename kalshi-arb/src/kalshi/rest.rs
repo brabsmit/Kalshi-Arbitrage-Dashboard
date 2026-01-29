@@ -70,6 +70,7 @@ impl KalshiRest {
     }
 
     /// Get account balance.
+    #[allow(dead_code)]
     pub async fn get_balance(&self) -> Result<i64> {
         let path = "/trade-api/v2/portfolio/balance";
         let url = format!("{}{}", self.base_url, path);
@@ -78,6 +79,7 @@ impl KalshiRest {
     }
 
     /// Get open positions.
+    #[allow(dead_code)]
     pub async fn get_positions(&self) -> Result<Vec<MarketPosition>> {
         let path = "/trade-api/v2/portfolio/positions";
         let url = format!("{}{}", self.base_url, path);
@@ -86,6 +88,7 @@ impl KalshiRest {
     }
 
     /// Authenticated GET request.
+    #[allow(dead_code)]
     async fn get_authed<T: serde::de::DeserializeOwned>(&self, url: &str, path: &str) -> Result<T> {
         let headers = self.auth.headers("GET", path)?;
         let mut req = self.client.get(url);

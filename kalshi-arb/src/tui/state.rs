@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct AppState {
     pub balance_cents: i64,
     pub total_exposure_cents: i64,
@@ -83,6 +84,7 @@ impl AppState {
         });
     }
 
+    #[allow(dead_code)]
     pub fn push_trade(&mut self, trade: TradeRow) {
         if self.trades.len() >= 100 {
             self.trades.pop_front();

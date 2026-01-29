@@ -45,6 +45,7 @@ impl KalshiAuth {
         Ok((timestamp, sig_b64))
     }
 
+    #[allow(dead_code)]
     pub fn api_key(&self) -> &str {
         &self.api_key
     }

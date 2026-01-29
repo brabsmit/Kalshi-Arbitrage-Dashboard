@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct OddsUpdate {
     pub event_id: String,
     pub sport: String,
@@ -11,6 +12,7 @@ pub struct OddsUpdate {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct BookmakerOdds {
     pub name: String,
     pub home_odds: f64,
@@ -30,6 +32,7 @@ pub struct OddsApiEvent {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct OddsApiBookmaker {
     pub key: String,
     pub title: String,

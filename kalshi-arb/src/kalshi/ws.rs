@@ -83,7 +83,7 @@ impl KalshiWs {
                 }
             });
             write
-                .send(Message::Text(sub.to_string().into()))
+                .send(Message::Text(sub.to_string()))
                 .await
                 .context("WS subscribe failed")?;
         }

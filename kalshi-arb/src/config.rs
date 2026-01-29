@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::path::Path;
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct Config {
     pub strategy: StrategyConfig,
     pub risk: RiskConfig,
@@ -26,6 +27,7 @@ pub struct RiskConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct ExecutionConfig {
     pub maker_timeout_ms: u64,
     pub stale_odds_threshold_ms: u64,
@@ -38,6 +40,7 @@ pub struct KalshiConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct OddsFeedConfig {
     pub provider: String,
     pub sports: Vec<String>,

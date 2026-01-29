@@ -13,15 +13,16 @@ pub fn calculate_fee(price_cents: u32, quantity: u32, is_taker: bool) -> u32 {
     if is_taker {
         let numerator = 7 * q * spread_factor;
         let denominator = 10_000u64;
-        ((numerator + denominator - 1) / denominator) as u32
+        numerator.div_ceil(denominator) as u32
     } else {
         let numerator = 175 * q * spread_factor;
         let denominator = 1_000_000u64;
-        ((numerator + denominator - 1) / denominator) as u32
+        numerator.div_ceil(denominator) as u32
     }
 }
 
 /// Find minimum sell price to break even after exit fees.
+#[allow(dead_code)]
 pub fn break_even_sell_price(total_entry_cost_cents: u32, quantity: u32, is_taker_exit: bool) -> u32 {
     for price in 1..=99u32 {
         let fee = calculate_fee(price, quantity, is_taker_exit);
