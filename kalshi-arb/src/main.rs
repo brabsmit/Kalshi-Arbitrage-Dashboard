@@ -415,7 +415,6 @@ async fn main() -> Result<()> {
 
                     // Sim fill detection: check if any sim position's sell is filled
                     if sim_mode_ws {
-                        let yes_bid = yes_bid;
                         let ticker = snap.market_ticker.clone();
                         state_tx_ws.send_modify(|s| {
                             let mut filled_indices = Vec::new();
