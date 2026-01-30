@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use super::state::{AppState, PositionRow};
 use ratatui::{
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Cell, Paragraph, Row, Table},
@@ -202,6 +202,60 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
 
 fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
     let inner_width = area.width.saturating_sub(2) as usize;
+
+    // If no live markets, show filter summary + countdown
+    if state.markets.is_empty() {
+        let mut lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "No live markets",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(Span::styled(
+                format!(
+                    "{} pre-game \u{00b7} {} closed",
+                    state.filter_stats.pre_game, state.filter_stats.closed
+                ),
+                Style::default().fg(Color::DarkGray),
+            )),
+            Line::from(""),
+        ];
+
+        if let Some(next_start) = state.next_game_start {
+            let now = chrono::Utc::now();
+            if next_start > now {
+                let diff = next_start - now;
+                let total_secs = diff.num_seconds().max(0) as u64;
+                let h = total_secs / 3600;
+                let m = (total_secs % 3600) / 60;
+                let s = total_secs % 60;
+                lines.push(Line::from(Span::styled(
+                    format!("Next game starts in {}h {:02}m {:02}s", h, m, s),
+                    Style::default().fg(Color::Cyan),
+                )));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    "Next game starting...",
+                    Style::default().fg(Color::Green),
+                )));
+            }
+        } else {
+            lines.push(Line::from(Span::styled(
+                "No upcoming games found",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+
+        let block = Block::default()
+            .title(" Live Markets ")
+            .borders(Borders::ALL);
+        let para = Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .block(block);
+        f.render_widget(para, area);
+        return;
+    }
+
     let fixed_cols_full: usize = 5 + 5 + 5 + 6 + 8 + 8; // fair+bid+ask+edge+action+latency = 37
 
     let (headers, constraints, ticker_w, drop_latency, drop_action) = if inner_width < 45 {
@@ -512,6 +566,13 @@ fn draw_api_status(f: &mut Frame, state: &AppState, area: Rect) {
         state.api_hours_remaining,
     );
 
+    let filter_str = format!(
+        " | {} live \u{00b7} {} pre-game \u{00b7} {} closed",
+        state.filter_stats.live,
+        state.filter_stats.pre_game,
+        state.filter_stats.closed,
+    );
+
     let color = if state.api_requests_remaining < 100 {
         Color::Red
     } else if state.api_requests_remaining < 250 {
@@ -520,7 +581,10 @@ fn draw_api_status(f: &mut Frame, state: &AppState, area: Rect) {
         Color::DarkGray
     };
 
-    let line = Line::from(Span::styled(quota_str, Style::default().fg(color)));
+    let line = Line::from(vec![
+        Span::styled(quota_str, Style::default().fg(color)),
+        Span::styled(filter_str, Style::default().fg(Color::DarkGray)),
+    ]);
     let para = Paragraph::new(line);
     f.render_widget(para, area);
 }

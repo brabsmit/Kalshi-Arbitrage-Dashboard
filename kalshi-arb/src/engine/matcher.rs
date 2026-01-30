@@ -17,6 +17,8 @@ pub struct SideMarket {
     pub yes_ask: u32,
     pub no_bid: u32,
     pub no_ask: u32,
+    pub status: String,
+    pub close_time: Option<String>,
 }
 
 /// Both sides of a game stored in the index.
@@ -350,5 +352,21 @@ mod tests {
     fn test_parse_ufc_title_not_ufc() {
         let result = parse_ufc_title("Dallas Mavericks at Los Angeles Lakers Winner?");
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_side_market_carries_status_and_close_time() {
+        let sm = SideMarket {
+            ticker: "KXNBAGAME-26JAN19LACWAS-LAC".to_string(),
+            title: "Test".to_string(),
+            yes_bid: 50,
+            yes_ask: 55,
+            no_bid: 45,
+            no_ask: 50,
+            status: "open".to_string(),
+            close_time: Some("2026-01-20T04:00:00Z".to_string()),
+        };
+        assert_eq!(sm.status, "open");
+        assert_eq!(sm.close_time.as_deref(), Some("2026-01-20T04:00:00Z"));
     }
 }
