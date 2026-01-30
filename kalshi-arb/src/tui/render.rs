@@ -48,6 +48,32 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
         draw_header(f, state, chunks[0], spinner_frame);
         draw_markets(f, state, chunks[1]);
         draw_footer(f, state, chunks[2]);
+    } else if state.position_focus {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(header_height),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        draw_header(f, state, chunks[0], spinner_frame);
+        draw_positions(f, state, chunks[1]);
+        draw_footer(f, state, chunks[2]);
+    } else if state.trade_focus {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(header_height),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        draw_header(f, state, chunks[0], spinner_frame);
+        draw_trades(f, state, chunks[1]);
+        draw_footer(f, state, chunks[2]);
     } else {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -326,6 +352,26 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
         })
         .collect();
 
+    let visible_lines = area.height.saturating_sub(4) as usize;
+    let total = rows.len();
+    let offset = if state.position_focus {
+        state.position_scroll_offset.min(total.saturating_sub(visible_lines))
+    } else {
+        0
+    };
+
+    let rows: Vec<Row> = rows.into_iter().skip(offset).take(visible_lines).collect();
+
+    let title = if state.position_focus {
+        format!(
+            " Open Positions [{}/{}] ",
+            (offset + rows.len()).min(total),
+            total,
+        )
+    } else {
+        " Open Positions ".to_string()
+    };
+
     let table = Table::new(
         rows,
         [
@@ -339,7 +385,7 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     .header(header)
     .block(
         Block::default()
-            .title(" Open Positions ")
+            .title(title)
             .borders(Borders::ALL),
     );
 
@@ -347,12 +393,23 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
-    let max_width = area.width.saturating_sub(2) as usize; // borders
+    let max_width = area.width.saturating_sub(2) as usize;
+    let visible_lines = area.height.saturating_sub(2) as usize;
+
+    let total = state.trades.len();
+
+    let offset = if state.trade_focus {
+        state.trade_scroll_offset.min(total.saturating_sub(visible_lines))
+    } else {
+        0
+    };
+
     let lines: Vec<Line> = state
         .trades
         .iter()
         .rev()
-        .take(4)
+        .skip(offset)
+        .take(if state.trade_focus { visible_lines } else { 4 })
         .map(|t| {
             let pnl = t
                 .pnl
@@ -366,8 +423,18 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
         })
         .collect();
 
+    let title = if state.trade_focus {
+        format!(
+            " Recent Trades [{}/{}] ",
+            (offset + lines.len()).min(total),
+            total,
+        )
+    } else {
+        " Recent Trades ".to_string()
+    };
+
     let block = Block::default()
-        .title(" Recent Trades ")
+        .title(title)
         .borders(Borders::ALL);
     let para = Paragraph::new(lines).block(block);
     f.render_widget(para, area);
@@ -422,16 +489,7 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
-    let line = if state.log_focus {
-        Line::from(vec![
-            Span::styled("  [Esc]", Style::default().fg(Color::Yellow)),
-            Span::raw(" back  "),
-            Span::styled("[j/k]", Style::default().fg(Color::Yellow)),
-            Span::raw(" scroll  "),
-            Span::styled("[g/G]", Style::default().fg(Color::Yellow)),
-            Span::raw(" top/bottom  "),
-        ])
-    } else if state.market_focus {
+    let line = if state.log_focus || state.market_focus || state.position_focus || state.trade_focus {
         Line::from(vec![
             Span::styled("  [Esc]", Style::default().fg(Color::Yellow)),
             Span::raw(" back  "),
@@ -452,6 +510,10 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
             Span::raw("ogs  "),
             Span::styled("[m]", Style::default().fg(Color::Yellow)),
             Span::raw("arkets  "),
+            Span::styled("[o]", Style::default().fg(Color::Yellow)),
+            Span::raw("pen-pos  "),
+            Span::styled("[t]", Style::default().fg(Color::Yellow)),
+            Span::raw("rades  "),
         ])
     };
     let para = Paragraph::new(line);
