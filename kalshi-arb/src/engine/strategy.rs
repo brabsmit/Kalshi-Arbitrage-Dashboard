@@ -84,6 +84,53 @@ pub fn evaluate(
     }
 }
 
+/// Apply momentum gating to a strategy signal.
+///
+/// Downgrades actions based on momentum score:
+/// - Score < maker_threshold: force SKIP (edge without momentum)
+/// - Score >= maker_threshold but < taker_threshold: cap at MAKER
+/// - Score >= taker_threshold: allow TAKER
+///
+/// Signals already at SKIP pass through unchanged.
+pub fn momentum_gate(
+    signal: StrategySignal,
+    momentum_score: f64,
+    maker_momentum_threshold: u8,
+    taker_momentum_threshold: u8,
+) -> StrategySignal {
+    match signal.action {
+        TradeAction::Skip => signal,
+        TradeAction::TakerBuy => {
+            if momentum_score < maker_momentum_threshold as f64 {
+                StrategySignal {
+                    action: TradeAction::Skip,
+                    ..signal
+                }
+            } else if momentum_score < taker_momentum_threshold as f64 {
+                // Downgrade taker to maker
+                let bid_price = signal.price.saturating_sub(1).max(1);
+                StrategySignal {
+                    action: TradeAction::MakerBuy { bid_price },
+                    price: bid_price,
+                    ..signal
+                }
+            } else {
+                signal
+            }
+        }
+        TradeAction::MakerBuy { .. } => {
+            if momentum_score < maker_momentum_threshold as f64 {
+                StrategySignal {
+                    action: TradeAction::Skip,
+                    ..signal
+                }
+            } else {
+                signal
+            }
+        }
+    }
+}
+
 /// Convert American odds to implied probability.
 /// Positive odds (e.g., +150): prob = 100 / (odds + 100)
 /// Negative odds (e.g., -150): prob = |odds| / (|odds| + 100)
@@ -189,5 +236,59 @@ mod tests {
         assert!((home - away).abs() < 0.001);
         assert!((home - draw).abs() < 0.001);
         assert!((home + away + draw - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_momentum_gate_skip_below_maker_threshold() {
+        // Edge qualifies for taker, but momentum is too low → SKIP
+        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        assert_eq!(signal.action, TradeAction::TakerBuy);
+        let gated = momentum_gate(signal, 30.0, 40, 75);
+        assert_eq!(gated.action, TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_momentum_gate_maker_in_middle_range() {
+        // Edge qualifies for taker, momentum is moderate → MAKER
+        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        assert_eq!(signal.action, TradeAction::TakerBuy);
+        let gated = momentum_gate(signal, 55.0, 40, 75);
+        assert!(matches!(gated.action, TradeAction::MakerBuy { .. }));
+    }
+
+    #[test]
+    fn test_momentum_gate_taker_above_threshold() {
+        // Edge qualifies for taker, momentum is high → TAKER preserved
+        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        assert_eq!(signal.action, TradeAction::TakerBuy);
+        let gated = momentum_gate(signal, 80.0, 40, 75);
+        assert_eq!(gated.action, TradeAction::TakerBuy);
+    }
+
+    #[test]
+    fn test_momentum_gate_skip_stays_skip() {
+        // Edge too low → SKIP regardless of momentum
+        let signal = evaluate(61, 58, 60, 5, 2, 1);
+        assert_eq!(signal.action, TradeAction::Skip);
+        let gated = momentum_gate(signal, 90.0, 40, 75);
+        assert_eq!(gated.action, TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_momentum_gate_maker_downgraded_to_skip() {
+        // Edge qualifies for maker only, momentum too low → SKIP
+        let signal = evaluate(63, 58, 60, 5, 2, 1);
+        assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
+        let gated = momentum_gate(signal, 20.0, 40, 75);
+        assert_eq!(gated.action, TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_momentum_gate_maker_preserved() {
+        // Edge qualifies for maker, momentum moderate → MAKER preserved
+        let signal = evaluate(63, 58, 60, 5, 2, 1);
+        assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
+        let gated = momentum_gate(signal, 50.0, 40, 75);
+        assert!(matches!(gated.action, TradeAction::MakerBuy { .. }));
     }
 }
