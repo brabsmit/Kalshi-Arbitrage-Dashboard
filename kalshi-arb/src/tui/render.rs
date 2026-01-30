@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::state::AppState;
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
@@ -228,4 +230,59 @@ fn draw_footer(f: &mut Frame, _state: &AppState, area: Rect) {
     ]);
     let para = Paragraph::new(line);
     f.render_widget(para, area);
+}
+
+fn truncate_with_ellipsis(s: &str, max_width: usize) -> Cow<'_, str> {
+    if s.len() <= max_width {
+        Cow::Borrowed(s)
+    } else if max_width <= 3 {
+        Cow::Owned(".".repeat(max_width))
+    } else {
+        Cow::Owned(format!("{}...", &s[..max_width - 3]))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_truncate_short_string_unchanged() {
+        assert_eq!(truncate_with_ellipsis("hello", 10), "hello");
+    }
+
+    #[test]
+    fn test_truncate_exact_fit() {
+        assert_eq!(truncate_with_ellipsis("hello", 5), "hello");
+    }
+
+    #[test]
+    fn test_truncate_long_string() {
+        assert_eq!(truncate_with_ellipsis("hello world", 8), "hello...");
+    }
+
+    #[test]
+    fn test_truncate_very_small_width() {
+        assert_eq!(truncate_with_ellipsis("hello", 2), "..");
+    }
+
+    #[test]
+    fn test_truncate_width_3() {
+        assert_eq!(truncate_with_ellipsis("hello", 3), "...");
+    }
+
+    #[test]
+    fn test_truncate_width_4() {
+        assert_eq!(truncate_with_ellipsis("hello", 4), "h...");
+    }
+
+    #[test]
+    fn test_truncate_empty_string() {
+        assert_eq!(truncate_with_ellipsis("", 5), "");
+    }
+
+    #[test]
+    fn test_truncate_zero_width() {
+        assert_eq!(truncate_with_ellipsis("hello", 0), "");
+    }
 }
