@@ -20,6 +20,12 @@ use tui::state::{AppState, MarketRow};
 /// Live orderbook: ticker -> (best_yes_bid, best_yes_ask, best_no_bid, best_no_ask)
 type LiveBook = Arc<Mutex<HashMap<String, (u32, u32, u32, u32)>>>;
 
+/// Extract last name from a full name (for MMA fighter matching).
+/// "Alex Volkanovski" -> "Volkanovski", "Benoit Saint-Denis" -> "Saint-Denis"
+fn last_name(full_name: &str) -> &str {
+    full_name.rsplit_once(' ').map_or(full_name, |(_, last)| last)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -222,15 +228,8 @@ async fn main() -> Result<()> {
                 match odds_feed.fetch_odds(sport).await {
                     Ok(updates) => {
                         for update in updates {
-                            // Devig using first bookmaker with valid odds
                             if let Some(bm) = update.bookmakers.first() {
-                                let (home_fv, _away_fv) =
-                                    strategy::devig(bm.home_odds, bm.away_odds);
-                                let home_cents = strategy::fair_value_cents(home_fv);
-
                                 // Parse game date from odds feed timestamp.
-                                // Convert to US Eastern before extracting date —
-                                // Kalshi ticker dates use ET game dates, not UTC.
                                 let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
                                 let date = chrono::DateTime::parse_from_rfc3339(
                                     &update.commence_time,
@@ -238,18 +237,140 @@ async fn main() -> Result<()> {
                                 .ok()
                                 .map(|dt| dt.with_timezone(&eastern).date_naive());
 
-                                if let Some(date) = date {
-                                    // Use find_match for proper home/away + inverse handling
+                                let Some(date) = date else { continue };
+
+                                // MMA: use last names for matching (Kalshi indexes by last name)
+                                let (lookup_home, lookup_away) = if sport == "mma" {
+                                    (last_name(&update.home_team).to_string(), last_name(&update.away_team).to_string())
+                                } else {
+                                    (update.home_team.clone(), update.away_team.clone())
+                                };
+
+                                // Check if this is a 3-way sport (soccer)
+                                let is_3way = sport.starts_with("soccer");
+
+                                if is_3way {
+                                    // --- 3-way evaluation (soccer) ---
+                                    let draw_odds = bm.draw_odds.unwrap_or(300.0);
+                                    let (home_fv, away_fv, draw_fv) =
+                                        strategy::devig_3way(bm.home_odds, bm.away_odds, draw_odds);
+
+                                    let key = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
+                                    let game = key.and_then(|k| market_index.get(&k));
+
+                                    if let Some(game) = game {
+                                        // Evaluate each side that exists
+                                        let sides: Vec<(Option<&matcher::SideMarket>, u32, &str)> = vec![
+                                            (game.home.as_ref(), strategy::fair_value_cents(home_fv), "HOME"),
+                                            (game.away.as_ref(), strategy::fair_value_cents(away_fv), "AWAY"),
+                                            (game.draw.as_ref(), strategy::fair_value_cents(draw_fv), "DRAW"),
+                                        ];
+
+                                        for (side_opt, fair, label) in sides {
+                                            let Some(side) = side_opt else { continue };
+
+                                            let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
+                                                if let Some(&(yb, ya, _, _)) = book.get(&side.ticker) {
+                                                    if ya > 0 { (yb, ya) } else { (side.yes_bid, side.yes_ask) }
+                                                } else {
+                                                    (side.yes_bid, side.yes_ask)
+                                                }
+                                            } else {
+                                                (side.yes_bid, side.yes_ask)
+                                            };
+
+                                            let signal = strategy::evaluate(
+                                                fair, bid, ask,
+                                                strategy_config.taker_edge_threshold,
+                                                strategy_config.maker_edge_threshold,
+                                                strategy_config.min_edge_after_fees,
+                                            );
+
+                                            let action_str = match &signal.action {
+                                                strategy::TradeAction::TakerBuy => "TAKER",
+                                                strategy::TradeAction::MakerBuy { .. } => "MAKER",
+                                                strategy::TradeAction::Skip => "SKIP",
+                                            };
+
+                                            market_rows.push(MarketRow {
+                                                ticker: side.ticker.clone(),
+                                                fair_value: fair,
+                                                bid,
+                                                ask,
+                                                edge: signal.edge,
+                                                action: action_str.to_string(),
+                                                latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+                                            });
+
+                                            if signal.action != strategy::TradeAction::Skip {
+                                                tracing::warn!(
+                                                    ticker = %side.ticker,
+                                                    action = %action_str,
+                                                    side = label,
+                                                    price = signal.price,
+                                                    edge = signal.edge,
+                                                    net = signal.net_profit_estimate,
+                                                    "signal detected (dry run)"
+                                                );
+                                            }
+
+                                            // Sim mode: place virtual buy
+                                            if sim_mode_engine && signal.action != strategy::TradeAction::Skip {
+                                                let entry_price = signal.price;
+                                                let qty = (5000u32 / entry_price).max(1);
+                                                let entry_cost = (qty * entry_price) as i64;
+                                                let entry_fee = calculate_fee(entry_price, qty, true) as i64;
+                                                let total_cost = entry_cost + entry_fee;
+
+                                                let ticker_clone = side.ticker.clone();
+                                                state_tx_engine.send_modify(|s| {
+                                                    if s.sim_balance_cents < total_cost {
+                                                        return;
+                                                    }
+                                                    if s.sim_positions.iter().any(|p| p.ticker == ticker_clone) {
+                                                        return;
+                                                    }
+                                                    s.sim_balance_cents -= total_cost;
+                                                    s.sim_positions.push(tui::state::SimPosition {
+                                                        ticker: ticker_clone.clone(),
+                                                        quantity: qty,
+                                                        entry_price,
+                                                        sell_price: fair,
+                                                        entry_fee: entry_fee as u32,
+                                                        filled_at: std::time::Instant::now(),
+                                                    });
+                                                    s.push_trade(tui::state::TradeRow {
+                                                        time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                                        action: "BUY".to_string(),
+                                                        ticker: ticker_clone.clone(),
+                                                        price: entry_price,
+                                                        quantity: qty,
+                                                        order_type: "SIM".to_string(),
+                                                        pnl: None,
+                                                    });
+                                                    s.push_log("TRADE", format!(
+                                                        "SIM BUY {}x {} @ {}¢, sell target {}¢",
+                                                        qty, ticker_clone, entry_price, fair
+                                                    ));
+                                                });
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // --- 2-way evaluation (existing behavior) ---
+                                    let (home_fv, _away_fv) =
+                                        strategy::devig(bm.home_odds, bm.away_odds);
+                                    let home_cents = strategy::fair_value_cents(home_fv);
+
                                     if let Some(mkt) = matcher::find_match(
                                         &market_index,
                                         sport,
-                                        &update.home_team,
-                                        &update.away_team,
+                                        &lookup_home,
+                                        &lookup_away,
                                         date,
                                     ) {
                                         let fair = home_cents;
 
-                                        // Override stale REST prices with live WS prices if available
                                         let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
                                             if let Some(&(yes_bid, yes_ask, _, _)) = book.get(&mkt.ticker) {
                                                 if yes_ask > 0 { (yes_bid, yes_ask) } else { (mkt.best_bid, mkt.best_ask) }
@@ -261,9 +382,7 @@ async fn main() -> Result<()> {
                                         };
 
                                         let signal = strategy::evaluate(
-                                            fair,
-                                            bid,
-                                            ask,
+                                            fair, bid, ask,
                                             strategy_config.taker_edge_threshold,
                                             strategy_config.maker_edge_threshold,
                                             strategy_config.min_edge_after_fees,
@@ -282,12 +401,9 @@ async fn main() -> Result<()> {
                                             ask,
                                             edge: signal.edge,
                                             action: action_str.to_string(),
-                                            latency_ms: Some(
-                                                cycle_start.elapsed().as_millis() as u64,
-                                            ),
+                                            latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
                                         });
 
-                                        // Signal evaluation only — no order placement
                                         if signal.action != strategy::TradeAction::Skip {
                                             tracing::warn!(
                                                 ticker = %mkt.ticker,
@@ -309,14 +425,12 @@ async fn main() -> Result<()> {
                                             let total_cost = entry_cost + entry_fee;
 
                                             state_tx_engine.send_modify(|s| {
-                                                // Skip if insufficient balance or duplicate ticker
                                                 if s.sim_balance_cents < total_cost {
                                                     return;
                                                 }
                                                 if s.sim_positions.iter().any(|p| p.ticker == mkt.ticker) {
                                                     return;
                                                 }
-
                                                 s.sim_balance_cents -= total_cost;
                                                 s.sim_positions.push(tui::state::SimPosition {
                                                     ticker: mkt.ticker.clone(),
