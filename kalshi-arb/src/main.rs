@@ -84,7 +84,9 @@ async fn main() -> Result<()> {
         match rest.get_markets_by_series(series).await {
             Ok(markets) => {
                 for m in &markets {
-                    if let Some((away, home)) = matcher::parse_kalshi_title(&m.title) {
+                    let parsed = matcher::parse_kalshi_title(&m.title)
+                        .or_else(|| matcher::parse_ufc_title(&m.title));
+                    if let Some((away, home)) = parsed {
                         // Date priority: ticker (actual game date) > event_start_time > others
                         // Kalshi's expected_expiration_time/close_time are market expiry dates,
                         // NOT game dates — they can be weeks after the game.
@@ -121,15 +123,19 @@ async fn main() -> Result<()> {
                                 };
 
                                 // Determine which side this market represents
-                                match matcher::is_away_market(&m.ticker, &away, &home) {
-                                    Some(true) => game.away = Some(side_market),
-                                    Some(false) => game.home = Some(side_market),
-                                    None => {
-                                        // Fallback: first goes to away, second to home
-                                        if game.away.is_none() {
-                                            game.away = Some(side_market);
-                                        } else {
-                                            game.home = Some(side_market);
+                                let winner_code = m.ticker.split('-').last().unwrap_or("");
+                                if winner_code.eq_ignore_ascii_case("TIE") {
+                                    game.draw = Some(side_market);
+                                } else {
+                                    match matcher::is_away_market(&m.ticker, &away, &home) {
+                                        Some(true) => game.away = Some(side_market),
+                                        Some(false) => game.home = Some(side_market),
+                                        None => {
+                                            if game.away.is_none() {
+                                                game.away = Some(side_market);
+                                            } else {
+                                                game.home = Some(side_market);
+                                            }
                                         }
                                     }
                                 }
