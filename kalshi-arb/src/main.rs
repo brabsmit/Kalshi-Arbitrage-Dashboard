@@ -204,12 +204,15 @@ async fn main() -> Result<()> {
                                     strategy::devig(bm.home_odds, bm.away_odds);
                                 let home_cents = strategy::fair_value_cents(home_fv);
 
-                                // Parse game date from odds feed timestamp
+                                // Parse game date from odds feed timestamp.
+                                // Convert to US Eastern before extracting date —
+                                // Kalshi ticker dates use ET game dates, not UTC.
+                                let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
                                 let date = chrono::DateTime::parse_from_rfc3339(
                                     &update.commence_time,
                                 )
                                 .ok()
-                                .map(|dt| dt.date_naive());
+                                .map(|dt| dt.with_timezone(&eastern).date_naive());
 
                                 if let Some(date) = date {
                                     // Use find_match for proper home/away + inverse handling
