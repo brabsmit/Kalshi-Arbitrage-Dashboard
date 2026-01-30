@@ -6,6 +6,7 @@ mod tui;
 
 use anyhow::Result;
 use config::Config;
+use engine::fees::calculate_fee;
 use engine::{matcher, strategy};
 use feed::{the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
@@ -179,6 +180,7 @@ async fn main() -> Result<()> {
     let strategy_config = config.strategy.clone();
     let rest_for_engine = rest.clone();
 
+    let sim_mode_engine = sim_mode;
     let state_tx_engine = state_tx.clone();
     tokio::spawn(async move {
         let mut is_paused = false;
@@ -288,6 +290,48 @@ async fn main() -> Result<()> {
                                                 "signal detected (dry run)"
                                             );
                                         }
+
+                                        // Sim mode: place virtual buy
+                                        if sim_mode_engine && signal.action != strategy::TradeAction::Skip {
+                                            let entry_price = signal.price;
+                                            let qty = (5000u32 / entry_price).max(1);
+                                            let entry_cost = (qty * entry_price) as i64;
+                                            let entry_fee = calculate_fee(entry_price, qty, true) as i64;
+                                            let total_cost = entry_cost + entry_fee;
+
+                                            state_tx_engine.send_modify(|s| {
+                                                // Skip if insufficient balance or duplicate ticker
+                                                if s.sim_balance_cents < total_cost {
+                                                    return;
+                                                }
+                                                if s.sim_positions.iter().any(|p| p.ticker == mkt.ticker) {
+                                                    return;
+                                                }
+
+                                                s.sim_balance_cents -= total_cost;
+                                                s.sim_positions.push(tui::state::SimPosition {
+                                                    ticker: mkt.ticker.clone(),
+                                                    quantity: qty,
+                                                    entry_price,
+                                                    sell_price: fair,
+                                                    entry_fee: entry_fee as u32,
+                                                    filled_at: std::time::Instant::now(),
+                                                });
+                                                s.push_trade(tui::state::TradeRow {
+                                                    time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                                    action: "BUY".to_string(),
+                                                    ticker: mkt.ticker.clone(),
+                                                    price: entry_price,
+                                                    quantity: qty,
+                                                    order_type: "SIM".to_string(),
+                                                    pnl: None,
+                                                });
+                                                s.push_log("TRADE", format!(
+                                                    "SIM BUY {}x {} @ {}¢, sell target {}¢",
+                                                    qty, mkt.ticker, entry_price, fair
+                                                ));
+                                            });
+                                        }
                                     }
                                 }
                             }
@@ -308,10 +352,12 @@ async fn main() -> Result<()> {
             });
 
             // Refresh balance each cycle
-            if let Ok(balance) = rest_for_engine.get_balance().await {
-                state_tx_engine.send_modify(|s| {
-                    s.balance_cents = balance;
-                });
+            if !sim_mode_engine {
+                if let Ok(balance) = rest_for_engine.get_balance().await {
+                    state_tx_engine.send_modify(|s| {
+                        s.balance_cents = balance;
+                    });
+                }
             }
 
             // Poll interval: 60s to stay within odds-api.io rate limits
