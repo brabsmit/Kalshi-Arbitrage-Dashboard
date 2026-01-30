@@ -233,6 +233,12 @@ async fn main() -> Result<()> {
         // Accumulated market rows across sports (for partial cycle updates)
         let mut accumulated_rows: HashMap<String, MarketRow> = HashMap::new();
 
+        // Filter statistics
+        let mut filter_live: usize;
+        let mut filter_pre_game: usize;
+        let mut filter_closed: usize;
+        let mut earliest_commence: Option<chrono::DateTime<chrono::Utc>> = None;
+
         loop {
             // Drain TUI commands
             while let Ok(cmd) = cmd_rx.try_recv() {
@@ -255,6 +261,11 @@ async fn main() -> Result<()> {
             }
 
             let cycle_start = Instant::now();
+
+            filter_live = 0;
+            filter_pre_game = 0;
+            filter_closed = 0;
+            earliest_commence = None;
 
             for sport in &odds_sports {
                 // Determine if any event in this sport is live
@@ -327,6 +338,27 @@ async fn main() -> Result<()> {
 
                                 let Some(date) = date else { continue };
 
+                                // --- Live filter: game must be in-progress + market open ---
+                                let now_utc = chrono::Utc::now();
+                                let commence_dt = chrono::DateTime::parse_from_rfc3339(
+                                    &update.commence_time,
+                                ).ok().map(|dt| dt.with_timezone(&chrono::Utc));
+
+                                let game_started = commence_dt
+                                    .is_some_and(|ct| ct <= now_utc);
+
+                                if !game_started {
+                                    filter_pre_game += 1;
+                                    // Track earliest commence for countdown
+                                    if let Some(ct) = commence_dt {
+                                        earliest_commence = Some(match earliest_commence {
+                                            Some(existing) => existing.min(ct),
+                                            None => ct,
+                                        });
+                                    }
+                                    continue;
+                                }
+
                                 // MMA: use last names for matching (Kalshi indexes by last name)
                                 let (lookup_home, lookup_away) = if sport == "mma" {
                                     (last_name(&update.home_team).to_string(), last_name(&update.away_team).to_string())
@@ -368,6 +400,17 @@ async fn main() -> Result<()> {
 
                                         for (side_opt, fair, label) in sides {
                                             let Some(side) = side_opt else { continue };
+
+                                            // Check Kalshi market is still open
+                                            let market_open = side.status == "open"
+                                                && side.close_time.as_deref()
+                                                    .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
+                                                    .map_or(true, |ct| ct.with_timezone(&chrono::Utc) > now_utc);
+                                            if !market_open {
+                                                filter_closed += 1;
+                                                continue;
+                                            }
+                                            filter_live += 1;
 
                                             let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
                                                 if let Some(&(yb, ya, _, _)) = book.get(&side.ticker) {
@@ -495,6 +538,24 @@ async fn main() -> Result<()> {
                                         date,
                                     ) {
                                         let fair = home_cents;
+
+                                        // Check Kalshi market is still open
+                                        let key_check = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
+                                        let game_check = key_check.and_then(|k| market_index.get(&k));
+                                        let side_market = game_check.and_then(|g| {
+                                            if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
+                                        });
+                                        let market_open = side_market.is_some_and(|sm| {
+                                            sm.status == "open"
+                                                && sm.close_time.as_deref()
+                                                    .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
+                                                    .map_or(true, |ct| ct.with_timezone(&chrono::Utc) > now_utc)
+                                        });
+                                        if !market_open {
+                                            filter_closed += 1;
+                                            continue;
+                                        }
+                                        filter_live += 1;
 
                                         let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
                                             if let Some(&(yes_bid, yes_ask, _, _)) = book.get(&mkt.ticker) {
@@ -636,6 +697,12 @@ async fn main() -> Result<()> {
             state_tx_engine.send_modify(|state| {
                 state.markets = market_rows;
                 state.live_sports = live_sports;
+                state.filter_stats = tui::state::FilterStats {
+                    live: filter_live,
+                    pre_game: filter_pre_game,
+                    closed: filter_closed,
+                };
+                state.next_game_start = earliest_commence;
             });
 
             // Refresh balance each cycle
