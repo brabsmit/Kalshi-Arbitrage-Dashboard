@@ -141,10 +141,11 @@ async fn tui_loop(
                                     position_scroll_offset = position_scroll_offset.saturating_sub(1);
                                 }
                                 KeyCode::Char('G') => {
-                                    let total = if state_rx.borrow().sim_mode {
-                                        state_rx.borrow().sim_positions.len()
+                                    let state = state_rx.borrow();
+                                    let total = if state.sim_mode {
+                                        state.sim_positions.len()
                                     } else {
-                                        state_rx.borrow().positions.len()
+                                        state.positions.len()
                                     };
                                     position_scroll_offset = total;
                                 }
