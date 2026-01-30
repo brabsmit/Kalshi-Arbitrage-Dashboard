@@ -13,6 +13,7 @@ pub struct Config {
     pub execution: ExecutionConfig,
     pub kalshi: KalshiConfig,
     pub odds_feed: OddsFeedConfig,
+    pub momentum: MomentumConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -50,6 +51,20 @@ pub struct OddsFeedConfig {
     pub sports: Vec<String>,
     pub base_url: String,
     pub bookmakers: String,
+    pub live_poll_interval_s: Option<u64>,
+    pub pre_game_poll_interval_s: Option<u64>,
+    pub quota_warning_threshold: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct MomentumConfig {
+    pub maker_momentum_threshold: u8,
+    pub taker_momentum_threshold: u8,
+    pub cancel_threshold: u8,
+    pub velocity_weight: f64,
+    pub book_pressure_weight: f64,
+    pub cancel_check_interval_ms: u64,
+    pub velocity_window_size: usize,
 }
 
 impl Config {
