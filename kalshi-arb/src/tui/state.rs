@@ -27,6 +27,11 @@ pub struct AppState {
     pub sim_balance_cents: i64,
     pub sim_positions: Vec<SimPosition>,
     pub sim_realized_pnl_cents: i64,
+    pub api_requests_used: u64,
+    pub api_requests_remaining: u64,
+    pub api_burn_rate: f64,
+    pub api_hours_remaining: f64,
+    pub live_sports: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,6 +43,7 @@ pub struct MarketRow {
     pub edge: i32,
     pub action: String,
     pub latency_ms: Option<u64>,
+    pub momentum_score: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +109,11 @@ impl AppState {
             sim_balance_cents: 100_000,
             sim_positions: Vec::new(),
             sim_realized_pnl_cents: 0,
+            api_requests_used: 0,
+            api_requests_remaining: 0,
+            api_burn_rate: 0.0,
+            api_hours_remaining: 0.0,
+            live_sports: Vec::new(),
         }
     }
 

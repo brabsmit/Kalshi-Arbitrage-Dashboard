@@ -307,6 +307,7 @@ async fn main() -> Result<()> {
                                                 edge: signal.edge,
                                                 action: action_str.to_string(),
                                                 latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+                                                momentum_score: 0.0,
                                             });
 
                                             if signal.action != strategy::TradeAction::Skip {
@@ -409,6 +410,7 @@ async fn main() -> Result<()> {
                                             edge: signal.edge,
                                             action: action_str.to_string(),
                                             latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+                                            momentum_score: 0.0,
                                         });
 
                                         if signal.action != strategy::TradeAction::Skip {
