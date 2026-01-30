@@ -12,67 +12,116 @@ use ratatui::{
 const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(3),  // header
-            Constraint::Min(8),    // markets
-            Constraint::Length(6), // positions
-            Constraint::Length(6), // trades
-            Constraint::Min(5),   // logs
-            Constraint::Length(1), // footer
-        ])
-        .split(f.area());
+    let width = f.area().width.saturating_sub(2) as usize;
 
-    draw_header(f, state, chunks[0], spinner_frame);
-    draw_markets(f, state, chunks[1]);
-    draw_positions(f, state, chunks[2]);
-    draw_trades(f, state, chunks[3]);
-    draw_logs(f, state, chunks[4]);
-    draw_footer(f, state, chunks[5]);
+    let bal = format!("${:.2}", state.balance_cents as f64 / 100.0);
+    let exp = format!("${:.2}", state.total_exposure_cents as f64 / 100.0);
+    let pnl_val = format!("${:.2}", state.realized_pnl_cents as f64 / 100.0);
+    let uptime = state.uptime();
+    let row1_width = 1 + 5 + bal.len() + 3 + 5 + exp.len() + 3 + 5 + pnl_val.len();
+    let full_width = row1_width + 3 + 4 + 4 + 3 + 4 + uptime.len() + 8;
+    let header_height = if full_width > width { 4 } else { 3 };
+
+    if state.log_focus {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(header_height),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        draw_header(f, state, chunks[0], spinner_frame);
+        draw_logs(f, state, chunks[1]);
+        draw_footer(f, state, chunks[2]);
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(header_height),
+                Constraint::Min(8),
+                Constraint::Length(6),
+                Constraint::Length(6),
+                Constraint::Min(5),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        draw_header(f, state, chunks[0], spinner_frame);
+        draw_markets(f, state, chunks[1]);
+        draw_positions(f, state, chunks[2]);
+        draw_trades(f, state, chunks[3]);
+        draw_logs(f, state, chunks[4]);
+        draw_footer(f, state, chunks[5]);
+    }
 }
 
 fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     let kalshi_status = if state.kalshi_ws_connected {
-        Span::styled("CONNECTED", Style::default().fg(Color::Green))
+        Span::styled("OK", Style::default().fg(Color::Green))
     } else {
-        Span::styled("DISCONNECTED", Style::default().fg(Color::Red))
+        Span::styled("DOWN", Style::default().fg(Color::Red))
     };
 
     let activity_indicator = if state.is_paused {
-        Span::styled(" ⏸ PAUSED", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        Span::styled(" PAUSED", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
     } else {
         let ch = SPINNER_FRAMES[(spinner_frame as usize) % SPINNER_FRAMES.len()];
         Span::styled(
-            format!(" {} RUNNING", ch),
+            format!(" {} RUN", ch),
             Style::default().fg(Color::Cyan),
         )
     };
 
-    let line = Line::from(vec![
-        Span::raw(format!(
-            " Balance: ${:.2}  |  Exposure: ${:.2}  |  P&L: ",
-            state.balance_cents as f64 / 100.0,
-            state.total_exposure_cents as f64 / 100.0,
-        )),
-        Span::styled(
-            format!("${:.2}", state.realized_pnl_cents as f64 / 100.0),
-            Style::default().fg(if state.realized_pnl_cents >= 0 {
-                Color::Green
-            } else {
-                Color::Red
-            }),
-        ),
-        Span::raw("  |  Kalshi: "),
-        kalshi_status,
-        Span::raw(format!("  |  Uptime: {}", state.uptime())),
-        activity_indicator,
-    ]);
+    let bal = format!("${:.2}", state.balance_cents as f64 / 100.0);
+    let exp = format!("${:.2}", state.total_exposure_cents as f64 / 100.0);
+    let pnl_val = format!("${:.2}", state.realized_pnl_cents as f64 / 100.0);
+    let uptime = state.uptime();
+
+    let pnl_span = Span::styled(
+        pnl_val.clone(),
+        Style::default().fg(if state.realized_pnl_cents >= 0 {
+            Color::Green
+        } else {
+            Color::Red
+        }),
+    );
+
+    // Row 1 content: " Bal: $X.XX | Exp: $X.XX | P&L: $X.XX"
+    // Row 2 content: " WS: OK | Up: Xh XXm | <activity>"
+    let row1_width = 1 + 5 + bal.len() + 3 + 5 + exp.len() + 3 + 5 + pnl_val.len();
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let needs_wrap = row1_width + 3 + 4 + 4 + 3 + 4 + uptime.len() + 8 > inner_width;
+
+    let lines = if needs_wrap {
+        vec![
+            Line::from(vec![
+                Span::raw(format!(" Bal: {} | Exp: {} | P&L: ", bal, exp)),
+                pnl_span,
+            ]),
+            Line::from(vec![
+                Span::raw(" WS: "),
+                kalshi_status,
+                Span::raw(format!(" | Up: {}", uptime)),
+                activity_indicator,
+            ]),
+        ]
+    } else {
+        vec![Line::from(vec![
+            Span::raw(format!(" Bal: {} | Exp: {} | P&L: ", bal, exp)),
+            pnl_span,
+            Span::raw(" | WS: "),
+            kalshi_status,
+            Span::raw(format!(" | Up: {}", uptime)),
+            activity_indicator,
+        ])]
+    };
 
     let block = Block::default()
         .title(" Kalshi Arb Engine ")
         .borders(Borders::ALL);
-    let para = Paragraph::new(line).block(block);
+    let para = Paragraph::new(lines).block(block);
     f.render_widget(para, area);
 }
 
