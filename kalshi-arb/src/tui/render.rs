@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use super::state::AppState;
+use super::state::{AppState, PositionRow};
 use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -87,32 +87,49 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
         )
     };
 
-    let bal = format!("${:.2}", state.balance_cents as f64 / 100.0);
-    let exp = format!("${:.2}", state.total_exposure_cents as f64 / 100.0);
-    let pnl_val = format!("${:.2}", state.realized_pnl_cents as f64 / 100.0);
+    let (bal_cents, exp_cents, pnl_cents) = if state.sim_mode {
+        let exposure: i64 = state.sim_positions.iter()
+            .map(|p| (p.entry_price * p.quantity) as i64)
+            .sum();
+        (state.sim_balance_cents, exposure, state.sim_realized_pnl_cents)
+    } else {
+        (state.balance_cents, state.total_exposure_cents, state.realized_pnl_cents)
+    };
+
+    let bal = format!("${:.2}", bal_cents as f64 / 100.0);
+    let exp = format!("${:.2}", exp_cents as f64 / 100.0);
+    let pnl_val = format!("${:.2}", pnl_cents as f64 / 100.0);
     let uptime = state.uptime();
 
-    let pnl_span = Span::styled(
-        pnl_val.clone(),
-        Style::default().fg(if state.realized_pnl_cents >= 0 {
-            Color::Green
-        } else {
-            Color::Red
-        }),
-    );
+    let num_color = if state.sim_mode {
+        Color::Blue
+    } else if pnl_cents >= 0 {
+        Color::Green
+    } else {
+        Color::Red
+    };
 
-    // Row 1 content: " Bal: $X.XX | Exp: $X.XX | P&L: $X.XX"
-    // Row 2 content: " WS: OK | Up: Xh XXm | <activity>"
+    let pnl_span = Span::styled(pnl_val.clone(), Style::default().fg(num_color));
+
     let row1_width = 1 + 5 + bal.len() + 3 + 5 + exp.len() + 3 + 5 + pnl_val.len();
     let inner_width = area.width.saturating_sub(2) as usize;
     let needs_wrap = row1_width + 3 + 4 + 4 + 3 + 4 + uptime.len() + 8 > inner_width;
 
+    let bal_exp_prefix = if state.sim_mode {
+        vec![
+            Span::styled(" Bal: ", Style::default().fg(Color::Blue)),
+            Span::styled(&bal, Style::default().fg(Color::Blue)),
+            Span::styled(" | Exp: ", Style::default().fg(Color::Blue)),
+            Span::styled(&exp, Style::default().fg(Color::Blue)),
+            Span::styled(" | P&L: ", Style::default().fg(Color::Blue)),
+        ]
+    } else {
+        vec![Span::raw(format!(" Bal: {} | Exp: {} | P&L: ", bal, exp))]
+    };
+
     let lines = if needs_wrap {
         vec![
-            Line::from(vec![
-                Span::raw(format!(" Bal: {} | Exp: {} | P&L: ", bal, exp)),
-                pnl_span,
-            ]),
+            Line::from([bal_exp_prefix, vec![pnl_span]].concat()),
             Line::from(vec![
                 Span::raw(" WS: "),
                 kalshi_status,
@@ -121,18 +138,35 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
             ]),
         ]
     } else {
-        vec![Line::from(vec![
-            Span::raw(format!(" Bal: {} | Exp: {} | P&L: ", bal, exp)),
-            pnl_span,
-            Span::raw(" | WS: "),
-            kalshi_status,
-            Span::raw(format!(" | Up: {}", uptime)),
-            activity_indicator,
-        ])]
+        vec![Line::from(
+            [
+                bal_exp_prefix,
+                vec![
+                    pnl_span,
+                    Span::raw(" | WS: "),
+                    kalshi_status,
+                    Span::raw(format!(" | Up: {}", uptime)),
+                    activity_indicator,
+                ],
+            ]
+            .concat(),
+        )]
+    };
+
+    let title = if state.sim_mode {
+        " Kalshi Arb Engine [SIMULATION] "
+    } else {
+        " Kalshi Arb Engine "
+    };
+
+    let title_style = if state.sim_mode {
+        Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+    } else {
+        Style::default()
     };
 
     let block = Block::default()
-        .title(" Kalshi Arb Engine ")
+        .title(Span::styled(title, title_style))
         .borders(Borders::ALL);
     let para = Paragraph::new(lines).block(block);
     f.render_widget(para, area);
@@ -260,8 +294,23 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     let header = Row::new(vec!["Ticker", "Qty", "Entry", "Sell @", "P&L"])
         .style(Style::default().add_modifier(Modifier::BOLD));
 
-    let rows: Vec<Row> = state
-        .positions
+    let positions_source: Vec<PositionRow> = if state.sim_mode {
+        state.sim_positions.iter().map(|sp| {
+            let unrealized = (sp.sell_price as i32 - sp.entry_price as i32) * sp.quantity as i32
+                - sp.entry_fee as i32;
+            PositionRow {
+                ticker: sp.ticker.clone(),
+                quantity: sp.quantity,
+                entry_price: sp.entry_price,
+                sell_price: sp.sell_price,
+                unrealized_pnl: unrealized,
+            }
+        }).collect()
+    } else {
+        state.positions.clone()
+    };
+
+    let rows: Vec<Row> = positions_source
         .iter()
         .map(|p| {
             let pnl_color = if p.unrealized_pnl >= 0 { Color::Green } else { Color::Red };
