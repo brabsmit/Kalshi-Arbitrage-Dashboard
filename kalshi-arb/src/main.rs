@@ -7,13 +7,14 @@ mod tui;
 use anyhow::Result;
 use config::Config;
 use engine::fees::calculate_fee;
+use engine::momentum::{BookPressureTracker, MomentumScorer, VelocityTracker};
 use engine::{matcher, strategy};
 use feed::{the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, watch};
 use tui::state::{AppState, MarketRow};
 
@@ -197,12 +198,38 @@ async fn main() -> Result<()> {
     let mut odds_feed = TheOddsApi::new(odds_api_key, &config.odds_feed.base_url, &config.odds_feed.bookmakers);
     let odds_sports = config.odds_feed.sports.clone();
     let strategy_config = config.strategy.clone();
+    let momentum_config = config.momentum.clone();
+    let live_poll_interval = Duration::from_secs(
+        config.odds_feed.live_poll_interval_s.unwrap_or(20),
+    );
+    let pre_game_poll_interval = Duration::from_secs(
+        config.odds_feed.pre_game_poll_interval_s.unwrap_or(120),
+    );
+    let quota_warning_threshold = config.odds_feed.quota_warning_threshold.unwrap_or(100);
     let rest_for_engine = rest.clone();
 
     let sim_mode_engine = sim_mode;
     let state_tx_engine = state_tx.clone();
     tokio::spawn(async move {
         let mut is_paused = false;
+
+        // Per-event velocity trackers: keyed by event_id
+        let mut velocity_trackers: HashMap<String, VelocityTracker> = HashMap::new();
+        // Per-ticker book pressure trackers
+        let mut book_pressure_trackers: HashMap<String, BookPressureTracker> = HashMap::new();
+        // Momentum scorer
+        let scorer = MomentumScorer::new(
+            momentum_config.velocity_weight,
+            momentum_config.book_pressure_weight,
+        );
+        // Per-sport last poll time
+        let mut last_poll: HashMap<String, Instant> = HashMap::new();
+        // Per-sport commence times (to detect live games)
+        let mut sport_commence_times: HashMap<String, Vec<String>> = HashMap::new();
+        // Track API burn rate
+        let mut api_request_times: VecDeque<Instant> = VecDeque::with_capacity(100);
+        // Accumulated market rows across sports (for partial cycle updates)
+        let mut accumulated_rows: HashMap<String, MarketRow> = HashMap::new();
 
         loop {
             // Drain TUI commands
@@ -226,11 +253,66 @@ async fn main() -> Result<()> {
             }
 
             let cycle_start = Instant::now();
-            let mut market_rows: Vec<MarketRow> = Vec::new();
 
             for sport in &odds_sports {
+                // Determine if any event in this sport is live
+                let is_live = sport_commence_times.get(sport.as_str()).map_or(false, |times| {
+                    let now = chrono::Utc::now();
+                    times.iter().any(|ct| {
+                        chrono::DateTime::parse_from_rfc3339(ct)
+                            .ok()
+                            .map_or(false, |dt| dt < now)
+                    })
+                });
+
+                // Check if quota is critically low — force pre-game interval
+                let quota_low = api_request_times.len() > 0
+                    && state_tx_engine.borrow().api_requests_remaining < quota_warning_threshold;
+                let interval = if quota_low || !is_live {
+                    pre_game_poll_interval
+                } else {
+                    live_poll_interval
+                };
+
+                // Skip if not enough time has passed since last poll for this sport
+                if let Some(&last) = last_poll.get(sport.as_str()) {
+                    if cycle_start.duration_since(last) < interval {
+                        continue;
+                    }
+                }
+
+                last_poll.insert(sport.to_string(), Instant::now());
+
                 match odds_feed.fetch_odds(sport).await {
                     Ok(updates) => {
+                        // Store commence times for live detection
+                        let ctimes: Vec<String> = updates.iter()
+                            .map(|u| u.commence_time.clone())
+                            .collect();
+                        sport_commence_times.insert(sport.to_string(), ctimes);
+
+                        // Update API quota
+                        if let Some(quota) = odds_feed.last_quota() {
+                            api_request_times.push_back(Instant::now());
+                            // Keep only last hour of request times
+                            let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+                            while api_request_times.front().map_or(false, |&t| t < one_hour_ago) {
+                                api_request_times.pop_front();
+                            }
+                            let burn_rate = api_request_times.len() as f64;
+
+                            state_tx_engine.send_modify(|s| {
+                                s.api_requests_used = quota.requests_used;
+                                s.api_requests_remaining = quota.requests_remaining;
+                                s.api_burn_rate = burn_rate;
+                                s.api_hours_remaining = if burn_rate > 0.0 {
+                                    quota.requests_remaining as f64 / burn_rate
+                                } else {
+                                    f64::INFINITY
+                                };
+                            });
+                        }
+
                         for update in updates {
                             if let Some(bm) = update.bookmakers.first() {
                                 // Parse game date from odds feed timestamp.
@@ -253,6 +335,11 @@ async fn main() -> Result<()> {
                                 // Check if this is a 3-way sport (soccer)
                                 let is_3way = sport.starts_with("soccer");
 
+                                // Track velocity per event (using home implied prob)
+                                let vt = velocity_trackers
+                                    .entry(update.event_id.clone())
+                                    .or_insert_with(|| VelocityTracker::new(momentum_config.velocity_window_size));
+
                                 if is_3way {
                                     // --- 3-way evaluation (soccer) ---
                                     let Some(draw_odds) = bm.draw_odds else {
@@ -261,6 +348,10 @@ async fn main() -> Result<()> {
                                     };
                                     let (home_fv, away_fv, draw_fv) =
                                         strategy::devig_3way(bm.home_odds, bm.away_odds, draw_odds);
+
+                                    // Track velocity using home team's fair value
+                                    vt.push(home_fv, Instant::now());
+                                    let velocity_score = vt.score();
 
                                     let key = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
                                     let game = key.and_then(|k| market_index.get(&k));
@@ -286,6 +377,18 @@ async fn main() -> Result<()> {
                                                 (side.yes_bid, side.yes_ask)
                                             };
 
+                                            // Book pressure from orderbook depth
+                                            let bpt = book_pressure_trackers
+                                                .entry(side.ticker.clone())
+                                                .or_insert_with(|| BookPressureTracker::new(10));
+                                            if let Ok(book) = live_book_engine.lock() {
+                                                if let Some(&(yb, _ya, _nb, _na)) = book.get(&side.ticker) {
+                                                    bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
+                                                }
+                                            }
+                                            let pressure_score = bpt.score();
+                                            let momentum = scorer.composite(velocity_score, pressure_score);
+
                                             let signal = strategy::evaluate(
                                                 fair, bid, ask,
                                                 strategy_config.taker_edge_threshold,
@@ -299,7 +402,7 @@ async fn main() -> Result<()> {
                                                 strategy::TradeAction::Skip => "SKIP",
                                             };
 
-                                            market_rows.push(MarketRow {
+                                            accumulated_rows.insert(side.ticker.clone(), MarketRow {
                                                 ticker: side.ticker.clone(),
                                                 fair_value: fair,
                                                 bid,
@@ -307,7 +410,7 @@ async fn main() -> Result<()> {
                                                 edge: signal.edge,
                                                 action: action_str.to_string(),
                                                 latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
-                                                momentum_score: 0.0,
+                                                momentum_score: momentum,
                                             });
 
                                             if signal.action != strategy::TradeAction::Skip {
@@ -370,6 +473,10 @@ async fn main() -> Result<()> {
                                         strategy::devig(bm.home_odds, bm.away_odds);
                                     let home_cents = strategy::fair_value_cents(home_fv);
 
+                                    // Track velocity using home team's fair value
+                                    vt.push(home_fv, Instant::now());
+                                    let velocity_score = vt.score();
+
                                     if let Some(mkt) = matcher::find_match(
                                         &market_index,
                                         sport,
@@ -389,6 +496,18 @@ async fn main() -> Result<()> {
                                             (mkt.best_bid, mkt.best_ask)
                                         };
 
+                                        // Book pressure from orderbook depth
+                                        let bpt = book_pressure_trackers
+                                            .entry(mkt.ticker.clone())
+                                            .or_insert_with(|| BookPressureTracker::new(10));
+                                        if let Ok(book) = live_book_engine.lock() {
+                                            if let Some(&(yb, _ya, _nb, _na)) = book.get(&mkt.ticker) {
+                                                bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
+                                            }
+                                        }
+                                        let pressure_score = bpt.score();
+                                        let momentum = scorer.composite(velocity_score, pressure_score);
+
                                         let signal = strategy::evaluate(
                                             fair, bid, ask,
                                             strategy_config.taker_edge_threshold,
@@ -402,7 +521,7 @@ async fn main() -> Result<()> {
                                             strategy::TradeAction::Skip => "SKIP",
                                         };
 
-                                        market_rows.push(MarketRow {
+                                        accumulated_rows.insert(mkt.ticker.clone(), MarketRow {
                                             ticker: mkt.ticker.clone(),
                                             fair_value: fair,
                                             bid,
@@ -410,7 +529,7 @@ async fn main() -> Result<()> {
                                             edge: signal.edge,
                                             action: action_str.to_string(),
                                             latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
-                                            momentum_score: 0.0,
+                                            momentum_score: momentum,
                                         });
 
                                         if signal.action != strategy::TradeAction::Skip {
@@ -475,16 +594,30 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Sort by momentum descending, then edge descending
+            // Collect accumulated rows, sort by momentum descending then edge
+            let mut market_rows: Vec<MarketRow> = accumulated_rows.values().cloned().collect();
             market_rows.sort_by(|a, b| {
                 b.momentum_score.partial_cmp(&a.momentum_score)
                     .unwrap_or(std::cmp::Ordering::Equal)
                     .then_with(|| b.edge.cmp(&a.edge))
             });
 
-            // Update TUI state
+            // Update TUI state with live sports info
+            let live_sports: Vec<String> = sport_commence_times.iter()
+                .filter(|(_, times)| {
+                    let now = chrono::Utc::now();
+                    times.iter().any(|ct| {
+                        chrono::DateTime::parse_from_rfc3339(ct)
+                            .ok()
+                            .map_or(false, |dt| dt < now)
+                    })
+                })
+                .map(|(sport, _)| sport.clone())
+                .collect();
+
             state_tx_engine.send_modify(|state| {
                 state.markets = market_rows;
+                state.live_sports = live_sports;
             });
 
             // Refresh balance each cycle
@@ -496,9 +629,8 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Poll interval: 60s to stay within odds-api.io rate limits
-            // Events are cached for 5 minutes, so each cycle only makes 1 odds request
-            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            // Short sleep — per-sport timers handle individual scheduling
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     });
 
