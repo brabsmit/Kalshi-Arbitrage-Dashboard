@@ -367,6 +367,7 @@ async fn main() -> Result<()> {
     });
 
     // --- Phase 4: Process Kalshi WS events (update orderbook) ---
+    let sim_mode_ws = sim_mode;
     let state_tx_ws = state_tx.clone();
     tokio::spawn(async move {
         while let Some(event) = kalshi_ws_rx.recv().await {
@@ -411,9 +412,87 @@ async fn main() -> Result<()> {
                     if let Ok(mut book) = live_book_ws.lock() {
                         book.insert(snap.market_ticker.clone(), (yes_bid, yes_ask, no_bid, no_ask));
                     }
+
+                    // Sim fill detection: check if any sim position's sell is filled
+                    if sim_mode_ws {
+                        let yes_bid = yes_bid;
+                        let ticker = snap.market_ticker.clone();
+                        state_tx_ws.send_modify(|s| {
+                            let mut filled_indices = Vec::new();
+                            for (i, pos) in s.sim_positions.iter().enumerate() {
+                                if pos.ticker == ticker && yes_bid >= pos.sell_price {
+                                    filled_indices.push(i);
+                                }
+                            }
+                            for &i in filled_indices.iter().rev() {
+                                let pos = s.sim_positions.remove(i);
+                                let exit_revenue = (pos.quantity * pos.sell_price) as i64;
+                                let exit_fee = calculate_fee(pos.sell_price, pos.quantity, false) as i64;
+                                let entry_cost = (pos.quantity * pos.entry_price) as i64 + pos.entry_fee as i64;
+                                let pnl = (exit_revenue - exit_fee) - entry_cost;
+
+                                s.sim_balance_cents += exit_revenue - exit_fee;
+                                s.sim_realized_pnl_cents += pnl;
+                                s.push_trade(tui::state::TradeRow {
+                                    time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                    action: "SELL".to_string(),
+                                    ticker: pos.ticker.clone(),
+                                    price: pos.sell_price,
+                                    quantity: pos.quantity,
+                                    order_type: "SIM".to_string(),
+                                    pnl: Some(pnl as i32),
+                                });
+                                s.push_log("TRADE", format!(
+                                    "SIM SELL {}x {} @ {}¢, P&L: {:+}¢",
+                                    pos.quantity, pos.ticker, pos.sell_price, pnl
+                                ));
+                            }
+                        });
+                    }
                 }
                 kalshi::ws::KalshiWsEvent::Delta(_delta) => {
-                    // Delta events processed silently
+                    // Delta events: also check for sim fills using live_book
+                    if sim_mode_ws {
+                        if let Ok(book) = live_book_ws.lock() {
+                            let book_snapshot: Vec<(String, u32)> = book.iter()
+                                .map(|(t, (yb, _, _, _))| (t.clone(), *yb))
+                                .collect();
+                            drop(book);
+                            state_tx_ws.send_modify(|s| {
+                                let mut filled_indices = Vec::new();
+                                for (i, pos) in s.sim_positions.iter().enumerate() {
+                                    if let Some((_, best_bid)) = book_snapshot.iter().find(|(t, _)| t == &pos.ticker) {
+                                        if *best_bid >= pos.sell_price {
+                                            filled_indices.push(i);
+                                        }
+                                    }
+                                }
+                                for &i in filled_indices.iter().rev() {
+                                    let pos = s.sim_positions.remove(i);
+                                    let exit_revenue = (pos.quantity * pos.sell_price) as i64;
+                                    let exit_fee = calculate_fee(pos.sell_price, pos.quantity, false) as i64;
+                                    let entry_cost = (pos.quantity * pos.entry_price) as i64 + pos.entry_fee as i64;
+                                    let pnl = (exit_revenue - exit_fee) - entry_cost;
+
+                                    s.sim_balance_cents += exit_revenue - exit_fee;
+                                    s.sim_realized_pnl_cents += pnl;
+                                    s.push_trade(tui::state::TradeRow {
+                                        time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                        action: "SELL".to_string(),
+                                        ticker: pos.ticker.clone(),
+                                        price: pos.sell_price,
+                                        quantity: pos.quantity,
+                                        order_type: "SIM".to_string(),
+                                        pnl: Some(pnl as i32),
+                                    });
+                                    s.push_log("TRADE", format!(
+                                        "SIM SELL {}x {} @ {}¢, P&L: {:+}¢",
+                                        pos.quantity, pos.ticker, pos.sell_price, pnl
+                                    ));
+                                }
+                            });
+                        }
+                    }
                 }
             }
         }
