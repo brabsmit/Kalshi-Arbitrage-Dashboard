@@ -22,7 +22,20 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
     let full_width = row1_width + 3 + 4 + 4 + 3 + 4 + uptime.len() + 8;
     let header_height = if full_width > width { 4 } else { 3 };
 
-    if state.log_focus {
+    if state.diagnostic_focus {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(3),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        draw_diagnostic_header(f, state, chunks[0]);
+        draw_diagnostic(f, state, chunks[1]);
+        draw_diagnostic_footer(f, chunks[2]);
+    } else if state.log_focus {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
@@ -620,8 +633,192 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
             Span::raw("pen-pos  "),
             Span::styled("[t]", Style::default().fg(Color::Yellow)),
             Span::raw("rades  "),
+            Span::styled("[d]", Style::default().fg(Color::Yellow)),
+            Span::raw("iag  "),
         ])
     };
+    let para = Paragraph::new(line);
+    f.render_widget(para, area);
+}
+
+fn draw_diagnostic_header(f: &mut Frame, state: &AppState, area: Rect) {
+    let mode_tag = if state.diagnostic_snapshot {
+        Span::styled(" (Snapshot)", Style::default().fg(Color::Yellow))
+    } else {
+        Span::styled(" (Live)", Style::default().fg(Color::Green))
+    };
+
+    let total = state.diagnostic_rows.len();
+    let count_span = Span::styled(
+        format!(" [{} games]", total),
+        Style::default().fg(Color::DarkGray),
+    );
+
+    let title_line = Line::from(vec![
+        Span::styled(
+            " All Games from The Odds API",
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        mode_tag,
+        count_span,
+    ]);
+
+    let block = Block::default()
+        .title(" Diagnostic View ")
+        .borders(Borders::ALL);
+    let para = Paragraph::new(title_line).block(block);
+    f.render_widget(para, area);
+}
+
+fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let visible_lines = area.height.saturating_sub(4) as usize;
+
+    if state.diagnostic_rows.is_empty() {
+        let lines = vec![
+            Line::from(""),
+            Line::from(Span::styled(
+                "No games returned from The Odds API",
+                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+            )),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Fetching data...",
+                Style::default().fg(Color::DarkGray),
+            )),
+        ];
+        let block = Block::default().borders(Borders::ALL);
+        let para = Paragraph::new(lines).alignment(Alignment::Center).block(block);
+        f.render_widget(para, area);
+        return;
+    }
+
+    // Group rows by sport, sorted alphabetically
+    let mut by_sport: std::collections::BTreeMap<&str, Vec<&super::state::DiagnosticRow>> =
+        std::collections::BTreeMap::new();
+    for row in &state.diagnostic_rows {
+        by_sport.entry(&row.sport).or_default().push(row);
+    }
+
+    // Sort each group by commence_time
+    for rows in by_sport.values_mut() {
+        rows.sort_by(|a, b| a.commence_time.cmp(&b.commence_time));
+    }
+
+    // Responsive column widths
+    let matchup_w = inner_width.saturating_sub(14 + 10 + 16 + 8 + 18).max(10);
+
+    // Build display lines: sport headers + data rows
+    let mut display_rows: Vec<Row> = Vec::new();
+    for (sport, rows) in &by_sport {
+        // Sport header row
+        let header_text = format!("── {} ({}) ──", sport.to_uppercase(), rows.len());
+        display_rows.push(
+            Row::new(vec![
+                Cell::from(header_text).style(
+                    Style::default()
+                        .fg(Color::Cyan)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+                Cell::from(""),
+            ])
+        );
+
+        for row in rows {
+            let status_style = match row.game_status.as_str() {
+                s if s.starts_with("Live") => Style::default().fg(Color::Green),
+                s if s.starts_with("Upcoming") => Style::default().fg(Color::Yellow),
+                _ => Style::default().fg(Color::DarkGray),
+            };
+
+            let market_style = match row.market_status.as_deref() {
+                Some("Open") => Style::default().fg(Color::Green),
+                Some("Closed") => Style::default().fg(Color::Red),
+                _ => Style::default().fg(Color::DarkGray),
+            };
+
+            let reason_style = if row.reason.contains("tradeable") {
+                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+            } else if row.reason.contains("No match") {
+                Style::default().fg(Color::DarkGray)
+            } else {
+                Style::default().fg(Color::White)
+            };
+
+            display_rows.push(Row::new(vec![
+                Cell::from(truncate_with_ellipsis(&row.matchup, matchup_w).into_owned()),
+                Cell::from(row.commence_time.clone()),
+                Cell::from(row.game_status.clone()).style(status_style),
+                Cell::from(
+                    row.kalshi_ticker
+                        .as_deref()
+                        .map(|t| truncate_with_ellipsis(t, 16).into_owned())
+                        .unwrap_or_else(|| "\u{2014}".to_string()),
+                ),
+                Cell::from(
+                    row.market_status.as_deref().unwrap_or("\u{2014}").to_string(),
+                )
+                .style(market_style),
+                Cell::from(row.reason.clone()).style(reason_style),
+            ]));
+        }
+    }
+
+    let total = display_rows.len();
+    let offset = state
+        .diagnostic_scroll_offset
+        .min(total.saturating_sub(visible_lines));
+
+    let visible_rows: Vec<Row> = display_rows
+        .into_iter()
+        .skip(offset)
+        .take(visible_lines)
+        .collect();
+    let visible_count = visible_rows.len();
+
+    let matchup_w = matchup_w as u16;
+
+    let table_header = Row::new(vec!["Matchup", "Commence(ET)", "Status", "Kalshi Ticker", "Market", "Reason"])
+        .style(Style::default().add_modifier(Modifier::BOLD));
+
+    let table = Table::new(
+        visible_rows,
+        [
+            Constraint::Length(matchup_w),
+            Constraint::Length(14),
+            Constraint::Length(10),
+            Constraint::Length(16),
+            Constraint::Length(8),
+            Constraint::Length(18),
+        ],
+    )
+    .header(table_header)
+    .block(
+        Block::default()
+            .title(format!(
+                " [{}/{}] ",
+                (offset + visible_count).min(total),
+                total,
+            ))
+            .borders(Borders::ALL),
+    );
+
+    f.render_widget(table, area);
+}
+
+fn draw_diagnostic_footer(f: &mut Frame, area: Rect) {
+    let line = Line::from(vec![
+        Span::styled("  [d/Esc]", Style::default().fg(Color::Yellow)),
+        Span::raw(" close  "),
+        Span::styled("[j/k]", Style::default().fg(Color::Yellow)),
+        Span::raw(" scroll  "),
+        Span::styled("[g/G]", Style::default().fg(Color::Yellow)),
+        Span::raw(" top/bottom  "),
+    ]);
     let para = Paragraph::new(line);
     f.render_widget(para, area);
 }

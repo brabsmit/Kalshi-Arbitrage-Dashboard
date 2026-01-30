@@ -27,6 +27,104 @@ fn last_name(full_name: &str) -> &str {
     full_name.rsplit_once(' ').map_or(full_name, |(_, last)| last)
 }
 
+/// Build diagnostic rows from all odds updates for a given sport.
+fn build_diagnostic_rows(
+    updates: &[feed::types::OddsUpdate],
+    sport: &str,
+    market_index: &matcher::MarketIndex,
+) -> Vec<tui::state::DiagnosticRow> {
+    let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+    let now_utc = chrono::Utc::now();
+
+    updates
+        .iter()
+        .map(|update| {
+            let matchup = format!("{} vs {}", update.away_team, update.home_team);
+
+            // Format commence time in ET
+            let commence_et = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
+                .ok()
+                .map(|dt| dt.with_timezone(&eastern).format("%b %d %H:%M").to_string())
+                .unwrap_or_else(|| update.commence_time.clone());
+
+            // Determine game status
+            let commence_dt = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
+                .ok()
+                .map(|dt| dt.with_timezone(&chrono::Utc));
+
+            let game_status = match commence_dt {
+                Some(ct) if ct <= now_utc => "Live".to_string(),
+                Some(ct) => {
+                    let diff = ct - now_utc;
+                    let total_secs = diff.num_seconds().max(0) as u64;
+                    let h = total_secs / 3600;
+                    let m = (total_secs % 3600) / 60;
+                    if h > 0 {
+                        format!("Upcoming ({}h {:02}m)", h, m)
+                    } else {
+                        format!("Upcoming ({}m)", m)
+                    }
+                }
+                None => "Unknown".to_string(),
+            };
+
+            // Try to match to Kalshi
+            let date = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
+                .ok()
+                .map(|dt| dt.with_timezone(&eastern).date_naive());
+
+            let (lookup_home, lookup_away) = if sport == "mma" {
+                (last_name(&update.home_team).to_string(), last_name(&update.away_team).to_string())
+            } else {
+                (update.home_team.clone(), update.away_team.clone())
+            };
+
+            let matched_game = date.and_then(|d| {
+                matcher::generate_key(sport, &lookup_home, &lookup_away, d)
+                    .and_then(|k| market_index.get(&k))
+            });
+
+            let (kalshi_ticker, market_status, reason) = match matched_game {
+                Some(game) => {
+                    // Pick the first available side market for display
+                    let side = game.home.as_ref()
+                        .or(game.away.as_ref())
+                        .or(game.draw.as_ref());
+
+                    match side {
+                        Some(sm) => {
+                            // Market status from Kalshi API (captured at startup).
+                            // We only fetch status=open markets, so this is always "open"
+                            // at index time. Show as "Open" since Kalshi confirmed it.
+                            let market_st = if sm.status == "open" || sm.status == "active" { "Open" } else { "Closed" };
+
+                            let reason = if game_status.starts_with("Live") {
+                                "Live & tradeable".to_string()
+                            } else {
+                                "Not started yet".to_string()
+                            };
+
+                            (Some(sm.ticker.clone()), Some(market_st.to_string()), reason)
+                        }
+                        None => (None, None, "No match found".to_string()),
+                    }
+                }
+                None => (None, None, "No match found".to_string()),
+            };
+
+            tui::state::DiagnosticRow {
+                sport: sport.to_string(),
+                matchup,
+                commence_time: commence_et,
+                game_status,
+                kalshi_ticker,
+                market_status,
+                reason,
+            }
+        })
+        .collect()
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let log_file = std::fs::File::create("kalshi-arb.log")?;
@@ -254,6 +352,8 @@ async fn main() -> Result<()> {
         let mut api_request_times: VecDeque<Instant> = VecDeque::with_capacity(100);
         // Accumulated market rows across sports (for partial cycle updates)
         let mut accumulated_rows: HashMap<String, MarketRow> = HashMap::new();
+        // Per-sport diagnostic row cache (persists across cycles so skipped/rate-limited sports retain their rows)
+        let mut diagnostic_cache: HashMap<String, Vec<tui::state::DiagnosticRow>> = HashMap::new();
 
         // Filter statistics
         let mut filter_live: usize;
@@ -274,6 +374,48 @@ async fn main() -> Result<()> {
                         state_tx_engine.send_modify(|s| s.is_paused = false);
                     }
                     tui::TuiCommand::Quit => return,
+                    tui::TuiCommand::FetchDiagnostic => {
+                        // One-shot fetch for diagnostic view
+                        let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
+                        for diag_sport in &odds_sports {
+                            match odds_feed.fetch_odds(diag_sport).await {
+                                Ok(updates) => {
+                                    if let Some(quota) = odds_feed.last_quota() {
+                                        api_request_times.push_back(Instant::now());
+                                        let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+                                        while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
+                                            api_request_times.pop_front();
+                                        }
+                                        let burn_rate = api_request_times.len() as f64;
+                                        state_tx_engine.send_modify(|s| {
+                                            s.api_requests_used = quota.requests_used;
+                                            s.api_requests_remaining = quota.requests_remaining;
+                                            s.api_burn_rate = burn_rate;
+                                            s.api_hours_remaining = if burn_rate > 0.0 {
+                                                quota.requests_remaining as f64 / burn_rate
+                                            } else {
+                                                f64::INFINITY
+                                            };
+                                        });
+                                    }
+                                    let ctimes: Vec<String> = updates.iter()
+                                        .map(|u| u.commence_time.clone())
+                                        .collect();
+                                    sport_commence_times.insert(diag_sport.to_string(), ctimes);
+                                    diag_rows.extend(
+                                        build_diagnostic_rows(&updates, diag_sport, &market_index)
+                                    );
+                                }
+                                Err(e) => {
+                                    tracing::warn!(sport = diag_sport.as_str(), error = %e, "diagnostic fetch failed");
+                                }
+                            }
+                        }
+                        state_tx_engine.send_modify(|s| {
+                            s.diagnostic_rows = diag_rows;
+                            s.diagnostic_snapshot = true;
+                        });
+                    }
                 }
             }
 
@@ -313,7 +455,7 @@ async fn main() -> Result<()> {
                     let sides = [game.home.as_ref(), game.away.as_ref(), game.draw.as_ref()];
                     sides.iter().any(|s| {
                         s.is_some_and(|sm| {
-                            sm.status == "open"
+                            (sm.status == "open" || sm.status == "active")
                                 && sm.close_time.as_deref()
                                     .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
                                     .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc_precheck)
@@ -377,6 +519,12 @@ async fn main() -> Result<()> {
                                 };
                             });
                         }
+
+                        // Build diagnostic rows for this sport (cached per-sport)
+                        diagnostic_cache.insert(
+                            sport.to_string(),
+                            build_diagnostic_rows(&updates, sport, &market_index),
+                        );
 
                         for update in updates {
                             if let Some(bm) = update.bookmakers.first() {
@@ -454,7 +602,7 @@ async fn main() -> Result<()> {
                                             let Some(side) = side_opt else { continue };
 
                                             // Check Kalshi market is still open
-                                            let market_open = side.status == "open"
+                                            let market_open = (side.status == "open" || side.status == "active")
                                                 && side.close_time.as_deref()
                                                     .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
                                                     .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc);
@@ -598,7 +746,7 @@ async fn main() -> Result<()> {
                                             if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
                                         });
                                         let market_open = side_market.is_some_and(|sm| {
-                                            sm.status == "open"
+                                            (sm.status == "open" || sm.status == "active")
                                                 && sm.close_time.as_deref()
                                                     .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
                                                     .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc)
@@ -745,6 +893,8 @@ async fn main() -> Result<()> {
                                 closed: filter_closed,
                             };
                             state.next_game_start = earliest_commence;
+                            state.diagnostic_rows = diagnostic_cache.values().flatten().cloned().collect();
+                            state.diagnostic_snapshot = false;
                         });
 
                         // Sleep but wake early on TUI commands
@@ -761,6 +911,48 @@ async fn main() -> Result<()> {
                                         state_tx_engine.send_modify(|s| s.is_paused = false);
                                     }
                                     tui::TuiCommand::Quit => return,
+                                    tui::TuiCommand::FetchDiagnostic => {
+                                        // One-shot fetch for diagnostic view (during idle sleep)
+                                        let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
+                                        for diag_sport in &odds_sports {
+                                            match odds_feed.fetch_odds(diag_sport).await {
+                                                Ok(updates) => {
+                                                    if let Some(quota) = odds_feed.last_quota() {
+                                                        api_request_times.push_back(Instant::now());
+                                                        let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+                                                        while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
+                                                            api_request_times.pop_front();
+                                                        }
+                                                        let burn_rate = api_request_times.len() as f64;
+                                                        state_tx_engine.send_modify(|s| {
+                                                            s.api_requests_used = quota.requests_used;
+                                                            s.api_requests_remaining = quota.requests_remaining;
+                                                            s.api_burn_rate = burn_rate;
+                                                            s.api_hours_remaining = if burn_rate > 0.0 {
+                                                                quota.requests_remaining as f64 / burn_rate
+                                                            } else {
+                                                                f64::INFINITY
+                                                            };
+                                                        });
+                                                    }
+                                                    let ctimes: Vec<String> = updates.iter()
+                                                        .map(|u| u.commence_time.clone())
+                                                        .collect();
+                                                    sport_commence_times.insert(diag_sport.to_string(), ctimes);
+                                                    diag_rows.extend(
+                                                        build_diagnostic_rows(&updates, diag_sport, &market_index)
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(sport = diag_sport.as_str(), error = %e, "diagnostic fetch failed");
+                                                }
+                                            }
+                                        }
+                                        state_tx_engine.send_modify(|s| {
+                                            s.diagnostic_rows = diag_rows;
+                                            s.diagnostic_snapshot = true;
+                                        });
+                                    }
                                 }
                             }
                         }
@@ -799,6 +991,8 @@ async fn main() -> Result<()> {
                     closed: filter_closed,
                 };
                 state.next_game_start = earliest_commence;
+                state.diagnostic_rows = diagnostic_cache.values().flatten().cloned().collect();
+                state.diagnostic_snapshot = false;
             });
 
             // Refresh balance each cycle

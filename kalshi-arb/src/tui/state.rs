@@ -11,6 +11,17 @@ pub struct FilterStats {
 }
 
 #[derive(Debug, Clone)]
+pub struct DiagnosticRow {
+    pub sport: String,
+    pub matchup: String,
+    pub commence_time: String,
+    pub game_status: String,
+    pub kalshi_ticker: Option<String>,
+    pub market_status: Option<String>,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct AppState {
     pub balance_cents: i64,
@@ -43,6 +54,10 @@ pub struct AppState {
     pub live_sports: Vec<String>,
     pub filter_stats: FilterStats,
     pub next_game_start: Option<DateTime<Utc>>,
+    pub diagnostic_rows: Vec<DiagnosticRow>,
+    pub diagnostic_snapshot: bool,
+    pub diagnostic_focus: bool,
+    pub diagnostic_scroll_offset: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +142,10 @@ impl AppState {
             live_sports: Vec::new(),
             filter_stats: FilterStats::default(),
             next_game_start: None,
+            diagnostic_rows: Vec::new(),
+            diagnostic_snapshot: false,
+            diagnostic_focus: false,
+            diagnostic_scroll_offset: 0,
         }
     }
 

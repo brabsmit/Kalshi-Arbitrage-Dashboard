@@ -19,6 +19,7 @@ pub enum TuiCommand {
     Quit,
     Pause,
     Resume,
+    FetchDiagnostic,
 }
 
 /// Run the TUI. Reads state from `state_rx`, sends commands on `cmd_tx`.
@@ -55,6 +56,8 @@ async fn tui_loop(
     let mut position_scroll_offset: usize = 0;
     let mut trade_focus = false;
     let mut trade_scroll_offset: usize = 0;
+    let mut diagnostic_focus = false;
+    let mut diagnostic_scroll_offset: usize = 0;
 
     loop {
         // Render current state with UI-local overrides
@@ -68,6 +71,8 @@ async fn tui_loop(
             state.position_scroll_offset = position_scroll_offset;
             state.trade_focus = trade_focus;
             state.trade_scroll_offset = trade_scroll_offset;
+            state.diagnostic_focus = diagnostic_focus;
+            state.diagnostic_scroll_offset = diagnostic_scroll_offset;
             terminal.draw(|f| render::draw(f, &state, spinner_frame))?;
         }
 
@@ -183,6 +188,31 @@ async fn tui_loop(
                                 }
                                 _ => {}
                             }
+                        } else if diagnostic_focus {
+                            match key.code {
+                                KeyCode::Esc | KeyCode::Char('d') => {
+                                    diagnostic_focus = false;
+                                    diagnostic_scroll_offset = 0;
+                                }
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    diagnostic_scroll_offset = diagnostic_scroll_offset.saturating_add(1);
+                                }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    diagnostic_scroll_offset = diagnostic_scroll_offset.saturating_sub(1);
+                                }
+                                KeyCode::Char('G') => {
+                                    let total = state_rx.borrow().diagnostic_rows.len();
+                                    diagnostic_scroll_offset = total;
+                                }
+                                KeyCode::Char('g') => {
+                                    diagnostic_scroll_offset = 0;
+                                }
+                                KeyCode::Char('q') => {
+                                    let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                    return Ok(());
+                                }
+                                _ => {}
+                            }
                         } else {
                             match key.code {
                                 KeyCode::Char('q') => {
@@ -210,6 +240,14 @@ async fn tui_loop(
                                 KeyCode::Char('t') => {
                                     trade_focus = true;
                                     trade_scroll_offset = 0;
+                                }
+                                KeyCode::Char('d') => {
+                                    diagnostic_focus = true;
+                                    diagnostic_scroll_offset = 0;
+                                    // If no live games (engine idle), trigger one-shot fetch
+                                    if state_rx.borrow().markets.is_empty() {
+                                        let _ = cmd_tx.send(TuiCommand::FetchDiagnostic).await;
+                                    }
                                 }
                                 _ => {}
                             }
