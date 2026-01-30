@@ -18,6 +18,9 @@ fn api_sport_key(sport: &str) -> &str {
         "american-football" => "americanfootball_nfl",
         "baseball" => "baseball_mlb",
         "ice-hockey" => "icehockey_nhl",
+        "college-basketball" => "basketball_ncaab",
+        "soccer-epl" => "soccer_epl",
+        "mma" => "mma_mixed_martial_arts",
         _ => sport,
     }
 }
@@ -71,12 +74,16 @@ impl OddsFeed for TheOddsApi {
                     let away_price = market.outcomes.iter()
                         .find(|o| o.name == event.away_team)
                         .map(|o| o.price);
+                    let draw_price = market.outcomes.iter()
+                        .find(|o| o.name == "Draw")
+                        .map(|o| o.price);
 
                     if let (Some(h), Some(a)) = (home_price, away_price) {
                         bookmaker_odds.push(BookmakerOdds {
                             name: bm.title.clone(),
                             home_odds: h,
                             away_odds: a,
+                            draw_odds: draw_price,
                             last_update: bm.last_update.clone(),
                         });
                     }
