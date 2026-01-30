@@ -168,6 +168,20 @@ pub fn parse_kalshi_title(title: &str) -> Option<(String, String)> {
     Some((away, home))
 }
 
+/// Parse UFC/MMA title to extract fighter names from the event portion.
+/// Title format: "Will X win the Fighter1 vs Fighter2 professional MMA fight scheduled for ..."
+/// Returns (fighter1, fighter2) from the event portion.
+pub fn parse_ufc_title(title: &str) -> Option<(String, String)> {
+    let start = title.find("the ")? + 4;
+    let end = title.find(" professional MMA fight")?;
+    if start >= end {
+        return None;
+    }
+    let event_part = &title[start..end];
+    let (f1, f2) = event_part.split_once(" vs ")?;
+    Some((f1.to_string(), f2.to_string()))
+}
+
 /// Determine which team a market is for by parsing the ticker's winner code.
 /// Ticker format: KXNBAGAME-26JAN19LACWAS-LAC
 /// The middle segment after the date (7 chars) encodes both teams: away first, home second.
@@ -314,5 +328,27 @@ mod tests {
             is_away_market("KXNBAGAME-26JAN19LACWAS-WAS", "Los Angeles Clippers", "Washington Wizards"),
             Some(false),
         );
+    }
+
+    #[test]
+    fn test_parse_ufc_title() {
+        let result = parse_ufc_title(
+            "Will Alex Volkanovski win the Volkanovski vs Lopes professional MMA fight scheduled for Jan 31, 2026?"
+        );
+        assert_eq!(result, Some(("Volkanovski".to_string(), "Lopes".to_string())));
+    }
+
+    #[test]
+    fn test_parse_ufc_title_hyphenated() {
+        let result = parse_ufc_title(
+            "Will Benoit Saint-Denis win the Hooker vs Saint-Denis professional MMA fight scheduled for Jan 31, 2026?"
+        );
+        assert_eq!(result, Some(("Hooker".to_string(), "Saint-Denis".to_string())));
+    }
+
+    #[test]
+    fn test_parse_ufc_title_not_ufc() {
+        let result = parse_ufc_title("Dallas Mavericks at Los Angeles Lakers Winner?");
+        assert_eq!(result, None);
     }
 }
