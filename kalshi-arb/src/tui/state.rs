@@ -1,6 +1,15 @@
 use std::collections::VecDeque;
 use std::time::Instant;
 
+use chrono::{DateTime, Utc};
+
+#[derive(Debug, Clone, Default)]
+pub struct FilterStats {
+    pub live: usize,
+    pub pre_game: usize,
+    pub closed: usize,
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct AppState {
@@ -32,6 +41,8 @@ pub struct AppState {
     pub api_burn_rate: f64,
     pub api_hours_remaining: f64,
     pub live_sports: Vec<String>,
+    pub filter_stats: FilterStats,
+    pub next_game_start: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -114,6 +125,8 @@ impl AppState {
             api_burn_rate: 0.0,
             api_hours_remaining: 0.0,
             live_sports: Vec::new(),
+            filter_stats: FilterStats::default(),
+            next_game_start: None,
         }
     }
 
@@ -142,5 +155,19 @@ impl AppState {
         let h = secs / 3600;
         let m = (secs % 3600) / 60;
         format!("{}h {:02}m", h, m)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_filter_stats_default() {
+        let state = AppState::new();
+        assert_eq!(state.filter_stats.live, 0);
+        assert_eq!(state.filter_stats.pre_game, 0);
+        assert_eq!(state.filter_stats.closed, 0);
+        assert!(state.next_game_start.is_none());
     }
 }
