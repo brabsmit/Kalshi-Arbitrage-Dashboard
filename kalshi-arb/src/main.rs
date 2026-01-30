@@ -6,7 +6,7 @@ mod tui;
 
 use anyhow::Result;
 use config::Config;
-use engine::{matcher, risk::RiskManager, strategy};
+use engine::{matcher, strategy};
 use feed::{the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
 use std::collections::HashMap;
@@ -160,12 +160,10 @@ async fn main() -> Result<()> {
     let mut odds_feed = TheOddsApi::new(odds_api_key, &config.odds_feed.base_url, &config.odds_feed.bookmakers);
     let odds_sports = config.odds_feed.sports.clone();
     let strategy_config = config.strategy.clone();
-    let risk_config = config.risk.clone();
     let rest_for_engine = rest.clone();
 
     let state_tx_engine = state_tx.clone();
     tokio::spawn(async move {
-        let mut risk_mgr = RiskManager::new(risk_config);
         let mut _is_paused = false;
 
         loop {
@@ -243,46 +241,17 @@ async fn main() -> Result<()> {
                                             ),
                                         });
 
-                                        // Execute if actionable
-                                        if signal.action != strategy::TradeAction::Skip
-                                            && risk_mgr.can_trade(
-                                                &mkt.ticker,
-                                                1,
-                                                signal.price,
-                                            )
-                                        {
-                                            let order =
-                                                kalshi::types::CreateOrderRequest {
-                                                    ticker: mkt.ticker.clone(),
-                                                    action: "buy".to_string(),
-                                                    side: if mkt.is_inverse { "no" } else { "yes" }.to_string(),
-                                                    count: 1,
-                                                    order_type: "limit".to_string(),
-                                                    yes_price: if !mkt.is_inverse { Some(signal.price) } else { None },
-                                                    no_price: if mkt.is_inverse { Some(signal.price) } else { None },
-                                                    client_order_id: None,
-                                                };
-                                            match rest_for_engine
-                                                .create_order(&order)
-                                                .await
-                                            {
-                                                Ok(_resp) => {
-                                                    risk_mgr.record_buy(&mkt.ticker, 1);
-                                                    tracing::info!(
-                                                        ticker = mkt.ticker,
-                                                        price = signal.price,
-                                                        edge = signal.edge,
-                                                        inverse = mkt.is_inverse,
-                                                        "order placed"
-                                                    );
-                                                }
-                                                Err(e) => {
-                                                    tracing::warn!(
-                                                        "order failed: {:#}",
-                                                        e
-                                                    );
-                                                }
-                                            }
+                                        // Signal evaluation only — no order placement
+                                        if signal.action != strategy::TradeAction::Skip {
+                                            tracing::warn!(
+                                                ticker = %mkt.ticker,
+                                                action = %action_str,
+                                                price = signal.price,
+                                                edge = signal.edge,
+                                                net = signal.net_profit_estimate,
+                                                inverse = mkt.is_inverse,
+                                                "signal detected (dry run)"
+                                            );
                                         }
                                     }
                                 }
