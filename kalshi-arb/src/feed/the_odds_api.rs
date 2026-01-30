@@ -26,6 +26,16 @@ fn api_sport_key(sport: &str) -> &str {
     }
 }
 
+/// Parse a quota header that may be an integer or float (e.g. "14527.0").
+fn parse_quota_header(headers: &reqwest::header::HeaderMap, name: &str) -> u64 {
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<f64>().ok())
+        .map(|v| v as u64)
+        .unwrap_or(0)
+}
+
 impl TheOddsApi {
     pub fn new(api_key: String, base_url: &str, bookmakers: &str) -> Self {
         Self {
@@ -35,6 +45,39 @@ impl TheOddsApi {
             bookmakers: bookmakers.to_string(),
             last_quota: None,
         }
+    }
+
+    /// Call the free `/v4/sports` endpoint to check quota without consuming usage credits.
+    /// Returns an error if the key is invalid or quota is exhausted.
+    pub async fn check_quota(&mut self) -> Result<ApiQuota> {
+        let url = format!(
+            "{}/v4/sports?apiKey={}",
+            self.base_url, self.api_key,
+        );
+
+        let resp = self.client.get(&url).send().await
+            .context("failed to reach the-odds-api for quota check")?;
+
+        let status = resp.status();
+        let used = parse_quota_header(resp.headers(), "x-requests-used");
+        let remaining = parse_quota_header(resp.headers(), "x-requests-remaining");
+
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("the-odds-api key validation failed ({}): {}", status, body);
+        }
+
+        let quota = ApiQuota {
+            requests_used: used,
+            requests_remaining: remaining,
+        };
+        self.last_quota = Some(quota.clone());
+
+        if remaining == 0 {
+            anyhow::bail!("API quota exhausted ({} used, 0 remaining)", used);
+        }
+
+        Ok(quota)
     }
 }
 
@@ -52,16 +95,8 @@ impl OddsFeed for TheOddsApi {
             .context("the-odds-api request failed")?;
 
         // Extract quota from response headers
-        let used = resp.headers()
-            .get("x-requests-used")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0);
-        let remaining = resp.headers()
-            .get("x-requests-remaining")
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0);
+        let used = parse_quota_header(resp.headers(), "x-requests-used");
+        let remaining = parse_quota_header(resp.headers(), "x-requests-remaining");
         self.last_quota = Some(ApiQuota {
             requests_used: used,
             requests_remaining: remaining,

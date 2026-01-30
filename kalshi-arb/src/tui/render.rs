@@ -558,12 +558,17 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_api_status(f: &mut Frame, state: &AppState, area: Rect) {
+    let hours_left = if state.api_hours_remaining.is_infinite() {
+        "\u{221e}".to_string()
+    } else {
+        format!("{:.1}", state.api_hours_remaining)
+    };
     let quota_str = format!(
-        " API: {}/{} used | {:.1} req/hr | ~{:.1}h left",
+        " API: {}/{} used | {:.1} req/hr | ~{}h left",
         state.api_requests_used,
         state.api_requests_used + state.api_requests_remaining,
         state.api_burn_rate,
-        state.api_hours_remaining,
+        hours_left,
     );
 
     let filter_str = format!(

@@ -198,6 +198,27 @@ async fn main() -> Result<()> {
 
     // --- Phase 3: Spawn odds polling loop ---
     let mut odds_feed = TheOddsApi::new(odds_api_key, &config.odds_feed.base_url, &config.odds_feed.bookmakers);
+
+    // Validate API key and seed quota display before TUI starts
+    match odds_feed.check_quota().await {
+        Ok(quota) => {
+            println!("  Odds API OK: {}/{} requests remaining",
+                quota.requests_remaining,
+                quota.requests_used + quota.requests_remaining,
+            );
+            state_tx.send_modify(|s| {
+                s.api_requests_used = quota.requests_used;
+                s.api_requests_remaining = quota.requests_remaining;
+                s.api_burn_rate = 0.0;
+                s.api_hours_remaining = f64::INFINITY;
+            });
+        }
+        Err(e) => {
+            eprintln!("  Odds API error: {:#}", e);
+            std::process::exit(1);
+        }
+    }
+
     let odds_sports = config.odds_feed.sports.clone();
     let strategy_config = config.strategy.clone();
     let momentum_config = config.momentum.clone();
