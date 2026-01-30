@@ -265,6 +265,7 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
+    let max_width = area.width.saturating_sub(2) as usize; // borders
     let lines: Vec<Line> = state
         .trades
         .iter()
@@ -275,10 +276,11 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
                 .pnl
                 .map(|p| format!(" {:+}c", p))
                 .unwrap_or_default();
-            Line::from(format!(
+            let raw = format!(
                 " {} {} {}x {} @ {}c ({}){}",
                 t.time, t.action, t.quantity, t.ticker, t.price, t.order_type, pnl
-            ))
+            );
+            Line::from(truncate_with_ellipsis(&raw, max_width).into_owned())
         })
         .collect();
 
@@ -290,11 +292,22 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
+    let max_width = area.width.saturating_sub(2) as usize; // borders
+    let visible_lines = area.height.saturating_sub(2) as usize;
+
+    let total = state.logs.len();
+    let offset = if state.log_focus {
+        state.log_scroll_offset.min(total.saturating_sub(visible_lines))
+    } else {
+        0
+    };
+
     let lines: Vec<Line> = state
         .logs
         .iter()
         .rev()
-        .take(area.height.saturating_sub(2) as usize)
+        .skip(offset)
+        .take(visible_lines)
         .map(|l| {
             let color = match l.level.as_str() {
                 "ERROR" => Color::Red,
@@ -302,18 +315,25 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
                 "TRADE" => Color::Cyan,
                 _ => Color::DarkGray,
             };
+            let prefix = format!(" {} [{}] ", l.time, l.level);
+            let prefix_len = prefix.len();
+            let msg_max = max_width.saturating_sub(prefix_len);
+            let msg = truncate_with_ellipsis(&l.message, msg_max);
             Line::from(vec![
-                Span::styled(
-                    format!(" {} [{}] ", l.time, l.level),
-                    Style::default().fg(color),
-                ),
-                Span::raw(&l.message),
+                Span::styled(prefix, Style::default().fg(color)),
+                Span::raw(msg.into_owned()),
             ])
         })
         .collect();
 
+    let title = if state.log_focus {
+        format!(" Engine Log [{}/{} lines] ", offset + visible_lines.min(total), total)
+    } else {
+        " Engine Log ".to_string()
+    };
+
     let block = Block::default()
-        .title(" Engine Log ")
+        .title(title)
         .borders(Borders::ALL);
     let para = Paragraph::new(lines).block(block);
     f.render_widget(para, area);
