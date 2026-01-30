@@ -29,6 +29,7 @@ pub async fn run_tui(
     enable_raw_mode()?;
     stdout().execute(EnterAlternateScreen)?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+    terminal.clear()?;
 
     let result = tui_loop(&mut terminal, state_rx, cmd_tx).await;
 
