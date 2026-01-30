@@ -126,7 +126,58 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
 }
 
 fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
-    let header = Row::new(vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Action", "Latency"])
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let fixed_cols_full: usize = 5 + 5 + 5 + 6 + 8 + 8; // fair+bid+ask+edge+action+latency = 37
+
+    let (headers, constraints, ticker_w, drop_latency, drop_action) = if inner_width < 45 {
+        // Drop both Latency and Action
+        let fixed = 5 + 5 + 5 + 6;
+        let ticker_w = inner_width.saturating_sub(fixed).max(4);
+        (
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge"],
+            vec![
+                Constraint::Length(ticker_w as u16),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(6),
+            ],
+            ticker_w, true, true,
+        )
+    } else if inner_width < 55 {
+        // Drop Latency only
+        let fixed = 5 + 5 + 5 + 6 + 8;
+        let ticker_w = inner_width.saturating_sub(fixed).max(4);
+        (
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Action"],
+            vec![
+                Constraint::Length(ticker_w as u16),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(6),
+                Constraint::Length(8),
+            ],
+            ticker_w, true, false,
+        )
+    } else {
+        let ticker_w = inner_width.saturating_sub(fixed_cols_full).max(4);
+        (
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Action", "Latency"],
+            vec![
+                Constraint::Length(ticker_w as u16),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(5),
+                Constraint::Length(6),
+                Constraint::Length(8),
+                Constraint::Length(8),
+            ],
+            ticker_w, false, false,
+        )
+    };
+
+    let header = Row::new(headers)
         .style(Style::default().add_modifier(Modifier::BOLD));
 
     let rows: Vec<Row> = state
@@ -134,46 +185,45 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
         .iter()
         .map(|m| {
             let edge_color = if m.edge > 0 { Color::Green } else { Color::Red };
-            Row::new(vec![
-                Cell::from(m.ticker.clone()),
+            let ticker = truncate_with_ellipsis(&m.ticker, ticker_w);
+            let mut cells = vec![
+                Cell::from(ticker.into_owned()),
                 Cell::from(m.fair_value.to_string()),
                 Cell::from(m.bid.to_string()),
                 Cell::from(m.ask.to_string()),
                 Cell::from(format!("{:+}", m.edge))
                     .style(Style::default().fg(edge_color)),
-                Cell::from(m.action.clone()),
-                Cell::from(
+            ];
+            if !drop_action {
+                cells.push(Cell::from(m.action.clone()));
+            }
+            if !drop_latency {
+                cells.push(Cell::from(
                     m.latency_ms
                         .map(|l| format!("{}ms", l))
                         .unwrap_or_else(|| "--".to_string()),
-                ),
-            ])
+                ));
+            }
+            Row::new(cells)
         })
         .collect();
 
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Percentage(25),
-            Constraint::Length(5),
-            Constraint::Length(5),
-            Constraint::Length(5),
-            Constraint::Length(6),
-            Constraint::Length(8),
-            Constraint::Length(8),
-        ],
-    )
-    .header(header)
-    .block(
-        Block::default()
-            .title(" Live Markets ")
-            .borders(Borders::ALL),
-    );
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .block(
+            Block::default()
+                .title(" Live Markets ")
+                .borders(Borders::ALL),
+        );
 
     f.render_widget(table, area);
 }
 
 fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let fixed_cols: usize = 5 + 8 + 8 + 8; // qty+entry+sell+pnl = 29
+    let ticker_w = inner_width.saturating_sub(fixed_cols).max(4);
+
     let header = Row::new(vec!["Ticker", "Qty", "Entry", "Sell @", "P&L"])
         .style(Style::default().add_modifier(Modifier::BOLD));
 
@@ -182,8 +232,9 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
         .iter()
         .map(|p| {
             let pnl_color = if p.unrealized_pnl >= 0 { Color::Green } else { Color::Red };
+            let ticker = truncate_with_ellipsis(&p.ticker, ticker_w);
             Row::new(vec![
-                Cell::from(p.ticker.clone()),
+                Cell::from(ticker.into_owned()),
                 Cell::from(p.quantity.to_string()),
                 Cell::from(format!("{}c", p.entry_price)),
                 Cell::from(format!("{}c", p.sell_price)),
@@ -196,7 +247,7 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     let table = Table::new(
         rows,
         [
-            Constraint::Percentage(30),
+            Constraint::Length(ticker_w as u16),
             Constraint::Length(5),
             Constraint::Length(8),
             Constraint::Length(8),
