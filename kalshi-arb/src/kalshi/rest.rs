@@ -13,7 +13,6 @@ pub struct KalshiRest {
 impl KalshiRest {
     pub fn new(auth: Arc<KalshiAuth>, base_url: &str) -> Self {
         let client = Client::builder()
-            .http2_prior_knowledge()
             .pool_max_idle_per_host(4)
             .build()
             .expect("failed to build HTTP client");
@@ -30,20 +29,31 @@ impl KalshiRest {
         let mut cursor: Option<String> = None;
 
         loop {
-            let path = "/trade-api/v2/markets";
-            let mut url = format!("{}{}", self.base_url, path);
-            url.push_str(&format!("?series_ticker={}&limit=200&status=open", series_ticker));
+            let mut url = format!(
+                "{}/trade-api/v2/markets?series_ticker={}&limit=200&status=open",
+                self.base_url, series_ticker
+            );
             if let Some(ref c) = cursor {
                 url.push_str(&format!("&cursor={}", c));
             }
 
-            let resp: MarketsResponse = self.get(&url, path).await?;
-            let done = resp.cursor.is_none() || resp.markets.is_empty();
-            all_markets.extend(resp.markets);
+            let resp = self.client.get(&url).send().await.context("GET markets failed")?;
+            let status = resp.status();
+            if !status.is_success() {
+                let body = resp.text().await.unwrap_or_default();
+                anyhow::bail!("GET markets failed ({}): {}", status, body);
+            }
+
+            let parsed: MarketsResponse = resp.json().await
+                .context("failed to parse markets response")?;
+
+            let done = parsed.markets.is_empty()
+                || parsed.cursor.as_deref().map_or(true, |c| c.is_empty());
+            all_markets.extend(parsed.markets);
             if done {
                 break;
             }
-            cursor = resp.cursor;
+            cursor = parsed.cursor;
         }
 
         Ok(all_markets)
@@ -70,7 +80,6 @@ impl KalshiRest {
     }
 
     /// Get account balance.
-    #[allow(dead_code)]
     pub async fn get_balance(&self) -> Result<i64> {
         let path = "/trade-api/v2/portfolio/balance";
         let url = format!("{}{}", self.base_url, path);
@@ -88,7 +97,6 @@ impl KalshiRest {
     }
 
     /// Authenticated GET request.
-    #[allow(dead_code)]
     async fn get_authed<T: serde::de::DeserializeOwned>(&self, url: &str, path: &str) -> Result<T> {
         let headers = self.auth.headers("GET", path)?;
         let mut req = self.client.get(url);
@@ -100,17 +108,6 @@ impl KalshiRest {
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             anyhow::bail!("GET {} failed ({}): {}", path, status, body);
-        }
-        resp.json().await.context("failed to parse response")
-    }
-
-    /// Unauthenticated GET (for public endpoints like /markets).
-    async fn get<T: serde::de::DeserializeOwned>(&self, url: &str, _path: &str) -> Result<T> {
-        let resp = self.client.get(url).send().await.context("GET request failed")?;
-        let status = resp.status();
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            anyhow::bail!("GET failed ({}): {}", status, body);
         }
         resp.json().await.context("failed to parse response")
     }

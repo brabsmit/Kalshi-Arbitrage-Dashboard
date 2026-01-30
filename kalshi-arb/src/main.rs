@@ -128,6 +128,19 @@ async fn main() -> Result<()> {
 
     tracing::info!(total = market_index.len(), "market index built (games)");
 
+    // Fetch initial balance
+    match rest.get_balance().await {
+        Ok(balance) => {
+            state_tx.send_modify(|s| {
+                s.balance_cents = balance;
+            });
+            tracing::warn!("balance: {} cents (${:.2})", balance, balance as f64 / 100.0);
+        }
+        Err(e) => {
+            tracing::error!("failed to fetch balance: {:#}", e);
+        }
+    }
+
     // --- Phase 2: Spawn Kalshi WebSocket ---
     let kalshi_ws = KalshiWs::new(auth.clone(), &config.kalshi.ws_url);
     let ws_tickers = all_tickers.clone();
@@ -271,6 +284,13 @@ async fn main() -> Result<()> {
             state_tx_engine.send_modify(|state| {
                 state.markets = market_rows;
             });
+
+            // Refresh balance each cycle
+            if let Ok(balance) = rest_for_engine.get_balance().await {
+                state_tx_engine.send_modify(|s| {
+                    s.balance_cents = balance;
+                });
+            }
 
             // Poll interval: 60s to stay within odds-api.io rate limits
             // Events are cached for 5 minutes, so each cycle only makes 1 odds request

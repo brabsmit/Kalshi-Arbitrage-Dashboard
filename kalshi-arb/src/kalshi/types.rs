@@ -72,6 +72,8 @@ pub struct Market {
 #[allow(dead_code)]
 pub struct BalanceResponse {
     pub balance: i64,
+    #[serde(default)]
+    pub portfolio_value: i64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
