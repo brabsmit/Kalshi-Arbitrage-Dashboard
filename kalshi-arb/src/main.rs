@@ -237,7 +237,7 @@ async fn main() -> Result<()> {
         let mut filter_live: usize;
         let mut filter_pre_game: usize;
         let mut filter_closed: usize;
-        let mut earliest_commence: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut earliest_commence: Option<chrono::DateTime<chrono::Utc>>;
 
         loop {
             // Drain TUI commands
@@ -293,7 +293,7 @@ async fn main() -> Result<()> {
                             sm.status == "open"
                                 && sm.close_time.as_deref()
                                     .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
-                                    .map_or(true, |ct| ct.with_timezone(&chrono::Utc) > now_utc_precheck)
+                                    .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc_precheck)
                         })
                     })
                 });
@@ -434,7 +434,7 @@ async fn main() -> Result<()> {
                                             let market_open = side.status == "open"
                                                 && side.close_time.as_deref()
                                                     .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
-                                                    .map_or(true, |ct| ct.with_timezone(&chrono::Utc) > now_utc);
+                                                    .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc);
                                             if !market_open {
                                                 filter_closed += 1;
                                                 continue;
@@ -578,7 +578,7 @@ async fn main() -> Result<()> {
                                             sm.status == "open"
                                                 && sm.close_time.as_deref()
                                                     .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
-                                                    .map_or(true, |ct| ct.with_timezone(&chrono::Utc) > now_utc)
+                                                    .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc)
                                         });
                                         if !market_open {
                                             filter_closed += 1;
