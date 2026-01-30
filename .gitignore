@@ -31,5 +31,8 @@ Cargo.lock
 *.pem
 *.key
 
+# Worktrees
+.worktrees/
+
 # Verification artifacts
 verification/*.png
