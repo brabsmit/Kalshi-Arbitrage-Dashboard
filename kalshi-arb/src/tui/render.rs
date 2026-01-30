@@ -84,6 +84,7 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(6),
                 Constraint::Min(5),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(f.area());
 
@@ -92,7 +93,8 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
         draw_positions(f, state, chunks[2]);
         draw_trades(f, state, chunks[3]);
         draw_logs(f, state, chunks[4]);
-        draw_footer(f, state, chunks[5]);
+        draw_api_status(f, state, chunks[5]);
+        draw_footer(f, state, chunks[6]);
     }
 }
 
@@ -204,45 +206,49 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
 
     let (headers, constraints, ticker_w, drop_latency, drop_action) = if inner_width < 45 {
         // Drop both Latency and Action
-        let fixed = 5 + 5 + 5 + 6;
+        let fixed = 5 + 5 + 5 + 6 + 5; // fair+bid+ask+edge+mom
         let ticker_w = inner_width.saturating_sub(fixed).max(4);
         (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge"],
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom"],
             vec![
                 Constraint::Length(ticker_w as u16),
                 Constraint::Length(5),
                 Constraint::Length(5),
                 Constraint::Length(5),
                 Constraint::Length(6),
+                Constraint::Length(5),
             ],
             ticker_w, true, true,
         )
     } else if inner_width < 55 {
         // Drop Latency only
-        let fixed = 5 + 5 + 5 + 6 + 8;
+        let fixed = 5 + 5 + 5 + 6 + 5 + 8; // fair+bid+ask+edge+mom+action
         let ticker_w = inner_width.saturating_sub(fixed).max(4);
         (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Action"],
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Action"],
             vec![
                 Constraint::Length(ticker_w as u16),
                 Constraint::Length(5),
                 Constraint::Length(5),
                 Constraint::Length(5),
                 Constraint::Length(6),
+                Constraint::Length(5),
                 Constraint::Length(8),
             ],
             ticker_w, true, false,
         )
     } else {
-        let ticker_w = inner_width.saturating_sub(fixed_cols_full).max(4);
+        let fixed_with_mom = fixed_cols_full + 5; // +mom column
+        let ticker_w = inner_width.saturating_sub(fixed_with_mom).max(4);
         (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Action", "Latency"],
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Action", "Latency"],
             vec![
                 Constraint::Length(ticker_w as u16),
                 Constraint::Length(5),
                 Constraint::Length(5),
                 Constraint::Length(5),
                 Constraint::Length(6),
+                Constraint::Length(5),
                 Constraint::Length(8),
                 Constraint::Length(8),
             ],
@@ -259,6 +265,13 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
         .map(|m| {
             let edge_color = if m.edge > 0 { Color::Green } else { Color::Red };
             let ticker = truncate_with_ellipsis(&m.ticker, ticker_w);
+            let mom_color = if m.momentum_score >= 75.0 {
+                Color::Green
+            } else if m.momentum_score >= 40.0 {
+                Color::Yellow
+            } else {
+                Color::DarkGray
+            };
             let mut cells = vec![
                 Cell::from(ticker.into_owned()),
                 Cell::from(m.fair_value.to_string()),
@@ -266,6 +279,8 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 Cell::from(m.ask.to_string()),
                 Cell::from(format!("{:+}", m.edge))
                     .style(Style::default().fg(edge_color)),
+                Cell::from(format!("{:.0}", m.momentum_score))
+                    .style(Style::default().fg(mom_color)),
             ];
             if !drop_action {
                 cells.push(Cell::from(m.action.clone()));
@@ -485,6 +500,28 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
         .title(title)
         .borders(Borders::ALL);
     let para = Paragraph::new(lines).block(block);
+    f.render_widget(para, area);
+}
+
+fn draw_api_status(f: &mut Frame, state: &AppState, area: Rect) {
+    let quota_str = format!(
+        " API: {}/{} used | {:.1} req/hr | ~{:.1}h left",
+        state.api_requests_used,
+        state.api_requests_used + state.api_requests_remaining,
+        state.api_burn_rate,
+        state.api_hours_remaining,
+    );
+
+    let color = if state.api_requests_remaining < 100 {
+        Color::Red
+    } else if state.api_requests_remaining < 250 {
+        Color::Yellow
+    } else {
+        Color::DarkGray
+    };
+
+    let line = Line::from(Span::styled(quota_str, Style::default().fg(color)));
+    let para = Paragraph::new(line);
     f.render_widget(para, area);
 }
 

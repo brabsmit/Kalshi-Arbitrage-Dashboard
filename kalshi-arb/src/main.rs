@@ -475,8 +475,12 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Sort by edge descending
-            market_rows.sort_by(|a, b| b.edge.cmp(&a.edge));
+            // Sort by momentum descending, then edge descending
+            market_rows.sort_by(|a, b| {
+                b.momentum_score.partial_cmp(&a.momentum_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| b.edge.cmp(&a.edge))
+            });
 
             // Update TUI state
             state_tx_engine.send_modify(|state| {
