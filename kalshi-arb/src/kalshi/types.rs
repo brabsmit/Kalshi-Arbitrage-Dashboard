@@ -88,8 +88,6 @@ pub struct MarketPosition {
     pub ticker: String,
     pub market_exposure: i64,
     pub position: i64,
-    #[serde(default)]
-    pub resting_orders_count: u32,
 }
 
 /// WebSocket orderbook snapshot message
