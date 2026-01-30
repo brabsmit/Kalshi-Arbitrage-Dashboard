@@ -129,6 +129,8 @@ async fn main() -> Result<()> {
                                     yes_ask: kalshi::types::dollars_to_cents(m.yes_ask_dollars.as_deref()),
                                     no_bid: kalshi::types::dollars_to_cents(m.no_bid_dollars.as_deref()),
                                     no_ask: kalshi::types::dollars_to_cents(m.no_ask_dollars.as_deref()),
+                                    status: m.status.clone(),
+                                    close_time: m.close_time.clone(),
                                 };
 
                                 // Determine which side this market represents
