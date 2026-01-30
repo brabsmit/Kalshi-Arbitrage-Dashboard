@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::Message;
 
 /// Events emitted by the Kalshi WebSocket connection.
@@ -54,22 +55,28 @@ impl KalshiWs {
         tickers: &[String],
         tx: &mpsc::Sender<KalshiWsEvent>,
     ) -> Result<()> {
-        // Build auth for WS handshake
         let path = "/trade-api/ws/v2";
-        let headers = self.auth.headers("GET", path)?;
+        let auth_headers = self.auth.headers("GET", path)?;
 
-        let mut request = url::Url::parse(&self.ws_url)?;
-        // Pass auth as query params (Kalshi WS auth method)
-        for (k, v) in &headers {
-            request.query_pairs_mut().append_pair(k, v);
+        // Build request from URL (adds WS upgrade headers automatically),
+        // then attach Kalshi auth headers
+        let mut request = self.ws_url.as_str().into_client_request()
+            .context("failed to build WS request")?;
+        for (k, v) in &auth_headers {
+            request.headers_mut().insert(
+                k.parse::<tokio_tungstenite::tungstenite::http::HeaderName>()
+                    .map_err(|e| anyhow::anyhow!("invalid header name: {}", e))?,
+                v.parse::<tokio_tungstenite::tungstenite::http::HeaderValue>()
+                    .map_err(|e| anyhow::anyhow!("invalid header value: {}", e))?,
+            );
         }
 
-        let (ws_stream, _) = tokio_tungstenite::connect_async(request.as_str())
+        let (ws_stream, _) = tokio_tungstenite::connect_async(request)
             .await
             .context("WS connection failed")?;
 
         let (mut write, mut read) = ws_stream.split();
-        tracing::info!("kalshi WS connected");
+        tracing::debug!("kalshi WS connected");
         let _ = tx.send(KalshiWsEvent::Connected).await;
 
         // Subscribe to orderbook_delta for all tickers (batch in groups of 50)
@@ -88,7 +95,7 @@ impl KalshiWs {
                 .context("WS subscribe failed")?;
         }
 
-        tracing::info!(count = tickers.len(), "subscribed to tickers");
+        tracing::debug!(count = tickers.len(), "subscribed to tickers");
 
         // Read loop
         while let Some(msg) = read.next().await {
@@ -103,7 +110,7 @@ impl KalshiWs {
                     write.send(Message::Pong(data)).await?;
                 }
                 Message::Close(_) => {
-                    tracing::info!("kalshi WS received close frame");
+                    tracing::debug!("kalshi WS received close frame");
                     break;
                 }
                 _ => {}

@@ -19,7 +19,7 @@ use tui::state::{AppState, MarketRow};
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter("kalshi_arb=info")
+        .with_env_filter("kalshi_arb=warn")
         .init();
 
     let config = Config::load(Path::new("config.toml"))?;
@@ -118,7 +118,7 @@ async fn main() -> Result<()> {
                         }
                     }
                 }
-                tracing::info!(sport, count = markets.len(), "indexed Kalshi markets");
+                tracing::debug!(sport, count = markets.len(), "indexed Kalshi markets");
             }
             Err(e) => {
                 tracing::warn!(sport, error = %e, "failed to fetch Kalshi markets");
@@ -126,7 +126,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    tracing::info!(total = market_index.len(), "market index built (games)");
+    tracing::debug!(total = market_index.len(), "market index built (games)");
 
     // Fetch initial balance
     match rest.get_balance().await {
@@ -308,7 +308,7 @@ async fn main() -> Result<()> {
                 kalshi::ws::KalshiWsEvent::Connected => {
                     state_tx_ws.send_modify(|s| {
                         s.kalshi_ws_connected = true;
-                        s.push_log("INFO", "Kalshi WS connected".to_string());
+                        s.push_log("WARN", "Kalshi WS connected".to_string());
                     });
                 }
                 kalshi::ws::KalshiWsEvent::Disconnected(reason) => {
@@ -328,24 +328,9 @@ async fn main() -> Result<()> {
                     if let Ok(mut book) = live_book_ws.lock() {
                         book.insert(snap.market_ticker.clone(), (yes_bid, yes_ask, no_bid, no_ask));
                     }
-
-                    state_tx_ws.send_modify(|s| {
-                        s.push_log(
-                            "INFO",
-                            format!("Orderbook snapshot: {}", snap.market_ticker),
-                        );
-                    });
                 }
-                kalshi::ws::KalshiWsEvent::Delta(delta) => {
-                    state_tx_ws.send_modify(|s| {
-                        s.push_log(
-                            "INFO",
-                            format!(
-                                "Delta: {} {} {:+} @ {}c",
-                                delta.market_ticker, delta.side, delta.delta, delta.price
-                            ),
-                        );
-                    });
+                kalshi::ws::KalshiWsEvent::Delta(_delta) => {
+                    // Delta events processed silently
                 }
             }
         }
@@ -354,6 +339,6 @@ async fn main() -> Result<()> {
     // --- Phase 5: Run TUI (blocks until quit) ---
     tui::run_tui(state_rx, cmd_tx).await?;
 
-    tracing::info!("shutting down");
+    tracing::debug!("shutting down");
     Ok(())
 }
