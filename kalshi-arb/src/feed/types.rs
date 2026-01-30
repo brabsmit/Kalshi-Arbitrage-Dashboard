@@ -56,3 +56,10 @@ pub struct TheOddsApiOutcome {
     pub name: String,
     pub price: f64,
 }
+
+/// API usage quota info extracted from response headers.
+#[derive(Debug, Clone, Default)]
+pub struct ApiQuota {
+    pub requests_used: u64,
+    pub requests_remaining: u64,
+}

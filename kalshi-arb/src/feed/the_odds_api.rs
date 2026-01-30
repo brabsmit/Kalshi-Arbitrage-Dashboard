@@ -9,6 +9,7 @@ pub struct TheOddsApi {
     api_key: String,
     base_url: String,
     bookmakers: String,
+    last_quota: Option<ApiQuota>,
 }
 
 /// Map our internal sport key to the-odds-api.com sport key.
@@ -32,6 +33,7 @@ impl TheOddsApi {
             api_key,
             base_url: base_url.trim_end_matches('/').to_string(),
             bookmakers: bookmakers.to_string(),
+            last_quota: None,
         }
     }
 }
@@ -48,6 +50,22 @@ impl OddsFeed for TheOddsApi {
 
         let resp = self.client.get(&url).send().await
             .context("the-odds-api request failed")?;
+
+        // Extract quota from response headers
+        let used = resp.headers()
+            .get("x-requests-used")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        let remaining = resp.headers()
+            .get("x-requests-remaining")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+        self.last_quota = Some(ApiQuota {
+            requests_used: used,
+            requests_remaining: remaining,
+        });
 
         let status = resp.status();
         if !status.is_success() {
@@ -103,5 +121,9 @@ impl OddsFeed for TheOddsApi {
         }
 
         Ok(updates)
+    }
+
+    fn last_quota(&self) -> Option<ApiQuota> {
+        self.last_quota.clone()
     }
 }
