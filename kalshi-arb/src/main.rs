@@ -278,6 +278,35 @@ async fn main() -> Result<()> {
                     })
                 });
 
+                // Pre-check: does this sport have any game that COULD be live?
+                // Skip the API call entirely if all games are pre-game or closed.
+                let now_utc_precheck = chrono::Utc::now();
+                let sport_key_normalized: String = sport.to_uppercase().chars().filter(|c| c.is_ascii_alphabetic()).collect();
+                let sport_has_eligible_games = market_index.iter().any(|(key, game)| {
+                    if key.sport != sport_key_normalized {
+                        return false;
+                    }
+                    // Check if any side market is open
+                    let sides = [game.home.as_ref(), game.away.as_ref(), game.draw.as_ref()];
+                    sides.iter().any(|s| {
+                        s.is_some_and(|sm| {
+                            sm.status == "open"
+                                && sm.close_time.as_deref()
+                                    .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
+                                    .map_or(true, |ct| ct.with_timezone(&chrono::Utc) > now_utc_precheck)
+                        })
+                    })
+                });
+
+                if !sport_has_eligible_games {
+                    // Still count these games for filter stats
+                    let sport_game_count = market_index.keys()
+                        .filter(|k| k.sport == sport_key_normalized)
+                        .count();
+                    filter_closed += sport_game_count;
+                    continue;
+                }
+
                 // Check if quota is critically low — force pre-game interval
                 let quota_low = !api_request_times.is_empty()
                     && state_tx_engine.borrow().api_requests_remaining < quota_warning_threshold;
@@ -669,6 +698,50 @@ async fn main() -> Result<()> {
                     }
                     Err(e) => {
                         tracing::warn!(sport, error = %e, "odds fetch failed");
+                    }
+                }
+            }
+
+            // If nothing is live, sleep until the next game starts
+            if filter_live == 0 {
+                if let Some(next_start) = earliest_commence {
+                    let now_utc = chrono::Utc::now();
+                    if next_start > now_utc {
+                        let wait = (next_start - now_utc).to_std().unwrap_or(Duration::from_secs(5));
+                        // Cap at pre_game_poll_interval to allow index refresh
+                        let capped_wait = wait.min(pre_game_poll_interval);
+
+                        // Update TUI state before sleeping (so countdown is visible)
+                        let live_sports_empty: Vec<String> = Vec::new();
+                        state_tx_engine.send_modify(|state| {
+                            state.markets = Vec::new();
+                            state.live_sports = live_sports_empty;
+                            state.filter_stats = tui::state::FilterStats {
+                                live: filter_live,
+                                pre_game: filter_pre_game,
+                                closed: filter_closed,
+                            };
+                            state.next_game_start = earliest_commence;
+                        });
+
+                        // Sleep but wake early on TUI commands
+                        tokio::select! {
+                            _ = tokio::time::sleep(capped_wait) => {}
+                            Some(cmd) = cmd_rx.recv() => {
+                                match cmd {
+                                    tui::TuiCommand::Pause => {
+                                        is_paused = true;
+                                        state_tx_engine.send_modify(|s| s.is_paused = true);
+                                    }
+                                    tui::TuiCommand::Resume => {
+                                        is_paused = false;
+                                        state_tx_engine.send_modify(|s| s.is_paused = false);
+                                    }
+                                    tui::TuiCommand::Quit => return,
+                                }
+                            }
+                        }
+                        continue; // restart loop (re-check everything)
                     }
                 }
             }
