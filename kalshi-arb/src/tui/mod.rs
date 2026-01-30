@@ -51,6 +51,10 @@ async fn tui_loop(
     let mut log_scroll_offset: usize = 0;
     let mut market_focus = false;
     let mut market_scroll_offset: usize = 0;
+    let mut position_focus = false;
+    let mut position_scroll_offset: usize = 0;
+    let mut trade_focus = false;
+    let mut trade_scroll_offset: usize = 0;
 
     loop {
         // Render current state with UI-local overrides
@@ -60,6 +64,10 @@ async fn tui_loop(
             state.log_scroll_offset = log_scroll_offset;
             state.market_focus = market_focus;
             state.market_scroll_offset = market_scroll_offset;
+            state.position_focus = position_focus;
+            state.position_scroll_offset = position_scroll_offset;
+            state.trade_focus = trade_focus;
+            state.trade_scroll_offset = trade_scroll_offset;
             terminal.draw(|f| render::draw(f, &state, spinner_frame))?;
         }
 
@@ -120,6 +128,60 @@ async fn tui_loop(
                                 }
                                 _ => {}
                             }
+                        } else if position_focus {
+                            match key.code {
+                                KeyCode::Esc | KeyCode::Char('o') => {
+                                    position_focus = false;
+                                    position_scroll_offset = 0;
+                                }
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    position_scroll_offset = position_scroll_offset.saturating_add(1);
+                                }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    position_scroll_offset = position_scroll_offset.saturating_sub(1);
+                                }
+                                KeyCode::Char('G') => {
+                                    let total = if state_rx.borrow().sim_mode {
+                                        state_rx.borrow().sim_positions.len()
+                                    } else {
+                                        state_rx.borrow().positions.len()
+                                    };
+                                    position_scroll_offset = total;
+                                }
+                                KeyCode::Char('g') => {
+                                    position_scroll_offset = 0;
+                                }
+                                KeyCode::Char('q') => {
+                                    let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                    return Ok(());
+                                }
+                                _ => {}
+                            }
+                        } else if trade_focus {
+                            match key.code {
+                                KeyCode::Esc | KeyCode::Char('t') => {
+                                    trade_focus = false;
+                                    trade_scroll_offset = 0;
+                                }
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    trade_scroll_offset = trade_scroll_offset.saturating_add(1);
+                                }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    trade_scroll_offset = trade_scroll_offset.saturating_sub(1);
+                                }
+                                KeyCode::Char('G') => {
+                                    let total = state_rx.borrow().trades.len();
+                                    trade_scroll_offset = total;
+                                }
+                                KeyCode::Char('g') => {
+                                    trade_scroll_offset = 0;
+                                }
+                                KeyCode::Char('q') => {
+                                    let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                    return Ok(());
+                                }
+                                _ => {}
+                            }
                         } else {
                             match key.code {
                                 KeyCode::Char('q') => {
@@ -139,6 +201,14 @@ async fn tui_loop(
                                 KeyCode::Char('m') => {
                                     market_focus = true;
                                     market_scroll_offset = 0;
+                                }
+                                KeyCode::Char('o') => {
+                                    position_focus = true;
+                                    position_scroll_offset = 0;
+                                }
+                                KeyCode::Char('t') => {
+                                    trade_focus = true;
+                                    trade_scroll_offset = 0;
                                 }
                                 _ => {}
                             }
