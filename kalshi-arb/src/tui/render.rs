@@ -7,7 +7,9 @@ use ratatui::{
     Frame,
 };
 
-pub fn draw(f: &mut Frame, state: &AppState) {
+const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
+pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -20,7 +22,7 @@ pub fn draw(f: &mut Frame, state: &AppState) {
         ])
         .split(f.area());
 
-    draw_header(f, state, chunks[0]);
+    draw_header(f, state, chunks[0], spinner_frame);
     draw_markets(f, state, chunks[1]);
     draw_positions(f, state, chunks[2]);
     draw_trades(f, state, chunks[3]);
@@ -28,17 +30,21 @@ pub fn draw(f: &mut Frame, state: &AppState) {
     draw_footer(f, state, chunks[5]);
 }
 
-fn draw_header(f: &mut Frame, state: &AppState, area: Rect) {
+fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     let kalshi_status = if state.kalshi_ws_connected {
         Span::styled("CONNECTED", Style::default().fg(Color::Green))
     } else {
         Span::styled("DISCONNECTED", Style::default().fg(Color::Red))
     };
 
-    let pause_status = if state.is_paused {
-        Span::styled(" PAUSED", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+    let activity_indicator = if state.is_paused {
+        Span::styled(" ⏸ PAUSED", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
     } else {
-        Span::styled(" RUNNING", Style::default().fg(Color::Green))
+        let ch = SPINNER_FRAMES[(spinner_frame as usize) % SPINNER_FRAMES.len()];
+        Span::styled(
+            format!(" {} RUNNING", ch),
+            Style::default().fg(Color::Cyan),
+        )
     };
 
     let line = Line::from(vec![
@@ -58,7 +64,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect) {
         Span::raw("  |  Kalshi: "),
         kalshi_status,
         Span::raw(format!("  |  Uptime: {}", state.uptime())),
-        pause_status,
+        activity_indicator,
     ]);
 
     let block = Block::default()
