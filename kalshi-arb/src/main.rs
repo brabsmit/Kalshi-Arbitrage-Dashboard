@@ -72,6 +72,9 @@ async fn main() -> Result<()> {
         ("american-football", "KXNFLGAME"),
         ("baseball", "KXMLBGAME"),
         ("ice-hockey", "KXNHLGAME"),
+        ("college-basketball", "KXNCAABGAME"),
+        ("soccer-epl", "KXEPLGAME"),
+        ("mma", "KXUFCFIGHT"),
     ];
 
     let mut market_index: matcher::MarketIndex = HashMap::new();

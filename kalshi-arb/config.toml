@@ -18,6 +18,6 @@ ws_url = "wss://api.elections.kalshi.com/trade-api/ws/v2"
 
 [odds_feed]
 provider = "the-odds-api"
-sports = ["basketball", "american-football", "baseball", "ice-hockey"]
+sports = ["basketball", "american-football", "baseball", "ice-hockey", "college-basketball", "soccer-epl", "mma"]
 base_url = "https://api.the-odds-api.com"
 bookmakers = "draftkings,fanduel,betmgm,caesars"
