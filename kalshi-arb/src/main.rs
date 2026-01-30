@@ -11,7 +11,7 @@ use feed::{the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tokio::sync::{mpsc, watch};
 use tui::state::{AppState, MarketRow};
@@ -141,6 +141,12 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Live orderbook: ticker -> (best_yes_bid, best_yes_ask, best_no_bid, best_no_ask)
+    let live_book: Arc<Mutex<HashMap<String, (u32, u32, u32, u32)>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let live_book_ws = live_book.clone();
+    let live_book_engine = live_book.clone();
+
     // --- Phase 2: Spawn Kalshi WebSocket ---
     let kalshi_ws = KalshiWs::new(auth.clone(), &config.kalshi.ws_url);
     let ws_tickers = all_tickers.clone();
@@ -198,10 +204,22 @@ async fn main() -> Result<()> {
                                         date,
                                     ) {
                                         let fair = home_cents;
+
+                                        // Override stale REST prices with live WS prices if available
+                                        let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
+                                            if let Some(&(yes_bid, yes_ask, _, _)) = book.get(&mkt.ticker) {
+                                                if yes_ask > 0 { (yes_bid, yes_ask) } else { (mkt.best_bid, mkt.best_ask) }
+                                            } else {
+                                                (mkt.best_bid, mkt.best_ask)
+                                            }
+                                        } else {
+                                            (mkt.best_bid, mkt.best_ask)
+                                        };
+
                                         let signal = strategy::evaluate(
                                             fair,
-                                            mkt.best_bid,
-                                            mkt.best_ask,
+                                            bid,
+                                            ask,
                                             strategy_config.taker_edge_threshold,
                                             strategy_config.maker_edge_threshold,
                                             strategy_config.min_edge_after_fees,
@@ -216,8 +234,8 @@ async fn main() -> Result<()> {
                                         market_rows.push(MarketRow {
                                             ticker: mkt.ticker.clone(),
                                             fair_value: fair,
-                                            bid: mkt.best_bid,
-                                            ask: mkt.best_ask,
+                                            bid,
+                                            ask,
                                             edge: signal.edge,
                                             action: action_str.to_string(),
                                             latency_ms: Some(
@@ -316,6 +334,17 @@ async fn main() -> Result<()> {
                     });
                 }
                 kalshi::ws::KalshiWsEvent::Snapshot(snap) => {
+                    let yes_bid = snap.yes.iter()
+                        .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0);
+                    let no_bid = snap.no.iter()
+                        .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0);
+                    let yes_ask = if no_bid > 0 { 100 - no_bid } else { 0 };
+                    let no_ask = if yes_bid > 0 { 100 - yes_bid } else { 0 };
+
+                    if let Ok(mut book) = live_book_ws.lock() {
+                        book.insert(snap.market_ticker.clone(), (yes_bid, yes_ask, no_bid, no_ask));
+                    }
+
                     state_tx_ws.send_modify(|s| {
                         s.push_log(
                             "INFO",
