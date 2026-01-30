@@ -25,6 +25,8 @@ async fn main() -> Result<()> {
         .with_env_filter("kalshi_arb=warn")
         .init();
 
+    let sim_mode = std::env::args().any(|arg| arg == "--simulate");
+
     let config = Config::load(Path::new("config.toml"))?;
 
     // Load saved keys from .env (real env vars take precedence)
@@ -38,6 +40,11 @@ async fn main() -> Result<()> {
     println!("  Loading API credentials (.env / env vars / interactive prompt):");
     println!();
 
+    if sim_mode {
+        println!("  ** SIMULATION MODE ** ($1000 virtual balance)");
+        println!();
+    }
+
     let kalshi_api_key = Config::kalshi_api_key()?;
     let pk_pem = Config::kalshi_private_key_pem()?;
     let odds_api_key = Config::odds_api_key()?;
@@ -50,7 +57,11 @@ async fn main() -> Result<()> {
     let rest = Arc::new(KalshiRest::new(auth.clone(), &config.kalshi.api_base));
 
     // Channels
-    let (state_tx, state_rx) = watch::channel(AppState::new());
+    let (state_tx, state_rx) = watch::channel({
+        let mut s = AppState::new();
+        s.sim_mode = sim_mode;
+        s
+    });
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<tui::TuiCommand>(16);
     let (kalshi_ws_tx, mut kalshi_ws_rx) = mpsc::channel(512);
 
@@ -135,15 +146,17 @@ async fn main() -> Result<()> {
     tracing::debug!(total = market_index.len(), "market index built (games)");
 
     // Fetch initial balance
-    match rest.get_balance().await {
-        Ok(balance) => {
-            state_tx.send_modify(|s| {
-                s.balance_cents = balance;
-            });
-            tracing::warn!("balance: {} cents (${:.2})", balance, balance as f64 / 100.0);
-        }
-        Err(e) => {
-            tracing::error!("failed to fetch balance: {:#}", e);
+    if !sim_mode {
+        match rest.get_balance().await {
+            Ok(balance) => {
+                state_tx.send_modify(|s| {
+                    s.balance_cents = balance;
+                });
+                tracing::warn!("balance: {} cents (${:.2})", balance, balance as f64 / 100.0);
+            }
+            Err(e) => {
+                tracing::error!("failed to fetch balance: {:#}", e);
+            }
         }
     }
 
