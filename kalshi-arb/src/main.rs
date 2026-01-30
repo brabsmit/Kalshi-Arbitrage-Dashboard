@@ -48,7 +48,7 @@ async fn main() -> Result<()> {
 
     // Channels
     let (state_tx, state_rx) = watch::channel(AppState::new());
-    let (cmd_tx, _cmd_rx) = mpsc::channel::<tui::TuiCommand>(16);
+    let (cmd_tx, mut cmd_rx) = mpsc::channel::<tui::TuiCommand>(16);
     let (kalshi_ws_tx, mut kalshi_ws_rx) = mpsc::channel(512);
 
     // --- Phase 1: Fetch Kalshi markets and build index ---
@@ -164,10 +164,25 @@ async fn main() -> Result<()> {
 
     let state_tx_engine = state_tx.clone();
     tokio::spawn(async move {
-        let mut _is_paused = false;
+        let mut is_paused = false;
 
         loop {
-            if _is_paused {
+            // Drain TUI commands
+            while let Ok(cmd) = cmd_rx.try_recv() {
+                match cmd {
+                    tui::TuiCommand::Pause => {
+                        is_paused = true;
+                        state_tx_engine.send_modify(|s| s.is_paused = true);
+                    }
+                    tui::TuiCommand::Resume => {
+                        is_paused = false;
+                        state_tx_engine.send_modify(|s| s.is_paused = false);
+                    }
+                    tui::TuiCommand::Quit => return,
+                }
+            }
+
+            if is_paused {
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 continue;
             }
