@@ -129,7 +129,7 @@ async fn main() -> Result<()> {
                                 };
 
                                 // Determine which side this market represents
-                                let winner_code = m.ticker.split('-').last().unwrap_or("");
+                                let winner_code = m.ticker.split('-').next_back().unwrap_or("");
                                 if winner_code.eq_ignore_ascii_case("TIE") {
                                     game.draw = Some(side_market);
                                 } else {
