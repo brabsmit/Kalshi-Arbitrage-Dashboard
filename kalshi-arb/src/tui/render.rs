@@ -339,15 +339,28 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(para, area);
 }
 
-fn draw_footer(f: &mut Frame, _state: &AppState, area: Rect) {
-    let line = Line::from(vec![
-        Span::styled("  [q]", Style::default().fg(Color::Yellow)),
-        Span::raw("uit  "),
-        Span::styled("[p]", Style::default().fg(Color::Yellow)),
-        Span::raw("ause  "),
-        Span::styled("[r]", Style::default().fg(Color::Yellow)),
-        Span::raw("esume  "),
-    ]);
+fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
+    let line = if state.log_focus {
+        Line::from(vec![
+            Span::styled("  [Esc]", Style::default().fg(Color::Yellow)),
+            Span::raw(" back  "),
+            Span::styled("[j/k]", Style::default().fg(Color::Yellow)),
+            Span::raw(" scroll  "),
+            Span::styled("[g/G]", Style::default().fg(Color::Yellow)),
+            Span::raw(" top/bottom  "),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled("  [q]", Style::default().fg(Color::Yellow)),
+            Span::raw("uit  "),
+            Span::styled("[p]", Style::default().fg(Color::Yellow)),
+            Span::raw("ause  "),
+            Span::styled("[r]", Style::default().fg(Color::Yellow)),
+            Span::raw("esume  "),
+            Span::styled("[l]", Style::default().fg(Color::Yellow)),
+            Span::raw("ogs  "),
+        ])
+    };
     let para = Paragraph::new(line);
     f.render_widget(para, area);
 }

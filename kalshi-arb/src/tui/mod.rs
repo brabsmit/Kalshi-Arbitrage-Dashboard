@@ -46,15 +46,18 @@ async fn tui_loop(
     let mut ticker = tokio::time::interval(std::time::Duration::from_millis(100));
     let mut event_stream = EventStream::new();
     let mut spinner_frame: u8 = 0;
+    let mut log_focus = false;
+    let mut log_scroll_offset: usize = 0;
 
     loop {
-        // Always render current state + spinner
+        // Render current state with UI-local overrides
         {
-            let state = state_rx.borrow().clone();
+            let mut state = state_rx.borrow().clone();
+            state.log_focus = log_focus;
+            state.log_scroll_offset = log_scroll_offset;
             terminal.draw(|f| render::draw(f, &state, spinner_frame))?;
         }
 
-        // Wait for whichever fires first: tick, keyboard, or state change
         tokio::select! {
             _ = ticker.tick() => {
                 spinner_frame = spinner_frame.wrapping_add(1);
@@ -62,25 +65,54 @@ async fn tui_loop(
             event = event_stream.next() => {
                 if let Some(Ok(Event::Key(key))) = event {
                     if key.kind == KeyEventKind::Press {
-                        match key.code {
-                            KeyCode::Char('q') => {
-                                let _ = cmd_tx.send(TuiCommand::Quit).await;
-                                return Ok(());
+                        if log_focus {
+                            match key.code {
+                                KeyCode::Esc | KeyCode::Char('l') => {
+                                    log_focus = false;
+                                    log_scroll_offset = 0;
+                                }
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    log_scroll_offset = log_scroll_offset.saturating_add(1);
+                                }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    log_scroll_offset = log_scroll_offset.saturating_sub(1);
+                                }
+                                KeyCode::Char('G') => {
+                                    let total = state_rx.borrow().logs.len();
+                                    log_scroll_offset = total;
+                                }
+                                KeyCode::Char('g') => {
+                                    log_scroll_offset = 0;
+                                }
+                                KeyCode::Char('q') => {
+                                    let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                    return Ok(());
+                                }
+                                _ => {}
                             }
-                            KeyCode::Char('p') => {
-                                let _ = cmd_tx.send(TuiCommand::Pause).await;
+                        } else {
+                            match key.code {
+                                KeyCode::Char('q') => {
+                                    let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                    return Ok(());
+                                }
+                                KeyCode::Char('p') => {
+                                    let _ = cmd_tx.send(TuiCommand::Pause).await;
+                                }
+                                KeyCode::Char('r') => {
+                                    let _ = cmd_tx.send(TuiCommand::Resume).await;
+                                }
+                                KeyCode::Char('l') => {
+                                    log_focus = true;
+                                    log_scroll_offset = 0;
+                                }
+                                _ => {}
                             }
-                            KeyCode::Char('r') => {
-                                let _ = cmd_tx.send(TuiCommand::Resume).await;
-                            }
-                            _ => {}
                         }
                     }
                 }
             }
-            _ = state_rx.changed() => {
-                // State updated — will re-render on next iteration
-            }
+            _ = state_rx.changed() => {}
         }
     }
 }
