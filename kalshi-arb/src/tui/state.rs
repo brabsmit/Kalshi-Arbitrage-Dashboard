@@ -17,6 +17,8 @@ pub struct AppState {
     pub logs: VecDeque<LogEntry>,
     pub log_focus: bool,
     pub log_scroll_offset: usize,
+    pub market_focus: bool,
+    pub market_scroll_offset: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -73,6 +75,8 @@ impl AppState {
             logs: VecDeque::with_capacity(200),
             log_focus: false,
             log_scroll_offset: 0,
+            market_focus: false,
+            market_scroll_offset: 0,
         }
     }
 
