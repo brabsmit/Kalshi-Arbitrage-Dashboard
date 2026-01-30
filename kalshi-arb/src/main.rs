@@ -54,6 +54,9 @@ async fn main() -> Result<()> {
     // --- Phase 1: Fetch Kalshi markets and build index ---
     let sport_series = vec![
         ("basketball", "KXNBAGAME"),
+        ("american-football", "KXNFLGAME"),
+        ("baseball", "KXMLBGAME"),
+        ("ice-hockey", "KXNHLGAME"),
     ];
 
     let mut market_index: matcher::MarketIndex = HashMap::new();
