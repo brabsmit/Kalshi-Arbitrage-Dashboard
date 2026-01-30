@@ -26,6 +26,7 @@ pub struct SideMarket {
 pub struct IndexedGame {
     pub away: Option<SideMarket>,
     pub home: Option<SideMarket>,
+    pub draw: Option<SideMarket>,
     pub away_team: String,
     pub home_team: String,
 }
