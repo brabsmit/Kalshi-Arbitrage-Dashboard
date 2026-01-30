@@ -108,6 +108,19 @@ pub fn devig(home_odds: f64, away_odds: f64) -> (f64, f64) {
     (home_implied / total, away_implied / total)
 }
 
+/// Devig three-way odds (soccer: home/away/draw) to get fair probabilities.
+/// Returns (home_fair_prob, away_fair_prob, draw_fair_prob).
+pub fn devig_3way(home_odds: f64, away_odds: f64, draw_odds: f64) -> (f64, f64, f64) {
+    let home_implied = american_to_probability(home_odds);
+    let away_implied = american_to_probability(away_odds);
+    let draw_implied = american_to_probability(draw_odds);
+    let total = home_implied + away_implied + draw_implied;
+    if total == 0.0 {
+        return (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0);
+    }
+    (home_implied / total, away_implied / total, draw_implied / total)
+}
+
 /// Compute fair value in cents from devigged probability.
 pub fn fair_value_cents(probability: f64) -> u32 {
     (probability * 100.0).round().clamp(1.0, 99.0) as u32
@@ -158,5 +171,23 @@ mod tests {
     fn test_evaluate_skip() {
         let signal = evaluate(61, 58, 60, 5, 2, 1);
         assert_eq!(signal.action, TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_devig_3way() {
+        // Soccer-style: home -120, away +250, draw +280
+        let (home, away, draw) = devig_3way(-120.0, 250.0, 280.0);
+        assert!((home + away + draw - 1.0).abs() < 0.001);
+        assert!(home > away); // home is favorite
+        assert!(home > draw);
+    }
+
+    #[test]
+    fn test_devig_3way_even() {
+        // Roughly equal odds
+        let (home, away, draw) = devig_3way(200.0, 200.0, 200.0);
+        assert!((home - away).abs() < 0.001);
+        assert!((home - draw).abs() < 0.001);
+        assert!((home + away + draw - 1.0).abs() < 0.001);
     }
 }
