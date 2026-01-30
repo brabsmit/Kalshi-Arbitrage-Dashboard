@@ -48,7 +48,7 @@ impl KalshiRest {
                 .context("failed to parse markets response")?;
 
             let done = parsed.markets.is_empty()
-                || parsed.cursor.as_deref().map_or(true, |c| c.is_empty());
+                || parsed.cursor.as_deref().is_none_or(|c| c.is_empty());
             all_markets.extend(parsed.markets);
             if done {
                 break;
@@ -60,6 +60,7 @@ impl KalshiRest {
     }
 
     /// Place an order.
+    #[allow(dead_code)]
     pub async fn create_order(&self, order: &CreateOrderRequest) -> Result<OrderResponse> {
         let path = "/trade-api/v2/portfolio/orders";
         let url = format!("{}{}", self.base_url, path);

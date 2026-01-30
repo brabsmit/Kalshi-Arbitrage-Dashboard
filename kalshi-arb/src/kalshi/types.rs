@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct CreateOrderRequest {
     pub ticker: String,
     pub action: String,       // "buy" or "sell"
@@ -102,6 +103,7 @@ pub struct OrderbookSnapshot {
 
 /// WebSocket orderbook delta message
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)]
 pub struct OrderbookDelta {
     pub market_ticker: String,
     pub price: u32,

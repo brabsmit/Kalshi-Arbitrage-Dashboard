@@ -1,6 +1,9 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::io::{self, Write};
 use std::path::Path;
+
+const ENV_FILE: &str = ".env";
 
 #[derive(Debug, Deserialize, Clone)]
 #[allow(dead_code)]
@@ -20,6 +23,7 @@ pub struct StrategyConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
 pub struct RiskConfig {
     pub max_contracts_per_market: u32,
     pub max_total_exposure_cents: u64,
@@ -45,6 +49,7 @@ pub struct OddsFeedConfig {
     pub provider: String,
     pub sports: Vec<String>,
     pub base_url: String,
+    pub bookmakers: String,
 }
 
 impl Config {
@@ -56,19 +61,97 @@ impl Config {
         Ok(config)
     }
 
-    /// API keys come from environment variables, never config files.
-    pub fn kalshi_api_key() -> Result<String> {
-        std::env::var("KALSHI_API_KEY")
-            .context("KALSHI_API_KEY environment variable not set")
+    /// Load .env file into process environment. Real env vars take precedence.
+    pub fn load_env_file() {
+        let path = Path::new(ENV_FILE);
+        let content = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => return,
+        };
+        for line in content.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = value.trim();
+                if std::env::var(key).is_err() {
+                    std::env::set_var(key, value);
+                }
+            }
+        }
     }
 
-    pub fn kalshi_private_key_path() -> Result<String> {
-        std::env::var("KALSHI_PRIVATE_KEY_PATH")
-            .context("KALSHI_PRIVATE_KEY_PATH environment variable not set")
+    /// API keys come from environment variables, or prompted at startup.
+    /// Prompted values are saved to .env for future runs.
+    pub fn kalshi_api_key() -> Result<String> {
+        match std::env::var("KALSHI_API_KEY") {
+            Ok(key) if !key.is_empty() => Ok(key),
+            _ => {
+                let key = prompt("Kalshi API Key")?;
+                save_env_var("KALSHI_API_KEY", &key);
+                Ok(key)
+            }
+        }
+    }
+
+    /// Returns the PEM content of the private key.
+    /// Checks KALSHI_PRIVATE_KEY_PATH env var first, then prompts for a file path.
+    /// Prompted path is saved to .env for future runs.
+    pub fn kalshi_private_key_pem() -> Result<String> {
+        let path = match std::env::var("KALSHI_PRIVATE_KEY_PATH") {
+            Ok(p) if !p.is_empty() => p,
+            _ => {
+                let p = prompt("Kalshi Private Key file path")?;
+                save_env_var("KALSHI_PRIVATE_KEY_PATH", &p);
+                p
+            }
+        };
+
+        let expanded = if path.starts_with('~') {
+            let home = std::env::var("HOME").unwrap_or_default();
+            path.replacen('~', &home, 1)
+        } else {
+            path.clone()
+        };
+
+        std::fs::read_to_string(&expanded)
+            .with_context(|| format!("Failed to read private key file: {}", expanded))
     }
 
     pub fn odds_api_key() -> Result<String> {
-        std::env::var("ODDS_API_KEY")
-            .context("ODDS_API_KEY environment variable not set")
+        match std::env::var("ODDS_API_KEY") {
+            Ok(key) if !key.is_empty() => Ok(key),
+            _ => {
+                let key = prompt("Odds API Key (the-odds-api.com)")?;
+                save_env_var("ODDS_API_KEY", &key);
+                Ok(key)
+            }
+        }
     }
+}
+
+fn prompt(label: &str) -> Result<String> {
+    print!("  {} > ", label);
+    io::stdout().flush()?;
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let value = input.trim().to_string();
+    if value.is_empty() {
+        anyhow::bail!("{} cannot be empty", label);
+    }
+    Ok(value)
+}
+
+/// Append a KEY=VALUE line to .env and set it in the current process.
+fn save_env_var(key: &str, value: &str) {
+    std::env::set_var(key, value);
+    let path = Path::new(ENV_FILE);
+    let mut contents = std::fs::read_to_string(path).unwrap_or_default();
+    if !contents.is_empty() && !contents.ends_with('\n') {
+        contents.push('\n');
+    }
+    contents.push_str(&format!("{}={}\n", key, value));
+    let _ = std::fs::write(path, contents);
 }

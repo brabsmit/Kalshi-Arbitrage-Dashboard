@@ -16,6 +16,9 @@ use std::time::Instant;
 use tokio::sync::{mpsc, watch};
 use tui::state::{AppState, MarketRow};
 
+/// Live orderbook: ticker -> (best_yes_bid, best_yes_ask, best_no_bid, best_no_ask)
+type LiveBook = Arc<Mutex<HashMap<String, (u32, u32, u32, u32)>>>;
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -144,9 +147,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    // Live orderbook: ticker -> (best_yes_bid, best_yes_ask, best_no_bid, best_no_ask)
-    let live_book: Arc<Mutex<HashMap<String, (u32, u32, u32, u32)>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let live_book: LiveBook = Arc::new(Mutex::new(HashMap::new()));
     let live_book_ws = live_book.clone();
     let live_book_engine = live_book.clone();
 

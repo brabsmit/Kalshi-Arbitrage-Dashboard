@@ -1,11 +1,13 @@
 use crate::config::RiskConfig;
 use std::collections::HashMap;
 
+#[allow(dead_code)]
 pub struct RiskManager {
     config: RiskConfig,
     positions: HashMap<String, u32>, // ticker -> contract count
 }
 
+#[allow(dead_code)]
 impl RiskManager {
     pub fn new(config: RiskConfig) -> Self {
         Self {
