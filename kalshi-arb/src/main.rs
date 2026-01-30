@@ -81,7 +81,8 @@ async fn main() -> Result<()> {
         ("american-football", "KXNFLGAME"),
         ("baseball", "KXMLBGAME"),
         ("ice-hockey", "KXNHLGAME"),
-        ("college-basketball", "KXNCAABGAME"),
+        ("college-basketball", "KXNCAAMBGAME"),
+        ("college-basketball-womens", "KXNCAAWBGAME"),
         ("soccer-epl", "KXEPLGAME"),
         ("mma", "KXUFCFIGHT"),
     ];

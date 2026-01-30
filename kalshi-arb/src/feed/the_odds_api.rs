@@ -20,6 +20,7 @@ fn api_sport_key(sport: &str) -> &str {
         "baseball" => "baseball_mlb",
         "ice-hockey" => "icehockey_nhl",
         "college-basketball" => "basketball_ncaab",
+        "college-basketball-womens" => "basketball_wncaab",
         "soccer-epl" => "soccer_epl",
         "mma" => "mma_mixed_martial_arts",
         _ => sport,
