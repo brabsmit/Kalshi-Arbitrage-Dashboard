@@ -396,6 +396,13 @@ async fn main() -> Result<()> {
                                                 strategy_config.min_edge_after_fees,
                                             );
 
+                                            let signal = strategy::momentum_gate(
+                                                signal,
+                                                momentum,
+                                                momentum_config.maker_momentum_threshold,
+                                                momentum_config.taker_momentum_threshold,
+                                            );
+
                                             let action_str = match &signal.action {
                                                 strategy::TradeAction::TakerBuy => "TAKER",
                                                 strategy::TradeAction::MakerBuy { .. } => "MAKER",
@@ -421,6 +428,7 @@ async fn main() -> Result<()> {
                                                     price = signal.price,
                                                     edge = signal.edge,
                                                     net = signal.net_profit_estimate,
+                                                    momentum = format!("{:.0}", momentum),
                                                     "signal detected (dry run)"
                                                 );
                                             }
@@ -515,6 +523,13 @@ async fn main() -> Result<()> {
                                             strategy_config.min_edge_after_fees,
                                         );
 
+                                        let signal = strategy::momentum_gate(
+                                            signal,
+                                            momentum,
+                                            momentum_config.maker_momentum_threshold,
+                                            momentum_config.taker_momentum_threshold,
+                                        );
+
                                         let action_str = match &signal.action {
                                             strategy::TradeAction::TakerBuy => "TAKER",
                                             strategy::TradeAction::MakerBuy { .. } => "MAKER",
@@ -540,6 +555,7 @@ async fn main() -> Result<()> {
                                                 edge = signal.edge,
                                                 net = signal.net_profit_estimate,
                                                 inverse = mkt.is_inverse,
+                                                momentum = format!("{:.0}", momentum),
                                                 "signal detected (dry run)"
                                             );
                                         }
