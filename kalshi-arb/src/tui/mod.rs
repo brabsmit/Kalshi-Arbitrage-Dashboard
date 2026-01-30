@@ -48,6 +48,8 @@ async fn tui_loop(
     let mut spinner_frame: u8 = 0;
     let mut log_focus = false;
     let mut log_scroll_offset: usize = 0;
+    let mut market_focus = false;
+    let mut market_scroll_offset: usize = 0;
 
     loop {
         // Render current state with UI-local overrides
@@ -55,6 +57,8 @@ async fn tui_loop(
             let mut state = state_rx.borrow().clone();
             state.log_focus = log_focus;
             state.log_scroll_offset = log_scroll_offset;
+            state.market_focus = market_focus;
+            state.market_scroll_offset = market_scroll_offset;
             terminal.draw(|f| render::draw(f, &state, spinner_frame))?;
         }
 
@@ -90,6 +94,31 @@ async fn tui_loop(
                                 }
                                 _ => {}
                             }
+                        } else if market_focus {
+                            match key.code {
+                                KeyCode::Esc | KeyCode::Char('m') => {
+                                    market_focus = false;
+                                    market_scroll_offset = 0;
+                                }
+                                KeyCode::Char('j') | KeyCode::Down => {
+                                    market_scroll_offset = market_scroll_offset.saturating_add(1);
+                                }
+                                KeyCode::Char('k') | KeyCode::Up => {
+                                    market_scroll_offset = market_scroll_offset.saturating_sub(1);
+                                }
+                                KeyCode::Char('G') => {
+                                    let total = state_rx.borrow().markets.len();
+                                    market_scroll_offset = total;
+                                }
+                                KeyCode::Char('g') => {
+                                    market_scroll_offset = 0;
+                                }
+                                KeyCode::Char('q') => {
+                                    let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                    return Ok(());
+                                }
+                                _ => {}
+                            }
                         } else {
                             match key.code {
                                 KeyCode::Char('q') => {
@@ -105,6 +134,10 @@ async fn tui_loop(
                                 KeyCode::Char('l') => {
                                     log_focus = true;
                                     log_scroll_offset = 0;
+                                }
+                                KeyCode::Char('m') => {
+                                    market_focus = true;
+                                    market_scroll_offset = 0;
                                 }
                                 _ => {}
                             }
