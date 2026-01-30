@@ -19,6 +19,10 @@ pub struct AppState {
     pub log_scroll_offset: usize,
     pub market_focus: bool,
     pub market_scroll_offset: usize,
+    pub sim_mode: bool,
+    pub sim_balance_cents: i64,
+    pub sim_positions: Vec<SimPosition>,
+    pub sim_realized_pnl_cents: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +57,16 @@ pub struct TradeRow {
 }
 
 #[derive(Debug, Clone)]
+pub struct SimPosition {
+    pub ticker: String,
+    pub quantity: u32,
+    pub entry_price: u32,
+    pub sell_price: u32,
+    pub entry_fee: u32,
+    pub filled_at: Instant,
+}
+
+#[derive(Debug, Clone)]
 pub struct LogEntry {
     pub time: String,
     pub level: String,
@@ -77,6 +91,10 @@ impl AppState {
             log_scroll_offset: 0,
             market_focus: false,
             market_scroll_offset: 0,
+            sim_mode: false,
+            sim_balance_cents: 100_000,
+            sim_positions: Vec::new(),
+            sim_realized_pnl_cents: 0,
         }
     }
 
