@@ -266,6 +266,7 @@ async fn main() -> Result<()> {
             filter_pre_game = 0;
             filter_closed = 0;
             earliest_commence = None;
+            accumulated_rows.clear();
 
             for sport in &odds_sports {
                 // Determine if any event in this sport is live
