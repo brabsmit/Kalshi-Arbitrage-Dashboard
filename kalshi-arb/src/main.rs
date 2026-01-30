@@ -157,6 +157,8 @@ async fn main() -> Result<()> {
                 tracing::warn!(sport, error = %e, "failed to fetch Kalshi markets");
             }
         }
+        // Rate-limit: avoid 429 from Kalshi API when fetching multiple series
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
     tracing::debug!(total = market_index.len(), "market index built (games)");
