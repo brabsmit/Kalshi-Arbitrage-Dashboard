@@ -91,14 +91,23 @@ pub struct MarketPosition {
     pub position: i64,
 }
 
-/// WebSocket orderbook snapshot message
+/// WebSocket orderbook snapshot message.
+/// Kalshi deprecated cent-based `yes`/`no` fields (Jan 2026).
+/// We accept both formats: dollar strings (current) and legacy cent arrays.
 #[derive(Debug, Clone, Deserialize)]
 #[allow(dead_code)]
 pub struct OrderbookSnapshot {
     pub market_ticker: String,
-    /// Each entry is [price_cents, quantity]
+    /// Legacy cent-based depth: each entry is [price_cents, quantity]
+    #[serde(default)]
     pub yes: Vec<[i64; 2]>,
+    #[serde(default)]
     pub no: Vec<[i64; 2]>,
+    /// Dollar-based depth: each entry is [price_str, quantity]
+    #[serde(default)]
+    pub yes_dollars: Vec<(String, i64)>,
+    #[serde(default)]
+    pub no_dollars: Vec<(String, i64)>,
 }
 
 /// WebSocket orderbook delta message
@@ -106,9 +115,12 @@ pub struct OrderbookSnapshot {
 #[allow(dead_code)]
 pub struct OrderbookDelta {
     pub market_ticker: String,
+    #[serde(default)]
     pub price: u32,
     pub delta: i64,
     pub side: String, // "yes" or "no"
+    #[serde(default)]
+    pub price_dollars: Option<String>,
 }
 
 /// Wrapper for WS messages
@@ -121,6 +133,7 @@ pub struct WsMessage {
     pub sid: u64,
     #[serde(default)]
     pub seq: u64,
+    #[serde(default)]
     pub msg: serde_json::Value,
 }
 

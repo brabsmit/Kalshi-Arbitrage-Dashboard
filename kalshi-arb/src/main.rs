@@ -322,10 +322,27 @@ async fn main() -> Result<()> {
                     });
                 }
                 kalshi::ws::KalshiWsEvent::Snapshot(snap) => {
-                    let yes_bid = snap.yes.iter()
-                        .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0);
-                    let no_bid = snap.no.iter()
-                        .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0);
+                    // Prefer dollar fields (current API), fall back to legacy cent fields
+                    let yes_bid = if !snap.yes_dollars.is_empty() {
+                        snap.yes_dollars.iter()
+                            .filter(|(_, q)| *q > 0)
+                            .filter_map(|(p, _)| p.parse::<f64>().ok())
+                            .map(|d| (d * 100.0).round() as u32)
+                            .max().unwrap_or(0)
+                    } else {
+                        snap.yes.iter()
+                            .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0)
+                    };
+                    let no_bid = if !snap.no_dollars.is_empty() {
+                        snap.no_dollars.iter()
+                            .filter(|(_, q)| *q > 0)
+                            .filter_map(|(p, _)| p.parse::<f64>().ok())
+                            .map(|d| (d * 100.0).round() as u32)
+                            .max().unwrap_or(0)
+                    } else {
+                        snap.no.iter()
+                            .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0)
+                    };
                     let yes_ask = if no_bid > 0 { 100 - no_bid } else { 0 };
                     let no_ask = if yes_bid > 0 { 100 - yes_bid } else { 0 };
 
