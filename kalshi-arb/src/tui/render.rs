@@ -35,6 +35,19 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
         draw_header(f, state, chunks[0], spinner_frame);
         draw_logs(f, state, chunks[1]);
         draw_footer(f, state, chunks[2]);
+    } else if state.market_focus {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(header_height),
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(f.area());
+
+        draw_header(f, state, chunks[0], spinner_frame);
+        draw_markets(f, state, chunks[1]);
+        draw_footer(f, state, chunks[2]);
     } else {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -208,11 +221,31 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
         })
         .collect();
 
+    let visible_lines = area.height.saturating_sub(4) as usize; // borders + header row + padding
+    let total = rows.len();
+    let offset = if state.market_focus {
+        state.market_scroll_offset.min(total.saturating_sub(visible_lines))
+    } else {
+        0
+    };
+
+    let rows: Vec<Row> = rows.into_iter().skip(offset).take(visible_lines).collect();
+
+    let title = if state.market_focus {
+        format!(
+            " Live Markets [{}/{} rows] ",
+            (offset + rows.len()).min(total),
+            total,
+        )
+    } else {
+        " Live Markets ".to_string()
+    };
+
     let table = Table::new(rows, constraints)
         .header(header)
         .block(
             Block::default()
-                .title(" Live Markets ")
+                .title(title)
                 .borders(Borders::ALL),
         );
 
@@ -349,6 +382,15 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
             Span::styled("[g/G]", Style::default().fg(Color::Yellow)),
             Span::raw(" top/bottom  "),
         ])
+    } else if state.market_focus {
+        Line::from(vec![
+            Span::styled("  [Esc]", Style::default().fg(Color::Yellow)),
+            Span::raw(" back  "),
+            Span::styled("[j/k]", Style::default().fg(Color::Yellow)),
+            Span::raw(" scroll  "),
+            Span::styled("[g/G]", Style::default().fg(Color::Yellow)),
+            Span::raw(" top/bottom  "),
+        ])
     } else {
         Line::from(vec![
             Span::styled("  [q]", Style::default().fg(Color::Yellow)),
@@ -359,6 +401,8 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
             Span::raw("esume  "),
             Span::styled("[l]", Style::default().fg(Color::Yellow)),
             Span::raw("ogs  "),
+            Span::styled("[m]", Style::default().fg(Color::Yellow)),
+            Span::raw("arkets  "),
         ])
     };
     let para = Paragraph::new(line);
