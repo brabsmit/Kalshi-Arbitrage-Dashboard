@@ -251,7 +251,10 @@ async fn main() -> Result<()> {
 
                                 if is_3way {
                                     // --- 3-way evaluation (soccer) ---
-                                    let draw_odds = bm.draw_odds.unwrap_or(300.0);
+                                    let Some(draw_odds) = bm.draw_odds else {
+                                        tracing::warn!(sport, home = %update.home_team, "skipping soccer event: missing draw odds");
+                                        continue;
+                                    };
                                     let (home_fv, away_fv, draw_fv) =
                                         strategy::devig_3way(bm.home_odds, bm.away_odds, draw_odds);
 

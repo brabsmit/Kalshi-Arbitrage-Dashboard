@@ -172,7 +172,7 @@ pub fn parse_kalshi_title(title: &str) -> Option<(String, String)> {
 /// Title format: "Will X win the Fighter1 vs Fighter2 professional MMA fight scheduled for ..."
 /// Returns (fighter1, fighter2) from the event portion.
 pub fn parse_ufc_title(title: &str) -> Option<(String, String)> {
-    let start = title.find("the ")? + 4;
+    let start = title.find("win the ")? + 8;
     let end = title.find(" professional MMA fight")?;
     if start >= end {
         return None;
