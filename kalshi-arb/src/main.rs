@@ -7,7 +7,7 @@ mod tui;
 use anyhow::Result;
 use config::Config;
 use engine::{matcher, risk::RiskManager, strategy};
-use feed::{odds_api_io::OddsApiIo, OddsFeed};
+use feed::{the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
 use std::collections::HashMap;
 use std::path::Path;
@@ -23,14 +23,26 @@ async fn main() -> Result<()> {
         .init();
 
     let config = Config::load(Path::new("config.toml"))?;
-    tracing::info!("loaded configuration");
 
-    // Load API keys from environment
+    // Load saved keys from .env (real env vars take precedence)
+    Config::load_env_file();
+
+    // --- Startup: collect API keys (env vars, .env, or interactive prompt) ---
+    println!();
+    println!("  Kalshi Arb Engine v0.1.0");
+    println!("  ========================");
+    println!();
+    println!("  Loading API credentials (.env / env vars / interactive prompt):");
+    println!();
+
     let kalshi_api_key = Config::kalshi_api_key()?;
-    let kalshi_pk_path = Config::kalshi_private_key_path()?;
+    let pk_pem = Config::kalshi_private_key_pem()?;
     let odds_api_key = Config::odds_api_key()?;
 
-    let pk_pem = std::fs::read_to_string(&kalshi_pk_path)?;
+    println!();
+    println!("  All keys loaded. Starting engine...");
+    println!();
+
     let auth = Arc::new(KalshiAuth::new(kalshi_api_key, &pk_pem)?);
     let rest = Arc::new(KalshiRest::new(auth.clone(), &config.kalshi.api_base));
 
@@ -41,10 +53,7 @@ async fn main() -> Result<()> {
 
     // --- Phase 1: Fetch Kalshi markets and build index ---
     let sport_series = vec![
-        ("americanfootball_nfl", "KXNFLGAME"),
-        ("basketball_nba", "KXNBAGAME"),
-        ("baseball_mlb", "KXMLBGAME"),
-        ("icehockey_nhl", "KXNHLGAME"),
+        ("basketball", "KXNBAGAME"),
     ];
 
     let mut market_index: matcher::MarketIndex = HashMap::new();
@@ -55,29 +64,55 @@ async fn main() -> Result<()> {
             Ok(markets) => {
                 for m in &markets {
                     if let Some((away, home)) = matcher::parse_kalshi_title(&m.title) {
-                        let date = m
-                            .expected_expiration_time
-                            .as_deref()
-                            .or(m.close_time.as_deref())
-                            .and_then(|ts| {
-                                chrono::DateTime::parse_from_rfc3339(ts)
-                                    .ok()
-                                    .map(|dt| dt.date_naive())
-                            })
-                            .or_else(|| matcher::parse_date_from_ticker(&m.event_ticker));
+                        // Date priority: ticker (actual game date) > event_start_time > others
+                        // Kalshi's expected_expiration_time/close_time are market expiry dates,
+                        // NOT game dates — they can be weeks after the game.
+                        let date = matcher::parse_date_from_ticker(&m.event_ticker)
+                            .or_else(|| {
+                                m.event_start_time.as_deref()
+                                    .or(m.expected_expiration_time.as_deref())
+                                    .or(m.close_time.as_deref())
+                                    .and_then(|ts| {
+                                        chrono::DateTime::parse_from_rfc3339(ts)
+                                            .ok()
+                                            .map(|dt| dt.date_naive())
+                                    })
+                            });
 
                         if let Some(date) = date {
                             if let Some(key) = matcher::generate_key(sport, &away, &home, date) {
-                                market_index.insert(
-                                    key,
-                                    matcher::IndexedMarket {
-                                        ticker: m.ticker.clone(),
-                                        title: m.title.clone(),
-                                        is_inverse: false,
-                                        best_bid: m.yes_bid,
-                                        best_ask: m.yes_ask,
-                                    },
-                                );
+                                // Get or create the game entry (stores both sides)
+                                let game = market_index.entry(key).or_insert_with(|| {
+                                    matcher::IndexedGame {
+                                        away_team: away.clone(),
+                                        home_team: home.clone(),
+                                        ..Default::default()
+                                    }
+                                });
+
+                                let side_market = matcher::SideMarket {
+                                    ticker: m.ticker.clone(),
+                                    title: m.title.clone(),
+                                    yes_bid: kalshi::types::dollars_to_cents(m.yes_bid_dollars.as_deref()),
+                                    yes_ask: kalshi::types::dollars_to_cents(m.yes_ask_dollars.as_deref()),
+                                    no_bid: kalshi::types::dollars_to_cents(m.no_bid_dollars.as_deref()),
+                                    no_ask: kalshi::types::dollars_to_cents(m.no_ask_dollars.as_deref()),
+                                };
+
+                                // Determine which side this market represents
+                                match matcher::is_away_market(&m.ticker, &away, &home) {
+                                    Some(true) => game.away = Some(side_market),
+                                    Some(false) => game.home = Some(side_market),
+                                    None => {
+                                        // Fallback: first goes to away, second to home
+                                        if game.away.is_none() {
+                                            game.away = Some(side_market);
+                                        } else {
+                                            game.home = Some(side_market);
+                                        }
+                                    }
+                                }
+
                                 all_tickers.push(m.ticker.clone());
                             }
                         }
@@ -91,7 +126,7 @@ async fn main() -> Result<()> {
         }
     }
 
-    tracing::info!(total = market_index.len(), "market index built");
+    tracing::info!(total = market_index.len(), "market index built (games)");
 
     // --- Phase 2: Spawn Kalshi WebSocket ---
     let kalshi_ws = KalshiWs::new(auth.clone(), &config.kalshi.ws_url);
@@ -103,7 +138,7 @@ async fn main() -> Result<()> {
     });
 
     // --- Phase 3: Spawn odds polling loop ---
-    let mut odds_feed = OddsApiIo::new(odds_api_key, &config.odds_feed.base_url);
+    let mut odds_feed = TheOddsApi::new(odds_api_key, &config.odds_feed.base_url, &config.odds_feed.bookmakers);
     let odds_sports = config.odds_feed.sports.clone();
     let strategy_config = config.strategy.clone();
     let risk_config = config.risk.clone();
@@ -132,9 +167,8 @@ async fn main() -> Result<()> {
                                 let (home_fv, _away_fv) =
                                     strategy::devig(bm.home_odds, bm.away_odds);
                                 let home_cents = strategy::fair_value_cents(home_fv);
-                                let _away_cents = strategy::fair_value_cents(_away_fv);
 
-                                // Try to match home team
+                                // Parse game date from odds feed timestamp
                                 let date = chrono::DateTime::parse_from_rfc3339(
                                     &update.commence_time,
                                 )
@@ -142,79 +176,80 @@ async fn main() -> Result<()> {
                                 .map(|dt| dt.date_naive());
 
                                 if let Some(date) = date {
-                                    if let Some(key) = matcher::generate_key(
+                                    // Use find_match for proper home/away + inverse handling
+                                    if let Some(mkt) = matcher::find_match(
+                                        &market_index,
                                         sport,
                                         &update.home_team,
                                         &update.away_team,
                                         date,
                                     ) {
-                                        if let Some(mkt) = market_index.get(&key) {
-                                            let fair = home_cents;
-                                            let signal = strategy::evaluate(
-                                                fair,
-                                                mkt.best_bid,
-                                                mkt.best_ask,
-                                                strategy_config.taker_edge_threshold,
-                                                strategy_config.maker_edge_threshold,
-                                                strategy_config.min_edge_after_fees,
-                                            );
+                                        let fair = home_cents;
+                                        let signal = strategy::evaluate(
+                                            fair,
+                                            mkt.best_bid,
+                                            mkt.best_ask,
+                                            strategy_config.taker_edge_threshold,
+                                            strategy_config.maker_edge_threshold,
+                                            strategy_config.min_edge_after_fees,
+                                        );
 
-                                            let action_str = match &signal.action {
-                                                strategy::TradeAction::TakerBuy => "TAKER",
-                                                strategy::TradeAction::MakerBuy { .. } => "MAKER",
-                                                strategy::TradeAction::Skip => "SKIP",
-                                            };
+                                        let action_str = match &signal.action {
+                                            strategy::TradeAction::TakerBuy => "TAKER",
+                                            strategy::TradeAction::MakerBuy { .. } => "MAKER",
+                                            strategy::TradeAction::Skip => "SKIP",
+                                        };
 
-                                            market_rows.push(MarketRow {
-                                                ticker: mkt.ticker.clone(),
-                                                fair_value: fair,
-                                                bid: mkt.best_bid,
-                                                ask: mkt.best_ask,
-                                                edge: signal.edge,
-                                                action: action_str.to_string(),
-                                                latency_ms: Some(
-                                                    cycle_start.elapsed().as_millis() as u64,
-                                                ),
-                                            });
+                                        market_rows.push(MarketRow {
+                                            ticker: mkt.ticker.clone(),
+                                            fair_value: fair,
+                                            bid: mkt.best_bid,
+                                            ask: mkt.best_ask,
+                                            edge: signal.edge,
+                                            action: action_str.to_string(),
+                                            latency_ms: Some(
+                                                cycle_start.elapsed().as_millis() as u64,
+                                            ),
+                                        });
 
-                                            // Execute if actionable
-                                            if signal.action != strategy::TradeAction::Skip
-                                                && risk_mgr.can_trade(
-                                                    &mkt.ticker,
-                                                    1,
-                                                    signal.price,
-                                                )
+                                        // Execute if actionable
+                                        if signal.action != strategy::TradeAction::Skip
+                                            && risk_mgr.can_trade(
+                                                &mkt.ticker,
+                                                1,
+                                                signal.price,
+                                            )
+                                        {
+                                            let order =
+                                                kalshi::types::CreateOrderRequest {
+                                                    ticker: mkt.ticker.clone(),
+                                                    action: "buy".to_string(),
+                                                    side: if mkt.is_inverse { "no" } else { "yes" }.to_string(),
+                                                    count: 1,
+                                                    order_type: "limit".to_string(),
+                                                    yes_price: if !mkt.is_inverse { Some(signal.price) } else { None },
+                                                    no_price: if mkt.is_inverse { Some(signal.price) } else { None },
+                                                    client_order_id: None,
+                                                };
+                                            match rest_for_engine
+                                                .create_order(&order)
+                                                .await
                                             {
-                                                let order =
-                                                    kalshi::types::CreateOrderRequest {
-                                                        ticker: mkt.ticker.clone(),
-                                                        action: "buy".to_string(),
-                                                        side: "yes".to_string(),
-                                                        count: 1,
-                                                        order_type: "limit".to_string(),
-                                                        yes_price: Some(signal.price),
-                                                        no_price: None,
-                                                        client_order_id: None,
-                                                    };
-                                                match rest_for_engine
-                                                    .create_order(&order)
-                                                    .await
-                                                {
-                                                    Ok(_resp) => {
-                                                        risk_mgr.record_buy(&mkt.ticker, 1);
-                                                        tracing::info!(
-                                                            ticker = mkt.ticker,
-                                                            price = signal.price,
-                                                            edge = signal.edge,
-                                                            "order placed"
-                                                        );
-                                                    }
-                                                    Err(e) => {
-                                                        tracing::warn!(
-                                                            "order failed: {:#}",
-                                                            e
-                                                        );
-                                                    }
+                                                Ok(_resp) => {
+                                                    risk_mgr.record_buy(&mkt.ticker, 1);
+                                                    tracing::info!(
+                                                        ticker = mkt.ticker,
+                                                        price = signal.price,
+                                                        edge = signal.edge,
+                                                        inverse = mkt.is_inverse,
+                                                        "order placed"
+                                                    );
+                                                }
+                                                Err(e) => {
+                                                    tracing::warn!(
+                                                        "order failed: {:#}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         }
@@ -237,8 +272,9 @@ async fn main() -> Result<()> {
                 state.markets = market_rows;
             });
 
-            // Poll interval: 10s for free tier rate limiting
-            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            // Poll interval: 60s to stay within odds-api.io rate limits
+            // Events are cached for 5 minutes, so each cycle only makes 1 odds request
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
         }
     });
 

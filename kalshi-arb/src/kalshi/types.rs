@@ -52,19 +52,20 @@ pub struct Market {
     pub title: String,
     pub status: String,
     #[serde(default)]
-    pub yes_bid: u32,
+    pub yes_bid_dollars: Option<String>,
     #[serde(default)]
-    pub yes_ask: u32,
+    pub yes_ask_dollars: Option<String>,
     #[serde(default)]
-    pub no_bid: u32,
+    pub no_bid_dollars: Option<String>,
     #[serde(default)]
-    pub no_ask: u32,
+    pub no_ask_dollars: Option<String>,
     #[serde(default)]
     pub volume: u64,
     #[serde(default)]
     pub open_interest: u64,
     pub close_time: Option<String>,
     pub expected_expiration_time: Option<String>,
+    pub event_start_time: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -119,4 +120,16 @@ pub struct WsMessage {
     #[serde(default)]
     pub seq: u64,
     pub msg: serde_json::Value,
+}
+
+/// Parse Kalshi fixed-point dollar string ("0.5600") to cents (56).
+/// Returns 0 if the string is missing or malformed.
+pub fn dollars_to_cents(dollars: Option<&str>) -> u32 {
+    let s = match dollars {
+        Some(s) if !s.is_empty() => s,
+        _ => return 0,
+    };
+    s.parse::<f64>()
+        .map(|d| (d * 100.0).round() as u32)
+        .unwrap_or(0)
 }
