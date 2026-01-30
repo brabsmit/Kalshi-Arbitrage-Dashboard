@@ -19,9 +19,17 @@ __pycache__/
 **/__pycache__/
 **/.pytest_cache/
 
+# Rust
+kalshi-arb/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
 # Secrets & Env
 .env
 .secrets/
+*.pem
+*.key
 
 # Verification artifacts
 verification/*.png

@@ -13,8 +13,19 @@ pub struct KalshiAuth {
 impl KalshiAuth {
     pub fn new(api_key: String, private_key_pem: &str) -> Result<Self> {
         let der = pem_to_der(private_key_pem)?;
-        let key_pair = RsaKeyPair::from_pkcs8(&der)
-            .map_err(|e| anyhow::anyhow!("Failed to parse RSA key: {}", e))?;
+
+        // Try PKCS#8 first, then fall back to PKCS#1 with wrapping
+        let key_pair = match RsaKeyPair::from_pkcs8(&der) {
+            Ok(kp) => kp,
+            Err(_) => {
+                // Key is likely PKCS#1 (BEGIN RSA PRIVATE KEY).
+                // Wrap the raw PKCS#1 DER in a PKCS#8 envelope.
+                let pkcs8 = wrap_pkcs1_in_pkcs8(&der);
+                RsaKeyPair::from_pkcs8(&pkcs8)
+                    .map_err(|e| anyhow::anyhow!("Failed to parse RSA key (tried PKCS#8 and PKCS#1): {}", e))?
+            }
+        };
+
         Ok(Self {
             api_key,
             key_pair,
@@ -62,6 +73,7 @@ impl KalshiAuth {
 }
 
 /// Convert PEM-encoded private key to DER bytes.
+/// Handles both PKCS#1 (BEGIN RSA PRIVATE KEY) and PKCS#8 (BEGIN PRIVATE KEY).
 fn pem_to_der(pem: &str) -> Result<Vec<u8>> {
     let pem = pem.trim();
     let b64: String = pem
@@ -72,4 +84,62 @@ fn pem_to_der(pem: &str) -> Result<Vec<u8>> {
     base64::engine::general_purpose::STANDARD
         .decode(&b64)
         .context("Failed to decode PEM base64")
+}
+
+/// Wrap a PKCS#1 RSAPrivateKey DER blob in a PKCS#8 PrivateKeyInfo envelope.
+///
+/// PKCS#8 structure (DER):
+///   SEQUENCE {
+///     INTEGER 0                          -- version
+///     SEQUENCE {                         -- algorithm
+///       OID 1.2.840.113549.1.1.1        -- rsaEncryption
+///       NULL
+///     }
+///     OCTET STRING <pkcs1_der>           -- privateKey
+///   }
+fn wrap_pkcs1_in_pkcs8(pkcs1_der: &[u8]) -> Vec<u8> {
+    // RSA algorithm identifier: OID 1.2.840.113549.1.1.1 + NULL
+    let algo_id: &[u8] = &[
+        0x30, 0x0d, // SEQUENCE, 13 bytes
+        0x06, 0x09, // OID, 9 bytes
+        0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01, // 1.2.840.113549.1.1.1
+        0x05, 0x00, // NULL
+    ];
+
+    let version: &[u8] = &[0x02, 0x01, 0x00]; // INTEGER 0
+
+    // Build the OCTET STRING wrapping the PKCS#1 key
+    let octet_string = der_wrap(0x04, pkcs1_der);
+
+    // Inner content: version + algoId + octetString
+    let mut inner = Vec::new();
+    inner.extend_from_slice(version);
+    inner.extend_from_slice(algo_id);
+    inner.extend_from_slice(&octet_string);
+
+    // Outer SEQUENCE
+    der_wrap(0x30, &inner)
+}
+
+/// Wrap data in a DER TLV (tag-length-value), handling long-form lengths.
+fn der_wrap(tag: u8, data: &[u8]) -> Vec<u8> {
+    let mut out = vec![tag];
+    let len = data.len();
+    if len < 0x80 {
+        out.push(len as u8);
+    } else if len < 0x100 {
+        out.push(0x81);
+        out.push(len as u8);
+    } else if len < 0x10000 {
+        out.push(0x82);
+        out.push((len >> 8) as u8);
+        out.push(len as u8);
+    } else {
+        out.push(0x83);
+        out.push((len >> 16) as u8);
+        out.push((len >> 8) as u8);
+        out.push(len as u8);
+    }
+    out.extend_from_slice(data);
+    out
 }

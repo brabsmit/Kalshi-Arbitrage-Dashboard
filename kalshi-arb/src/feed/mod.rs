@@ -1,4 +1,4 @@
-pub mod odds_api_io;
+pub mod the_odds_api;
 pub mod types;
 
 use anyhow::Result;
