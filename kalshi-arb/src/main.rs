@@ -28,8 +28,10 @@ fn last_name(full_name: &str) -> &str {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let log_file = std::fs::File::create("kalshi-arb.log")?;
     tracing_subscriber::fmt()
         .with_env_filter("kalshi_arb=warn")
+        .with_writer(log_file)
         .init();
 
     let sim_mode = std::env::args().any(|arg| arg == "--simulate");
