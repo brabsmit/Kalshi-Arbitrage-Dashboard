@@ -107,7 +107,8 @@ pub fn momentum_gate(
                     ..signal
                 }
             } else if momentum_score < taker_momentum_threshold as f64 {
-                // Downgrade taker to maker
+                // Downgrade taker to maker: use ask-1 since we don't have best_bid here.
+                // net_profit_estimate is approximate for downgraded signals.
                 let bid_price = signal.price.saturating_sub(1).max(1);
                 StrategySignal {
                     action: TradeAction::MakerBuy { bid_price },

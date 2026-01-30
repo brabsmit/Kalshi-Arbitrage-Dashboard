@@ -130,7 +130,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     let uptime = state.uptime();
 
     let num_color = if state.sim_mode {
-        Color::Blue
+        Color::Cyan
     } else if pnl_cents >= 0 {
         Color::Green
     } else {
@@ -145,11 +145,11 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
 
     let bal_exp_prefix = if state.sim_mode {
         vec![
-            Span::styled(" Bal: ", Style::default().fg(Color::Blue)),
-            Span::styled(&bal, Style::default().fg(Color::Blue)),
-            Span::styled(" | Exp: ", Style::default().fg(Color::Blue)),
-            Span::styled(&exp, Style::default().fg(Color::Blue)),
-            Span::styled(" | P&L: ", Style::default().fg(Color::Blue)),
+            Span::styled(" Bal: ", Style::default().fg(Color::Cyan)),
+            Span::styled(&bal, Style::default().fg(Color::Cyan)),
+            Span::styled(" | Exp: ", Style::default().fg(Color::Cyan)),
+            Span::styled(&exp, Style::default().fg(Color::Cyan)),
+            Span::styled(" | P&L: ", Style::default().fg(Color::Cyan)),
         ]
     } else {
         vec![Span::raw(format!(" Bal: {} | Exp: {} | P&L: ", bal, exp))]
@@ -188,7 +188,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     };
 
     let title_style = if state.sim_mode {
-        Style::default().fg(Color::Blue).add_modifier(Modifier::BOLD)
+        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
