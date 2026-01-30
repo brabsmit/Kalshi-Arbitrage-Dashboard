@@ -159,6 +159,20 @@ fn prompt(label: &str) -> Result<String> {
     Ok(value)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_parses() {
+        let config = Config::load(Path::new("config.toml")).unwrap();
+        assert_eq!(config.momentum.maker_momentum_threshold, 40);
+        assert_eq!(config.momentum.taker_momentum_threshold, 75);
+        assert_eq!(config.momentum.cancel_threshold, 30);
+        assert!(config.odds_feed.live_poll_interval_s.is_some());
+    }
+}
+
 /// Append a KEY=VALUE line to .env and set it in the current process.
 fn save_env_var(key: &str, value: &str) {
     std::env::set_var(key, value);

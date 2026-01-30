@@ -256,17 +256,17 @@ async fn main() -> Result<()> {
 
             for sport in &odds_sports {
                 // Determine if any event in this sport is live
-                let is_live = sport_commence_times.get(sport.as_str()).map_or(false, |times| {
+                let is_live = sport_commence_times.get(sport.as_str()).is_some_and(|times| {
                     let now = chrono::Utc::now();
                     times.iter().any(|ct| {
                         chrono::DateTime::parse_from_rfc3339(ct)
                             .ok()
-                            .map_or(false, |dt| dt < now)
+                            .is_some_and(|dt| dt < now)
                     })
                 });
 
                 // Check if quota is critically low — force pre-game interval
-                let quota_low = api_request_times.len() > 0
+                let quota_low = !api_request_times.is_empty()
                     && state_tx_engine.borrow().api_requests_remaining < quota_warning_threshold;
                 let interval = if quota_low || !is_live {
                     pre_game_poll_interval
@@ -296,7 +296,7 @@ async fn main() -> Result<()> {
                             api_request_times.push_back(Instant::now());
                             // Keep only last hour of request times
                             let one_hour_ago = Instant::now() - Duration::from_secs(3600);
-                            while api_request_times.front().map_or(false, |&t| t < one_hour_ago) {
+                            while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
                                 api_request_times.pop_front();
                             }
                             let burn_rate = api_request_times.len() as f64;
@@ -609,7 +609,7 @@ async fn main() -> Result<()> {
                     times.iter().any(|ct| {
                         chrono::DateTime::parse_from_rfc3339(ct)
                             .ok()
-                            .map_or(false, |dt| dt < now)
+                            .is_some_and(|dt| dt < now)
                     })
                 })
                 .map(|(sport, _)| sport.clone())
