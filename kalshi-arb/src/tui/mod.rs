@@ -20,6 +20,7 @@ pub enum TuiCommand {
     Pause,
     Resume,
     FetchDiagnostic,
+    ToggleSport(String),
 }
 
 /// Run the TUI. Reads state from `state_rx`, sends commands on `cmd_tx`.
@@ -106,6 +107,11 @@ async fn tui_loop(
                                     let _ = cmd_tx.send(TuiCommand::Quit).await;
                                     return Ok(());
                                 }
+                                KeyCode::Char(c @ '1'..='8') => {
+                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    }
+                                }
                                 _ => {}
                             }
                         } else if market_focus {
@@ -130,6 +136,11 @@ async fn tui_loop(
                                 KeyCode::Char('q') => {
                                     let _ = cmd_tx.send(TuiCommand::Quit).await;
                                     return Ok(());
+                                }
+                                KeyCode::Char(c @ '1'..='8') => {
+                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    }
                                 }
                                 _ => {}
                             }
@@ -161,6 +172,11 @@ async fn tui_loop(
                                     let _ = cmd_tx.send(TuiCommand::Quit).await;
                                     return Ok(());
                                 }
+                                KeyCode::Char(c @ '1'..='8') => {
+                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    }
+                                }
                                 _ => {}
                             }
                         } else if trade_focus {
@@ -186,6 +202,11 @@ async fn tui_loop(
                                     let _ = cmd_tx.send(TuiCommand::Quit).await;
                                     return Ok(());
                                 }
+                                KeyCode::Char(c @ '1'..='8') => {
+                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    }
+                                }
                                 _ => {}
                             }
                         } else if diagnostic_focus {
@@ -210,6 +231,11 @@ async fn tui_loop(
                                 KeyCode::Char('q') => {
                                     let _ = cmd_tx.send(TuiCommand::Quit).await;
                                     return Ok(());
+                                }
+                                KeyCode::Char(c @ '1'..='8') => {
+                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    }
                                 }
                                 _ => {}
                             }
@@ -247,6 +273,11 @@ async fn tui_loop(
                                     // If no live games (engine idle), trigger one-shot fetch
                                     if state_rx.borrow().markets.is_empty() {
                                         let _ = cmd_tx.send(TuiCommand::FetchDiagnostic).await;
+                                    }
+                                }
+                                KeyCode::Char(c @ '1'..='8') => {
+                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
                                     }
                                 }
                                 _ => {}

@@ -36,6 +36,7 @@ pub const SPORT_REGISTRY: &[SportDef] = &[
     SportDef { key: "mma",                       series: "KXUFCFIGHT",   label: "UFC",   hotkey: '8' },
 ];
 
+#[derive(Debug)]
 pub struct EnabledSports {
     map: HashMap<String, bool>,
     config_path: std::path::PathBuf,
@@ -885,6 +886,7 @@ async fn main() -> Result<()> {
     let (state_tx, state_rx) = watch::channel({
         let mut s = AppState::new();
         s.sim_mode = sim_mode;
+        s.enabled_sports = Some(enabled_sports.clone());
         s
     });
     let (cmd_tx, mut cmd_rx) = mpsc::channel::<tui::TuiCommand>(16);
@@ -1138,6 +1140,10 @@ async fn main() -> Result<()> {
                         state_tx_engine.send_modify(|s| s.is_paused = false);
                     }
                     tui::TuiCommand::Quit => return,
+                    tui::TuiCommand::ToggleSport(sport_key) => {
+                        enabled_sports_engine.lock().unwrap().toggle(&sport_key);
+                        tracing::info!(sport = sport_key.as_str(), "sport toggled");
+                    }
                     tui::TuiCommand::FetchDiagnostic => {
                         // One-shot fetch for diagnostic view (use unfiltered sports list
                         // so score-feed sports like basketball still appear)
@@ -1550,6 +1556,10 @@ async fn main() -> Result<()> {
                                         state_tx_engine.send_modify(|s| s.is_paused = false);
                                     }
                                     tui::TuiCommand::Quit => return,
+                                    tui::TuiCommand::ToggleSport(sport_key) => {
+                                        enabled_sports_engine.lock().unwrap().toggle(&sport_key);
+                                        tracing::info!(sport = sport_key.as_str(), "sport toggled");
+                                    }
                                     tui::TuiCommand::FetchDiagnostic => {
                                         // One-shot fetch for diagnostic view (during idle sleep;
                                         // use unfiltered sports list so score-feed sports still appear)
