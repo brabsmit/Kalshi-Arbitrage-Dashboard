@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -8,20 +9,15 @@ const ENV_FILE: &str = ".env";
 #[derive(Debug, Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct Config {
+    pub kalshi: KalshiConfig,
+    pub odds_sources: HashMap<String, OddsSourceConfig>,
     pub strategy: StrategyConfig,
     pub risk: RiskConfig,
-    pub execution: ExecutionConfig,
-    pub kalshi: KalshiConfig,
-    #[serde(default)]
-    pub sports: SportsConfig,
-    pub odds_feed: OddsFeedConfig,
-    pub draftkings_feed: Option<DraftKingsFeedConfig>,
     pub momentum: MomentumConfig,
-    pub score_feed: Option<ScoreFeedConfig>,
-    pub college_score_feed: Option<CollegeScoreFeedConfig>,
-    pub simulation: Option<SimulationConfig>,
-    pub win_prob: Option<WinProbConfig>,
-    pub college_win_prob: Option<WinProbConfig>,
+    pub execution: ExecutionConfig,
+    #[serde(default)]
+    pub simulation: SimulationConfig,
+    pub sports: HashMap<String, SportConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -54,73 +50,79 @@ pub struct KalshiConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-pub struct SportsConfig {
+pub struct OddsSourceConfig {
+    #[serde(rename = "type")]
+    pub source_type: String,
     #[serde(default)]
-    pub basketball: bool,
-    #[serde(default, alias = "american-football")]
-    pub american_football: bool,
+    pub base_url: Option<String>,
     #[serde(default)]
-    pub baseball: bool,
-    #[serde(default, alias = "ice-hockey")]
-    pub ice_hockey: bool,
-    #[serde(default, alias = "college-basketball")]
-    pub college_basketball: bool,
-    #[serde(default, alias = "college-basketball-womens")]
-    pub college_basketball_womens: bool,
-    #[serde(default, alias = "soccer-epl")]
-    pub soccer_epl: bool,
+    pub bookmakers: Option<String>,
+    #[serde(default = "default_live_poll")]
+    pub live_poll_s: u64,
+    #[serde(default = "default_pre_game_poll")]
+    pub pre_game_poll_s: u64,
     #[serde(default)]
-    pub mma: bool,
+    pub quota_warning_threshold: Option<u64>,
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout_ms: u64,
 }
 
-impl Default for SportsConfig {
-    fn default() -> Self {
-        Self {
-            basketball: true,
-            american_football: true,
-            baseball: true,
-            ice_hockey: true,
-            college_basketball: true,
-            college_basketball_womens: true,
-            soccer_epl: true,
-            mma: true,
-        }
-    }
-}
+fn default_live_poll() -> u64 { 20 }
+fn default_pre_game_poll() -> u64 { 120 }
+fn default_request_timeout() -> u64 { 5000 }
 
-impl SportsConfig {
-    /// Return the list of enabled sport keys (using the hyphenated API names).
-    pub fn enabled_keys(&self) -> Vec<String> {
-        let mut out = Vec::new();
-        if self.basketball { out.push("basketball".to_string()); }
-        if self.american_football { out.push("american-football".to_string()); }
-        if self.baseball { out.push("baseball".to_string()); }
-        if self.ice_hockey { out.push("ice-hockey".to_string()); }
-        if self.college_basketball { out.push("college-basketball".to_string()); }
-        if self.college_basketball_womens { out.push("college-basketball-womens".to_string()); }
-        if self.soccer_epl { out.push("soccer-epl".to_string()); }
-        if self.mma { out.push("mma".to_string()); }
-        out
-    }
+#[derive(Debug, Deserialize, Clone)]
+pub struct SportConfig {
+    pub enabled: bool,
+    pub kalshi_series: String,
+    pub label: String,
+    pub hotkey: String,
+    pub fair_value: String,
+    pub odds_source: String,
+    pub score_feed: Option<ScoreFeedConfig>,
+    pub win_prob: Option<WinProbConfig>,
+    pub strategy: Option<StrategyOverride>,
+    pub momentum: Option<MomentumOverride>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[allow(dead_code)]
-pub struct OddsFeedConfig {
-    pub provider: String,
-    pub base_url: String,
-    pub bookmakers: String,
-    pub live_poll_interval_s: Option<u64>,
-    pub pre_game_poll_interval_s: Option<u64>,
-    pub quota_warning_threshold: Option<u64>,
-    #[serde(default = "default_source_strategy")]
-    pub source_strategy: String,
+pub struct ScoreFeedConfig {
+    pub primary_url: String,
+    #[serde(default)]
+    pub fallback_url: Option<String>,
+    #[serde(default = "default_score_live_poll")]
+    pub live_poll_s: u64,
+    #[serde(default = "default_score_pre_game_poll")]
+    pub pre_game_poll_s: u64,
+    #[serde(default = "default_failover_threshold")]
+    pub failover_threshold: u32,
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout_ms: u64,
 }
 
-fn default_source_strategy() -> String {
-    "the-odds-api".to_string()
+fn default_score_live_poll() -> u64 { 1 }
+fn default_score_pre_game_poll() -> u64 { 60 }
+fn default_failover_threshold() -> u32 { 3 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct StrategyOverride {
+    pub taker_edge_threshold: Option<u8>,
+    pub maker_edge_threshold: Option<u8>,
+    pub min_edge_after_fees: Option<u8>,
 }
 
+#[derive(Debug, Deserialize, Clone)]
+pub struct MomentumOverride {
+    pub taker_momentum_threshold: Option<u8>,
+    pub maker_momentum_threshold: Option<u8>,
+    pub cancel_threshold: Option<u8>,
+    pub velocity_weight: Option<f64>,
+    pub book_pressure_weight: Option<f64>,
+    pub velocity_window_size: Option<usize>,
+    pub cancel_check_interval_ms: Option<u64>,
+}
+
+// Kept for internal use by DraftKingsFeed::new() — not part of the TOML schema.
 #[derive(Debug, Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct DraftKingsFeedConfig {
@@ -144,25 +146,6 @@ impl Default for DraftKingsFeedConfig {
             request_timeout_ms: 5000,
         }
     }
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct ScoreFeedConfig {
-    pub nba_api_url: String,
-    pub espn_api_url: String,
-    pub live_poll_interval_s: u64,
-    pub pre_game_poll_interval_s: u64,
-    pub failover_threshold: u32,
-    pub request_timeout_ms: u64,
-}
-
-#[derive(Debug, Deserialize, Clone)]
-pub struct CollegeScoreFeedConfig {
-    pub espn_mens_url: String,
-    pub espn_womens_url: String,
-    pub live_poll_interval_s: u64,
-    pub pre_game_poll_interval_s: u64,
-    pub request_timeout_ms: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -217,6 +200,41 @@ impl Default for WinProbConfig {
         }
     }
 }
+
+// ── Resolution helpers ──────────────────────────────────────────────────
+
+impl StrategyConfig {
+    pub fn with_override(&self, ov: Option<&StrategyOverride>) -> StrategyConfig {
+        match ov {
+            None => self.clone(),
+            Some(o) => StrategyConfig {
+                taker_edge_threshold: o.taker_edge_threshold.unwrap_or(self.taker_edge_threshold),
+                maker_edge_threshold: o.maker_edge_threshold.unwrap_or(self.maker_edge_threshold),
+                min_edge_after_fees: o.min_edge_after_fees.unwrap_or(self.min_edge_after_fees),
+            },
+        }
+    }
+}
+
+impl MomentumConfig {
+    pub fn with_override(&self, ov: Option<&MomentumOverride>) -> MomentumConfig {
+        match ov {
+            None => self.clone(),
+            Some(o) => MomentumConfig {
+                taker_momentum_threshold: o.taker_momentum_threshold.unwrap_or(self.taker_momentum_threshold),
+                maker_momentum_threshold: o.maker_momentum_threshold.unwrap_or(self.maker_momentum_threshold),
+                cancel_threshold: o.cancel_threshold.unwrap_or(self.cancel_threshold),
+                velocity_weight: o.velocity_weight.unwrap_or(self.velocity_weight),
+                book_pressure_weight: o.book_pressure_weight.unwrap_or(self.book_pressure_weight),
+                velocity_window_size: o.velocity_window_size.unwrap_or(self.velocity_window_size),
+                cancel_check_interval_ms: o.cancel_check_interval_ms.unwrap_or(self.cancel_check_interval_ms),
+                bypass_for_score_signals: false,
+            },
+        }
+    }
+}
+
+// ── Config loading & env helpers ────────────────────────────────────────
 
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
@@ -333,21 +351,6 @@ fn prompt(label: &str) -> Result<String> {
     Ok(value)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_config_parses() {
-        let config = Config::load(Path::new("config.toml")).unwrap();
-        assert_eq!(config.momentum.maker_momentum_threshold, 40);
-        assert_eq!(config.momentum.taker_momentum_threshold, 75);
-        assert_eq!(config.momentum.cancel_threshold, 30);
-        assert!(config.odds_feed.live_poll_interval_s.is_some());
-        assert!(config.sports.basketball);
-    }
-}
-
 /// Strip carriage returns, BOM, and other invisible chars from a key/path value.
 fn sanitize_key(raw: &str) -> String {
     raw.replace(['\r', '\u{feff}', '\u{200b}'], "")
@@ -365,4 +368,158 @@ fn save_env_var(key: &str, value: &str) {
     }
     contents.push_str(&format!("{}={}\n", key, value));
     let _ = std::fs::write(path, contents);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_new_config_parses() {
+        let toml_str = r#"
+[kalshi]
+api_base = "https://api.elections.kalshi.com"
+ws_url = "wss://api.elections.kalshi.com/trade-api/ws/v2"
+
+[odds_sources.the-odds-api]
+type = "the-odds-api"
+base_url = "https://api.the-odds-api.com"
+bookmakers = "draftkings,fanduel,betmgm,caesars"
+live_poll_s = 20
+pre_game_poll_s = 120
+quota_warning_threshold = 100
+
+[strategy]
+taker_edge_threshold = 5
+maker_edge_threshold = 2
+min_edge_after_fees = 1
+
+[risk]
+kelly_fraction = 0.25
+max_contracts_per_market = 10
+max_total_exposure_cents = 50000
+max_concurrent_markets = 5
+
+[momentum]
+taker_momentum_threshold = 75
+maker_momentum_threshold = 40
+cancel_threshold = 30
+velocity_weight = 0.6
+book_pressure_weight = 0.4
+velocity_window_size = 10
+cancel_check_interval_ms = 1000
+
+[execution]
+maker_timeout_ms = 2000
+stale_odds_threshold_ms = 30000
+
+[simulation]
+latency_ms = 500
+use_break_even_exit = true
+
+[sports.basketball]
+enabled = true
+kalshi_series = "KXNBAGAME"
+label = "NBA"
+hotkey = "1"
+fair_value = "score-feed"
+odds_source = "the-odds-api"
+
+[sports.basketball.score_feed]
+primary_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+fallback_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+live_poll_s = 1
+pre_game_poll_s = 60
+failover_threshold = 3
+request_timeout_ms = 5000
+
+[sports.basketball.win_prob]
+home_advantage = 2.5
+k_start = 0.065
+k_range = 0.25
+ot_k_start = 0.10
+ot_k_range = 1.0
+regulation_secs = 2880
+
+[sports.basketball.strategy]
+taker_edge_threshold = 3
+maker_edge_threshold = 1
+
+[sports.basketball.momentum]
+taker_momentum_threshold = 0
+maker_momentum_threshold = 0
+
+[sports.ice-hockey]
+enabled = true
+kalshi_series = "KXNHLGAME"
+label = "NHL"
+hotkey = "4"
+fair_value = "odds-feed"
+odds_source = "the-odds-api"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.kalshi.api_base, "https://api.elections.kalshi.com");
+        assert_eq!(config.strategy.taker_edge_threshold, 5);
+        assert_eq!(config.sports.len(), 2);
+
+        let bball = &config.sports["basketball"];
+        assert!(bball.enabled);
+        assert_eq!(bball.kalshi_series, "KXNBAGAME");
+        assert_eq!(bball.fair_value, "score-feed");
+        assert!(bball.score_feed.is_some());
+        assert!(bball.win_prob.is_some());
+        assert_eq!(bball.strategy.as_ref().unwrap().taker_edge_threshold, Some(3));
+        assert_eq!(bball.momentum.as_ref().unwrap().taker_momentum_threshold, Some(0));
+
+        let hockey = &config.sports["ice-hockey"];
+        assert_eq!(hockey.fair_value, "odds-feed");
+        assert!(hockey.score_feed.is_none());
+        assert!(hockey.strategy.is_none());
+    }
+
+    #[test]
+    fn test_strategy_override_resolution() {
+        let global = StrategyConfig {
+            taker_edge_threshold: 5,
+            maker_edge_threshold: 2,
+            min_edge_after_fees: 1,
+        };
+        let ov = StrategyOverride {
+            taker_edge_threshold: Some(3),
+            maker_edge_threshold: Some(1),
+            min_edge_after_fees: None,
+        };
+        let resolved = global.with_override(Some(&ov));
+        assert_eq!(resolved.taker_edge_threshold, 3);
+        assert_eq!(resolved.maker_edge_threshold, 1);
+        assert_eq!(resolved.min_edge_after_fees, 1);
+    }
+
+    #[test]
+    fn test_momentum_override_resolution() {
+        let global = MomentumConfig {
+            taker_momentum_threshold: 75,
+            maker_momentum_threshold: 40,
+            cancel_threshold: 30,
+            velocity_weight: 0.6,
+            book_pressure_weight: 0.4,
+            velocity_window_size: 10,
+            cancel_check_interval_ms: 1000,
+            bypass_for_score_signals: true,
+        };
+        let ov = MomentumOverride {
+            taker_momentum_threshold: Some(0),
+            maker_momentum_threshold: Some(0),
+            cancel_threshold: None,
+            velocity_weight: None,
+            book_pressure_weight: None,
+            velocity_window_size: None,
+            cancel_check_interval_ms: None,
+        };
+        let resolved = global.with_override(Some(&ov));
+        assert_eq!(resolved.taker_momentum_threshold, 0);
+        assert_eq!(resolved.maker_momentum_threshold, 0);
+        assert_eq!(resolved.cancel_threshold, 30);
+        assert!(!resolved.bypass_for_score_signals);
+    }
 }
