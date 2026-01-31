@@ -14,6 +14,7 @@ pub struct Config {
     pub kalshi: KalshiConfig,
     pub odds_feed: OddsFeedConfig,
     pub momentum: MomentumConfig,
+    pub score_feed: Option<ScoreFeedConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -54,6 +55,16 @@ pub struct OddsFeedConfig {
     pub live_poll_interval_s: Option<u64>,
     pub pre_game_poll_interval_s: Option<u64>,
     pub quota_warning_threshold: Option<u64>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ScoreFeedConfig {
+    pub nba_api_url: String,
+    pub espn_api_url: String,
+    pub live_poll_interval_s: u64,
+    pub pre_game_poll_interval_s: u64,
+    pub failover_threshold: u32,
+    pub request_timeout_ms: u64,
 }
 
 #[derive(Debug, Deserialize, Clone)]
