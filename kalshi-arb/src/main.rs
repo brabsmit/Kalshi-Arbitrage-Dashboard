@@ -1446,9 +1446,9 @@ async fn main() -> Result<()> {
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
-            // Clone the book snapshot and release the lock immediately
-            let snapshot = if let Ok(book) = live_book_display.lock() {
-                book.clone()
+            // Project best bid/ask from depth books and release the lock immediately
+            let snapshot: HashMap<String, (u32, u32, u32, u32)> = if let Ok(book) = live_book_display.lock() {
+                book.iter().map(|(k, v)| (k.clone(), v.best_bid_ask())).collect()
             } else {
                 continue;
             };
@@ -1457,8 +1457,7 @@ async fn main() -> Result<()> {
             }
             state_tx_display.send_modify(|state| {
                 for row in &mut state.markets {
-                    if let Some(depth) = snapshot.get(&row.ticker) {
-                        let (yb, ya, _, _) = depth.best_bid_ask();
+                    if let Some(&(yb, ya, _, _)) = snapshot.get(&row.ticker) {
                         if ya > 0 {
                             row.bid = yb;
                             row.ask = ya;
