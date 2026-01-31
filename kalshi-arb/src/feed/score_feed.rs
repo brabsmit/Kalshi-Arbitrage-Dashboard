@@ -51,6 +51,22 @@ impl ScoreUpdate {
             2880 + ot_period * 300 + (300 - clock_seconds)
         }
     }
+
+    /// Compute total elapsed seconds for college basketball.
+    /// College: 2 halves x 20 min (1200s each). OT periods are 5 min (300s each).
+    pub fn compute_elapsed_college(period: u8, clock_seconds: u16) -> u16 {
+        if period == 0 {
+            return 0;
+        }
+        if period <= 2 {
+            let completed = (period - 1) as u16;
+            completed * 1200 + (1200 - clock_seconds)
+        } else {
+            // Overtime: regulation (2400s) + completed OT periods
+            let ot_period = (period - 3) as u16;
+            2400 + ot_period * 300 + (300 - clock_seconds)
+        }
+    }
 }
 
 // ── NBA API Deserialization ──────────────────────────────────────────
@@ -529,5 +545,35 @@ mod tests {
         poller.espn_primary_polls += 1;
         poller.espn_primary_polls += 1;
         assert!(poller.espn_primary_polls >= poller.failover_threshold);
+    }
+
+    #[test]
+    fn test_college_elapsed_game_start() {
+        assert_eq!(ScoreUpdate::compute_elapsed_college(1, 1200), 0);
+    }
+
+    #[test]
+    fn test_college_elapsed_end_first_half() {
+        assert_eq!(ScoreUpdate::compute_elapsed_college(1, 0), 1200);
+    }
+
+    #[test]
+    fn test_college_elapsed_start_second_half() {
+        assert_eq!(ScoreUpdate::compute_elapsed_college(2, 1200), 1200);
+    }
+
+    #[test]
+    fn test_college_elapsed_end_regulation() {
+        assert_eq!(ScoreUpdate::compute_elapsed_college(2, 0), 2400);
+    }
+
+    #[test]
+    fn test_college_elapsed_overtime_start() {
+        assert_eq!(ScoreUpdate::compute_elapsed_college(3, 300), 2400);
+    }
+
+    #[test]
+    fn test_college_elapsed_overtime_end() {
+        assert_eq!(ScoreUpdate::compute_elapsed_college(3, 0), 2700);
     }
 }
