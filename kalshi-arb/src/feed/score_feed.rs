@@ -364,6 +364,70 @@ impl ScorePoller {
     }
 }
 
+// ── CollegeScorePoller — ESPN Men's & Women's ──────────────────────
+
+/// Score poller for college basketball via ESPN API.
+/// Fetches both men's and women's scoreboard endpoints.
+pub struct CollegeScorePoller {
+    client: Client,
+    mens_url: String,
+    womens_url: String,
+    timeout: Duration,
+    last_etag: HashMap<String, String>,
+    cached_response: HashMap<String, Vec<ScoreUpdate>>,
+}
+
+impl CollegeScorePoller {
+    pub fn new(mens_url: &str, womens_url: &str, timeout_ms: u64) -> Self {
+        Self {
+            client: Client::new(),
+            mens_url: mens_url.to_string(),
+            womens_url: womens_url.to_string(),
+            timeout: Duration::from_millis(timeout_ms),
+            last_etag: HashMap::new(),
+            cached_response: HashMap::new(),
+        }
+    }
+
+    /// Fetch both men's and women's college basketball scores.
+    pub async fn fetch(&mut self) -> anyhow::Result<(Vec<ScoreUpdate>, Vec<ScoreUpdate>)> {
+        let mens_url = self.mens_url.clone();
+        let womens_url = self.womens_url.clone();
+        let mens = self.fetch_endpoint(&mens_url).await.unwrap_or_default();
+        let womens = self.fetch_endpoint(&womens_url).await.unwrap_or_default();
+        Ok((mens, womens))
+    }
+
+    async fn fetch_endpoint(&mut self, url: &str) -> anyhow::Result<Vec<ScoreUpdate>> {
+        let mut req = self.client.get(url).timeout(self.timeout);
+        if let Some(etag) = self.last_etag.get(url) {
+            req = req.header("If-None-Match", etag.as_str());
+        }
+        let resp = req.send().await?;
+
+        if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.cached_response.get(url) {
+                return Ok(cached.clone());
+            }
+        }
+
+        if let Some(etag) = resp.headers().get("etag") {
+            if let Ok(etag_str) = etag.to_str() {
+                self.last_etag.insert(url.to_string(), etag_str.to_string());
+            }
+        }
+
+        let text = resp.text().await?;
+        let mut updates = parse_espn_scoreboard(&text)?;
+        // Recompute elapsed with college period structure
+        for u in &mut updates {
+            u.total_elapsed_seconds = ScoreUpdate::compute_elapsed_college(u.period, u.clock_seconds);
+        }
+        self.cached_response.insert(url.to_string(), updates.clone());
+        Ok(updates)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
