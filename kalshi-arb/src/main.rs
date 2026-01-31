@@ -1502,9 +1502,21 @@ async fn main() -> Result<()> {
                     match odds_feed.fetch_odds(sport).await {
                         Ok(updates) => {
                             last_poll.insert(sport.to_string(), Instant::now());
+                            let now_utc = chrono::Utc::now();
                             let ctimes: Vec<String> = updates.iter()
                                 .map(|u| u.commence_time.clone())
                                 .collect();
+                            // Track earliest upcoming game for countdown display
+                            for ct_str in &ctimes {
+                                if let Ok(ct) = chrono::DateTime::parse_from_rfc3339(ct_str) {
+                                    let ct_utc = ct.with_timezone(&chrono::Utc);
+                                    if ct_utc > now_utc {
+                                        earliest_commence = Some(
+                                            earliest_commence.map_or(ct_utc, |e: chrono::DateTime<chrono::Utc>| e.min(ct_utc))
+                                        );
+                                    }
+                                }
+                            }
                             sport_commence_times.insert(sport.to_string(), ctimes);
                             diagnostic_cache.insert(
                                 sport.to_string(),
