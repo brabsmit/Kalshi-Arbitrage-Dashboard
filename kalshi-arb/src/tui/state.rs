@@ -100,6 +100,8 @@ pub struct TradeRow {
     pub order_type: String,
     pub pnl: Option<i32>,
     pub slippage: Option<i32>,
+    pub source: String,
+    pub fair_value_basis: String,
 }
 
 #[derive(Debug, Clone)]
@@ -111,6 +113,7 @@ pub struct SimPosition {
     pub entry_fee: u32,
     pub filled_at: Instant,
     pub signal_ask: u32,
+    pub trace: Option<crate::pipeline::SignalTrace>,
 }
 
 #[derive(Debug, Clone)]
