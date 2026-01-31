@@ -118,6 +118,93 @@ pub fn parse_nba_scoreboard(json: &str) -> anyhow::Result<Vec<ScoreUpdate>> {
     Ok(updates)
 }
 
+// ── ESPN API Deserialization ─────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct EspnScoreboard {
+    events: Vec<EspnEvent>,
+}
+
+#[derive(Deserialize)]
+struct EspnEvent {
+    id: String,
+    competitions: Vec<EspnCompetition>,
+}
+
+#[derive(Deserialize)]
+struct EspnCompetition {
+    competitors: Vec<EspnCompetitor>,
+    status: EspnStatus,
+}
+
+#[derive(Deserialize)]
+struct EspnCompetitor {
+    #[serde(rename = "homeAway")]
+    home_away: String,
+    team: EspnTeam,
+    score: String,
+}
+
+#[derive(Deserialize)]
+struct EspnTeam {
+    #[serde(rename = "displayName")]
+    display_name: String,
+}
+
+#[derive(Deserialize)]
+struct EspnStatus {
+    #[serde(rename = "type")]
+    status_type: EspnStatusType,
+    period: u8,
+    #[serde(rename = "displayClock")]
+    display_clock: String,
+}
+
+#[derive(Deserialize)]
+struct EspnStatusType {
+    id: String,
+}
+
+fn parse_espn_clock(clock: &str) -> Option<u16> {
+    let clock = clock.split('.').next()?;
+    let (min_str, sec_str) = clock.split_once(':')?;
+    let minutes: u16 = min_str.parse().ok()?;
+    let seconds: u16 = sec_str.parse().ok()?;
+    Some(minutes * 60 + seconds)
+}
+
+pub fn parse_espn_scoreboard(json: &str) -> anyhow::Result<Vec<ScoreUpdate>> {
+    let scoreboard: EspnScoreboard = serde_json::from_str(json)?;
+    let mut updates = Vec::new();
+    for event in scoreboard.events {
+        let Some(comp) = event.competitions.first() else { continue };
+        let home = comp.competitors.iter().find(|c| c.home_away == "home");
+        let away = comp.competitors.iter().find(|c| c.home_away == "away");
+        let (Some(home), Some(away)) = (home, away) else { continue };
+        let status = match comp.status.status_type.id.as_str() {
+            "1" => GameStatus::PreGame,
+            "2" => GameStatus::Live,
+            "3" => GameStatus::Finished,
+            _ => GameStatus::PreGame,
+        };
+        let clock_secs = parse_espn_clock(&comp.status.display_clock).unwrap_or(0);
+        let elapsed = ScoreUpdate::compute_elapsed(comp.status.period, clock_secs);
+        updates.push(ScoreUpdate {
+            game_id: event.id,
+            home_team: home.team.display_name.clone(),
+            away_team: away.team.display_name.clone(),
+            home_score: home.score.parse().unwrap_or(0),
+            away_score: away.score.parse().unwrap_or(0),
+            period: comp.status.period,
+            clock_seconds: clock_secs,
+            total_elapsed_seconds: elapsed,
+            game_status: status,
+            source: ScoreSource::Espn,
+        });
+    }
+    Ok(updates)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +297,65 @@ mod tests {
         assert_eq!(nba_game_status(1), GameStatus::PreGame);
         assert_eq!(nba_game_status(2), GameStatus::Live);
         assert_eq!(nba_game_status(3), GameStatus::Finished);
+    }
+
+    #[test]
+    fn test_parse_espn_scoreboard() {
+        let json = r#"{
+            "events": [
+                {
+                    "id": "401584700",
+                    "competitions": [
+                        {
+                            "competitors": [
+                                {
+                                    "homeAway": "home",
+                                    "team": {
+                                        "displayName": "Los Angeles Lakers"
+                                    },
+                                    "score": "55"
+                                },
+                                {
+                                    "homeAway": "away",
+                                    "team": {
+                                        "displayName": "Boston Celtics"
+                                    },
+                                    "score": "50"
+                                }
+                            ],
+                            "status": {
+                                "type": {
+                                    "id": "2",
+                                    "name": "STATUS_IN_PROGRESS"
+                                },
+                                "period": 2,
+                                "displayClock": "5:30"
+                            }
+                        }
+                    ]
+                }
+            ]
+        }"#;
+
+        let updates = parse_espn_scoreboard(json).unwrap();
+        assert_eq!(updates.len(), 1);
+        let u = &updates[0];
+        assert_eq!(u.game_id, "401584700");
+        assert_eq!(u.home_team, "Los Angeles Lakers");
+        assert_eq!(u.away_team, "Boston Celtics");
+        assert_eq!(u.home_score, 55);
+        assert_eq!(u.away_score, 50);
+        assert_eq!(u.period, 2);
+        assert_eq!(u.clock_seconds, 330);
+        assert_eq!(u.game_status, GameStatus::Live);
+        assert_eq!(u.source, ScoreSource::Espn);
+    }
+
+    #[test]
+    fn test_parse_espn_display_clock() {
+        assert_eq!(parse_espn_clock("5:30"), Some(330));
+        assert_eq!(parse_espn_clock("12:00"), Some(720));
+        assert_eq!(parse_espn_clock("0:00"), Some(0));
+        assert_eq!(parse_espn_clock("0:05.3"), Some(5));
     }
 }
