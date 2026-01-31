@@ -30,12 +30,14 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(3),
                 Constraint::Min(0),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(f.area());
 
         draw_diagnostic_header(f, state, chunks[0]);
         draw_diagnostic(f, state, chunks[1]);
         draw_diagnostic_footer(f, chunks[2]);
+        draw_sport_legend(f, state, chunks[3]);
     } else if state.log_focus {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -43,12 +45,14 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(header_height),
                 Constraint::Min(0),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(f.area());
 
         draw_header(f, state, chunks[0], spinner_frame);
         draw_logs(f, state, chunks[1]);
         draw_footer(f, state, chunks[2]);
+        draw_sport_legend(f, state, chunks[3]);
     } else if state.market_focus {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -56,12 +60,14 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(header_height),
                 Constraint::Min(0),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(f.area());
 
         draw_header(f, state, chunks[0], spinner_frame);
         draw_markets(f, state, chunks[1]);
         draw_footer(f, state, chunks[2]);
+        draw_sport_legend(f, state, chunks[3]);
     } else if state.position_focus {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -69,12 +75,14 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(header_height),
                 Constraint::Min(0),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(f.area());
 
         draw_header(f, state, chunks[0], spinner_frame);
         draw_positions(f, state, chunks[1]);
         draw_footer(f, state, chunks[2]);
+        draw_sport_legend(f, state, chunks[3]);
     } else if state.trade_focus {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -82,12 +90,14 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(header_height),
                 Constraint::Min(0),
                 Constraint::Length(1),
+                Constraint::Length(1),
             ])
             .split(f.area());
 
         draw_header(f, state, chunks[0], spinner_frame);
         draw_trades(f, state, chunks[1]);
         draw_footer(f, state, chunks[2]);
+        draw_sport_legend(f, state, chunks[3]);
     } else {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -97,6 +107,7 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
                 Constraint::Length(6),
                 Constraint::Length(6),
                 Constraint::Min(5),
+                Constraint::Length(1),
                 Constraint::Length(1),
                 Constraint::Length(1),
             ])
@@ -109,6 +120,7 @@ pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
         draw_logs(f, state, chunks[4]);
         draw_api_status(f, state, chunks[5]);
         draw_footer(f, state, chunks[6]);
+        draw_sport_legend(f, state, chunks[7]);
     }
 }
 
@@ -848,6 +860,31 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
             Span::raw("iag  "),
         ])
     };
+    let para = Paragraph::new(line);
+    f.render_widget(para, area);
+}
+
+fn draw_sport_legend(f: &mut Frame, state: &AppState, area: Rect) {
+    let mut spans: Vec<Span> = vec![Span::raw("  ")];
+
+    for sd in crate::SPORT_REGISTRY {
+        let enabled = state.enabled_sports.as_ref()
+            .and_then(|es| es.lock().ok())
+            .map(|es| es.is_enabled(sd.key))
+            .unwrap_or(true);
+
+        let style = if enabled {
+            Style::default().fg(Color::Green)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        };
+
+        spans.push(Span::styled(format!("[{}]", sd.hotkey), Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(sd.label, style));
+        spans.push(Span::raw(" "));
+    }
+
+    let line = Line::from(spans);
     let para = Paragraph::new(line);
     f.render_widget(para, area);
 }
