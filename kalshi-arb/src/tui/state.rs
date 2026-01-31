@@ -75,6 +75,7 @@ pub struct MarketRow {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PositionRow {
     pub ticker: String,
     pub quantity: u32,
