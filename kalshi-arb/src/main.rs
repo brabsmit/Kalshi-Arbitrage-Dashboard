@@ -260,6 +260,12 @@ fn apply_config_update(
                 _ => {}
             }
         },
+        // Per-sport fair_value
+        ["sports", sport_key, "fair_value"] => {
+            if let Some(pipe) = sport_pipelines.iter_mut().find(|p| p.key == *sport_key) {
+                pipe.rebuild_fair_value_source(value);
+            }
+        },
         // Global simulation
         ["simulation", field] => {
             match *field {

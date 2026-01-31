@@ -21,6 +21,7 @@ pub enum FieldType {
     F64,
     Bool,
     String,
+    Enum(Vec<std::string::String>),
 }
 
 #[derive(Debug, Clone)]
@@ -229,18 +230,22 @@ fn build_sport_fields(
     let key = &pipe.key;
     let mut fields = Vec::new();
 
-    // Header: read-only info
+    // Header: fair_value as editable Enum
     let fv_str = match &pipe.fair_value_source {
         FairValueSource::ScoreFeed { .. } => "score-feed",
         FairValueSource::OddsFeed => "odds-feed",
     };
+    let mut valid_sources = vec!["odds-feed".to_string()];
+    if pipe.score_feed_config.is_some() && pipe.win_prob_config.is_some() {
+        valid_sources.insert(0, "score-feed".to_string());
+    }
     fields.push(ConfigField {
         label: "fair_value".to_string(),
         value: fv_str.to_string(),
-        field_type: FieldType::String,
+        field_type: FieldType::Enum(valid_sources),
         is_override: false,
         config_path: format!("sports.{}.fair_value", key),
-        read_only: true,
+        read_only: false,
     });
     fields.push(ConfigField {
         label: "odds_source".to_string(),

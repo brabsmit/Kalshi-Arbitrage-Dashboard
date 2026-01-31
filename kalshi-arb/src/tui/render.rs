@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use super::config_view;
 use super::state::AppState;
 use crate::engine::fees::calculate_fee;
 use ratatui::{
@@ -1171,6 +1172,8 @@ fn render_config(f: &mut Frame, state: &AppState) {
             };
             let value_str = if cv.editing && i == cv.selected_field {
                 format!("{}\u{258f}", cv.edit_buffer) // show cursor
+            } else if let config_view::FieldType::Enum(_) = &field.field_type {
+                format!("\u{25c0} {} \u{25b6}", field.value)
             } else {
                 field.value.clone()
             };
@@ -1208,7 +1211,7 @@ fn render_config(f: &mut Frame, state: &AppState) {
     let help = if cv.editing {
         " Enter: confirm | Esc: cancel | Type to edit "
     } else {
-        " \u{2190}\u{2192}: tabs | \u{2191}\u{2193}: fields | Enter: edit | Space: toggle bool | d: delete override | Esc: close "
+        " \u{2190}\u{2192}: tabs | \u{2191}\u{2193}: fields | Enter: edit | Space: toggle | d: delete override | Esc: close "
     };
     let help_line = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
     f.render_widget(help_line, chunks[2]);

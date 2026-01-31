@@ -1,4 +1,4 @@
-use crate::config::{MomentumConfig, OddsSourceConfig, StrategyConfig};
+use crate::config::{MomentumConfig, OddsSourceConfig, ScoreFeedConfig, StrategyConfig, WinProbConfig};
 use crate::engine::fees::calculate_fee;
 use crate::engine::momentum::{BookPressureTracker, MomentumScorer, VelocityTracker};
 use crate::engine::win_prob::WinProbTable;
@@ -82,6 +82,8 @@ pub struct SportPipeline {
 
     pub fair_value_source: FairValueSource,
     pub odds_source: String,
+    pub score_feed_config: Option<ScoreFeedConfig>,
+    pub win_prob_config: Option<WinProbConfig>,
 
     // Resolved config (sport override merged over global)
     pub strategy_config: StrategyConfig,
@@ -102,6 +104,42 @@ pub struct SportPipeline {
     pub book_pressure_trackers: HashMap<String, BookPressureTracker>,
 }
 
+fn build_fair_value_source(
+    key: &str,
+    fair_value_str: &str,
+    score_feed_config: Option<&ScoreFeedConfig>,
+    win_prob_config: Option<&WinProbConfig>,
+) -> FairValueSource {
+    match fair_value_str {
+        "score-feed" => {
+            let sf = score_feed_config
+                .unwrap_or_else(|| panic!("sport '{}' has fair_value=score-feed but no [score_feed] section", key));
+            let wp_config = win_prob_config
+                .unwrap_or_else(|| panic!("sport '{}' has fair_value=score-feed but no [win_prob] section", key));
+            let regulation_secs = wp_config.regulation_secs.unwrap_or(2880);
+            let poller = if let Some(ref fallback) = sf.fallback_url {
+                ScorePoller::new(
+                    &sf.primary_url, fallback,
+                    sf.request_timeout_ms, sf.failover_threshold,
+                )
+            } else {
+                ScorePoller::new(
+                    &sf.primary_url, &sf.primary_url,
+                    sf.request_timeout_ms, sf.failover_threshold,
+                )
+            };
+            FairValueSource::ScoreFeed {
+                poller: Box::new(poller),
+                win_prob: WinProbTable::from_config(wp_config),
+                regulation_secs,
+                live_poll_s: sf.live_poll_s,
+                pre_game_poll_s: sf.pre_game_poll_s,
+            }
+        }
+        _ => FairValueSource::OddsFeed,
+    }
+}
+
 impl SportPipeline {
     pub fn from_config(
         key: &str,
@@ -109,35 +147,14 @@ impl SportPipeline {
         global_strategy: &StrategyConfig,
         global_momentum: &MomentumConfig,
     ) -> Self {
-        let fair_value_source = match sport.fair_value.as_str() {
-            "score-feed" => {
-                let sf = sport.score_feed.as_ref()
-                    .unwrap_or_else(|| panic!("sport '{}' has fair_value=score-feed but no [score_feed] section", key));
-                let wp_config = sport.win_prob.as_ref()
-                    .unwrap_or_else(|| panic!("sport '{}' has fair_value=score-feed but no [win_prob] section", key));
-                let regulation_secs = wp_config.regulation_secs.unwrap_or(2880);
-                let poller = if let Some(ref fallback) = sf.fallback_url {
-                    ScorePoller::new(
-                        &sf.primary_url, fallback,
-                        sf.request_timeout_ms, sf.failover_threshold,
-                    )
-                } else {
-                    // Single-source poller: use primary as both (fallback never triggered)
-                    ScorePoller::new(
-                        &sf.primary_url, &sf.primary_url,
-                        sf.request_timeout_ms, sf.failover_threshold,
-                    )
-                };
-                FairValueSource::ScoreFeed {
-                    poller: Box::new(poller),
-                    win_prob: WinProbTable::from_config(wp_config),
-                    regulation_secs,
-                    live_poll_s: sf.live_poll_s,
-                    pre_game_poll_s: sf.pre_game_poll_s,
-                }
-            }
-            _ => FairValueSource::OddsFeed,
-        };
+        let score_feed_config = sport.score_feed.clone();
+        let win_prob_config = sport.win_prob.clone();
+        let fair_value_source = build_fair_value_source(
+            key,
+            &sport.fair_value,
+            score_feed_config.as_ref(),
+            win_prob_config.as_ref(),
+        );
 
         let hotkey = sport.hotkey.chars().next().unwrap_or('0');
 
@@ -149,6 +166,8 @@ impl SportPipeline {
             enabled: sport.enabled,
             fair_value_source,
             odds_source: sport.odds_source.clone(),
+            score_feed_config,
+            win_prob_config,
             strategy_config: global_strategy.with_override(sport.strategy.as_ref()),
             momentum_config: global_momentum.with_override(sport.momentum.as_ref()),
             last_odds_poll: None,
@@ -162,6 +181,16 @@ impl SportPipeline {
             velocity_trackers: HashMap::new(),
             book_pressure_trackers: HashMap::new(),
         }
+    }
+
+    /// Rebuild the fair value source at runtime (e.g. switching between score-feed and odds-feed).
+    pub fn rebuild_fair_value_source(&mut self, new_source: &str) {
+        self.fair_value_source = build_fair_value_source(
+            &self.key,
+            new_source,
+            self.score_feed_config.as_ref(),
+            self.win_prob_config.as_ref(),
+        );
     }
 
     /// Run one processing cycle for this sport.

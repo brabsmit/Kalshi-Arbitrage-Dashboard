@@ -159,7 +159,7 @@ async fn tui_loop(
                                         }
                                         KeyCode::Enter => {
                                             let field = &cv.tabs[cv.active_tab].fields[cv.selected_field];
-                                            if !field.read_only {
+                                            if !field.read_only && !matches!(field.field_type, config_view::FieldType::Enum(_)) {
                                                 cv.editing = true;
                                                 cv.edit_buffer = field.value.clone();
                                             }
@@ -167,14 +167,28 @@ async fn tui_loop(
                                         KeyCode::Char(' ') => {
                                             let field = &cv.tabs[cv.active_tab].fields[cv.selected_field];
                                             if !field.read_only {
-                                                if let config_view::FieldType::Bool = field.field_type {
-                                                    let new_val = if field.value == "true" { "false" } else { "true" };
-                                                    let sport_key = cv.tabs[cv.active_tab].sport_key.clone();
-                                                    let field_path = field.config_path.clone();
-                                                    cv.tabs[cv.active_tab].fields[cv.selected_field].value = new_val.to_string();
-                                                    let _ = cmd_tx.send(TuiCommand::UpdateConfig {
-                                                        sport_key, field_path, value: new_val.to_string(),
-                                                    }).await;
+                                                match &field.field_type {
+                                                    config_view::FieldType::Bool => {
+                                                        let new_val = if field.value == "true" { "false" } else { "true" };
+                                                        let sport_key = cv.tabs[cv.active_tab].sport_key.clone();
+                                                        let field_path = field.config_path.clone();
+                                                        cv.tabs[cv.active_tab].fields[cv.selected_field].value = new_val.to_string();
+                                                        let _ = cmd_tx.send(TuiCommand::UpdateConfig {
+                                                            sport_key, field_path, value: new_val.to_string(),
+                                                        }).await;
+                                                    }
+                                                    config_view::FieldType::Enum(variants) => {
+                                                        let idx = variants.iter().position(|v| v == &field.value).unwrap_or(0);
+                                                        let new_idx = (idx + 1) % variants.len();
+                                                        let new_val = variants[new_idx].clone();
+                                                        let sport_key = cv.tabs[cv.active_tab].sport_key.clone();
+                                                        let field_path = field.config_path.clone();
+                                                        cv.tabs[cv.active_tab].fields[cv.selected_field].value = new_val.clone();
+                                                        let _ = cmd_tx.send(TuiCommand::UpdateConfig {
+                                                            sport_key, field_path, value: new_val,
+                                                        }).await;
+                                                    }
+                                                    _ => {}
                                                 }
                                             }
                                         }
