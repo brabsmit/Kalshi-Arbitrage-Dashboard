@@ -50,6 +50,7 @@ impl TheOddsApi {
 
     /// Call the free `/v4/sports` endpoint to check quota without consuming usage credits.
     /// Returns an error if the key is invalid or quota is exhausted.
+    #[allow(dead_code)]
     pub async fn check_quota(&mut self) -> Result<ApiQuota> {
         let url = format!(
             "{}/v4/sports?apiKey={}",

@@ -103,6 +103,7 @@ pub struct TradeRow {
     pub pnl: Option<i32>,
     pub slippage: Option<i32>,
     pub source: String,
+    #[allow(dead_code)]
     pub fair_value_basis: String,
 }
 
@@ -114,6 +115,7 @@ pub struct SimPosition {
     pub sell_price: u32,
     pub entry_fee: u32,
     pub filled_at: Instant,
+    #[allow(dead_code)]
     pub signal_ask: u32,
     pub trace: Option<crate::pipeline::SignalTrace>,
 }

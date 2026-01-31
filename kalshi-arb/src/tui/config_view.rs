@@ -12,6 +12,7 @@ pub struct ConfigField {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum FieldType {
     U8,
     U16,

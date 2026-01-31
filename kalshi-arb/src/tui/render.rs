@@ -536,12 +536,9 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
 
     let now = std::time::Instant::now();
 
-    // Build rows from sim_positions (or real positions)
-    let positions = if state.sim_mode {
-        &state.sim_positions
-    } else {
-        &state.sim_positions // TODO: use state.positions when real mode implemented
-    };
+    // Build rows from sim_positions
+    // TODO: use state.positions when real mode is implemented
+    let positions = &state.sim_positions;
 
     let rows: Vec<Row> = positions
         .iter()

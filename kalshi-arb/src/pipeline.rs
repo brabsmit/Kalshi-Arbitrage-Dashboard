@@ -16,7 +16,7 @@ use tokio::sync::watch;
 pub enum FairValueSource {
     /// Live score data -> win probability model -> fair value in cents.
     ScoreFeed {
-        poller: ScorePoller,
+        poller: Box<ScorePoller>,
         win_prob: WinProbTable,
         regulation_secs: u16,
         live_poll_s: u64,
@@ -29,12 +29,13 @@ pub enum FairValueSource {
 /// What method produced a fair value.
 #[derive(Debug, Clone)]
 pub enum FairValueMethod {
-    ScoreFeed { source: String },
-    OddsFeed { source: String },
+    ScoreFeed { #[allow(dead_code)] source: String },
+    OddsFeed { #[allow(dead_code)] source: String },
 }
 
 /// Raw inputs that led to a fair value calculation.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum FairValueInputs {
     Score {
         home_score: u32,
@@ -53,6 +54,7 @@ pub enum FairValueInputs {
 
 /// Full provenance for a trade signal -- carried by SimPosition.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SignalTrace {
     pub sport: String,
     pub ticker: String,
@@ -127,7 +129,7 @@ impl SportPipeline {
                     )
                 };
                 FairValueSource::ScoreFeed {
-                    poller,
+                    poller: Box::new(poller),
                     win_prob: WinProbTable::from_config(wp_config),
                     regulation_secs,
                     live_poll_s: sf.live_poll_s,
@@ -436,6 +438,7 @@ pub struct TickResult {
     pub filter_closed: usize,
     pub earliest_commence: Option<chrono::DateTime<chrono::Utc>>,
     pub rows: HashMap<String, MarketRow>,
+    #[allow(dead_code)]
     pub has_live_games: bool,
 }
 

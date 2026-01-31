@@ -24,7 +24,7 @@ pub enum TuiCommand {
     ToggleSport(String),
     OpenConfig,
     CloseConfig,
-    UpdateConfig { sport_key: Option<String>, field_path: String, value: String },
+    UpdateConfig { #[allow(dead_code)] sport_key: Option<String>, field_path: String, value: String },
 }
 
 /// Run the TUI. Reads state from `state_rx`, sends commands on `cmd_tx`.

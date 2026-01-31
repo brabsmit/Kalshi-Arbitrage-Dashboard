@@ -22,7 +22,7 @@ use tui::state::{AppState, MarketRow};
 /// Per-ticker orderbook depth: price_cents -> quantity for each side.
 /// Supports snapshot replacement and incremental delta application.
 #[derive(Debug, Clone)]
-struct DepthBook {
+pub(crate) struct DepthBook {
     yes: HashMap<u32, i64>,
     no: HashMap<u32, i64>,
 }
@@ -102,7 +102,7 @@ impl DepthBook {
 }
 
 /// Live orderbook: ticker -> full depth book
-pub type LiveBook = Arc<Mutex<HashMap<String, DepthBook>>>;
+pub(crate) type LiveBook = Arc<Mutex<HashMap<String, DepthBook>>>;
 
 /// Extract last name from a full name (for MMA fighter matching).
 /// "Alex Volkanovski" -> "Volkanovski", "Benoit Saint-Denis" -> "Saint-Denis"
@@ -186,6 +186,89 @@ fn persist_sport_enabled(config_path: &Path, sport_key: &str, enabled: bool) {
             }
         }
         let _ = std::fs::write(config_path, toml::to_string_pretty(&doc).unwrap_or_default());
+    }
+}
+
+/// Apply a runtime config edit to in-memory pipeline state so changes take
+/// effect immediately without restarting.
+fn apply_config_update(
+    sport_pipelines: &mut [pipeline::SportPipeline],
+    global_strategy: &mut config::StrategyConfig,
+    global_momentum: &mut config::MomentumConfig,
+    risk_config: &mut config::RiskConfig,
+    sim_config: &mut config::SimulationConfig,
+    field_path: &str,
+    value: &str,
+) {
+    let parts: Vec<&str> = field_path.split('.').collect();
+    match parts.as_slice() {
+        // Global strategy
+        ["strategy", field] => {
+            match *field {
+                "taker_edge_threshold" => if let Ok(v) = value.parse() { global_strategy.taker_edge_threshold = v; },
+                "maker_edge_threshold" => if let Ok(v) = value.parse() { global_strategy.maker_edge_threshold = v; },
+                "min_edge_after_fees" => if let Ok(v) = value.parse() { global_strategy.min_edge_after_fees = v; },
+                _ => {}
+            }
+        },
+        // Per-sport strategy
+        ["sports", sport_key, "strategy", field] => {
+            if let Some(pipe) = sport_pipelines.iter_mut().find(|p| p.key == *sport_key) {
+                match *field {
+                    "taker_edge_threshold" => if let Ok(v) = value.parse() { pipe.strategy_config.taker_edge_threshold = v; },
+                    "maker_edge_threshold" => if let Ok(v) = value.parse() { pipe.strategy_config.maker_edge_threshold = v; },
+                    "min_edge_after_fees" => if let Ok(v) = value.parse() { pipe.strategy_config.min_edge_after_fees = v; },
+                    _ => {}
+                }
+            }
+        },
+        // Global momentum
+        ["momentum", field] => {
+            match *field {
+                "taker_momentum_threshold" => if let Ok(v) = value.parse() { global_momentum.taker_momentum_threshold = v; },
+                "maker_momentum_threshold" => if let Ok(v) = value.parse() { global_momentum.maker_momentum_threshold = v; },
+                "cancel_threshold" => if let Ok(v) = value.parse() { global_momentum.cancel_threshold = v; },
+                "velocity_weight" => if let Ok(v) = value.parse() { global_momentum.velocity_weight = v; },
+                "book_pressure_weight" => if let Ok(v) = value.parse() { global_momentum.book_pressure_weight = v; },
+                "velocity_window_size" => if let Ok(v) = value.parse() { global_momentum.velocity_window_size = v; },
+                "cancel_check_interval_ms" => if let Ok(v) = value.parse() { global_momentum.cancel_check_interval_ms = v; },
+                _ => {}
+            }
+        },
+        // Per-sport momentum
+        ["sports", sport_key, "momentum", field] => {
+            if let Some(pipe) = sport_pipelines.iter_mut().find(|p| p.key == *sport_key) {
+                match *field {
+                    "taker_momentum_threshold" => if let Ok(v) = value.parse() { pipe.momentum_config.taker_momentum_threshold = v; },
+                    "maker_momentum_threshold" => if let Ok(v) = value.parse() { pipe.momentum_config.maker_momentum_threshold = v; },
+                    "cancel_threshold" => if let Ok(v) = value.parse() { pipe.momentum_config.cancel_threshold = v; },
+                    "velocity_weight" => if let Ok(v) = value.parse() { pipe.momentum_config.velocity_weight = v; },
+                    "book_pressure_weight" => if let Ok(v) = value.parse() { pipe.momentum_config.book_pressure_weight = v; },
+                    "velocity_window_size" => if let Ok(v) = value.parse() { pipe.momentum_config.velocity_window_size = v; },
+                    "cancel_check_interval_ms" => if let Ok(v) = value.parse() { pipe.momentum_config.cancel_check_interval_ms = v; },
+                    _ => {}
+                }
+            }
+        },
+        // Global risk
+        ["risk", field] => {
+            match *field {
+                "kelly_fraction" => if let Ok(v) = value.parse() { risk_config.kelly_fraction = v; },
+                "max_contracts_per_market" => if let Ok(v) = value.parse() { risk_config.max_contracts_per_market = v; },
+                "max_total_exposure_cents" => if let Ok(v) = value.parse() { risk_config.max_total_exposure_cents = v; },
+                "max_concurrent_markets" => if let Ok(v) = value.parse() { risk_config.max_concurrent_markets = v; },
+                _ => {}
+            }
+        },
+        // Global simulation
+        ["simulation", field] => {
+            match *field {
+                "latency_ms" => if let Ok(v) = value.parse() { sim_config.latency_ms = v; },
+                "use_break_even_exit" => if let Ok(v) = value.parse() { sim_config.use_break_even_exit = v; },
+                _ => {}
+            }
+        },
+        _ => {}
     }
 }
 
@@ -463,8 +546,10 @@ async fn main() -> Result<()> {
         s.odds_source = source_label.to_string();
     });
 
-    let sim_config = config.simulation.clone();
-    let risk_config = config.risk.clone();
+    let mut sim_config = config.simulation.clone();
+    let mut risk_config = config.risk.clone();
+    let mut global_strategy = config.strategy.clone();
+    let mut global_momentum = config.momentum.clone();
     let odds_source_configs = config.odds_sources.clone();
 
     let rest_for_engine = rest.clone();
@@ -476,8 +561,8 @@ async fn main() -> Result<()> {
         let mut is_paused = false;
 
         let scorer = MomentumScorer::new(
-            config.momentum.velocity_weight,
-            config.momentum.book_pressure_weight,
+            global_momentum.velocity_weight,
+            global_momentum.book_pressure_weight,
         );
 
         let mut api_request_times: VecDeque<Instant> = VecDeque::with_capacity(100);
@@ -514,8 +599,8 @@ async fn main() -> Result<()> {
                     tui::TuiCommand::OpenConfig => {
                         let tabs = tui::config_view::build_config_tabs(
                             &sport_pipelines,
-                            &config.strategy,
-                            &config.momentum,
+                            &global_strategy,
+                            &global_momentum,
                             &risk_config,
                             &sim_config,
                         );
@@ -531,13 +616,20 @@ async fn main() -> Result<()> {
                             s.config_view = None;
                         });
                     }
-                    tui::TuiCommand::UpdateConfig { sport_key: _, field_path, value } => {
+                    tui::TuiCommand::UpdateConfig { field_path, value, .. } => {
                         if value.is_empty() {
                             if let Err(e) = config::remove_field(&config_path, &field_path) {
                                 tracing::warn!(path = %field_path, error = %e, "failed to remove config field");
                             }
-                        } else if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
-                            tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
+                        } else {
+                            if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
+                                tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
+                            }
+                            apply_config_update(
+                                &mut sport_pipelines, &mut global_strategy,
+                                &mut global_momentum, &mut risk_config,
+                                &mut sim_config, &field_path, &value,
+                            );
                         }
                     }
                 }
@@ -659,8 +751,8 @@ async fn main() -> Result<()> {
                                     tui::TuiCommand::OpenConfig => {
                                         let tabs = tui::config_view::build_config_tabs(
                                             &sport_pipelines,
-                                            &config.strategy,
-                                            &config.momentum,
+                                            &global_strategy,
+                                            &global_momentum,
                                             &risk_config,
                                             &sim_config,
                                         );
@@ -676,13 +768,20 @@ async fn main() -> Result<()> {
                                             s.config_view = None;
                                         });
                                     }
-                                    tui::TuiCommand::UpdateConfig { sport_key: _, field_path, value } => {
+                                    tui::TuiCommand::UpdateConfig { field_path, value, .. } => {
                                         if value.is_empty() {
                                             if let Err(e) = config::remove_field(&config_path, &field_path) {
                                                 tracing::warn!(path = %field_path, error = %e, "failed to remove config field");
                                             }
-                                        } else if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
-                                            tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
+                                        } else {
+                                            if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
+                                                tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
+                                            }
+                                            apply_config_update(
+                                                &mut sport_pipelines, &mut global_strategy,
+                                                &mut global_momentum, &mut risk_config,
+                                                &mut sim_config, &field_path, &value,
+                                            );
                                         }
                                     }
                                 }

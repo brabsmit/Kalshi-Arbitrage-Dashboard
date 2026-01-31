@@ -20,6 +20,7 @@ pub struct ScoreUpdate {
     pub clock_seconds: u16,
     pub total_elapsed_seconds: u16,
     pub game_status: GameStatus,
+    #[allow(dead_code)]
     pub source: ScoreSource,
 }
 
@@ -372,6 +373,7 @@ impl ScorePoller {
 
 /// Score poller for college basketball via ESPN API.
 /// Fetches both men's and women's scoreboard endpoints.
+#[allow(dead_code)]
 pub struct CollegeScorePoller {
     client: Client,
     mens_url: String,
@@ -381,6 +383,7 @@ pub struct CollegeScorePoller {
     cached_response: HashMap<String, Vec<ScoreUpdate>>,
 }
 
+#[allow(dead_code)]
 impl CollegeScorePoller {
     pub fn new(mens_url: &str, womens_url: &str, timeout_ms: u64) -> Self {
         Self {
