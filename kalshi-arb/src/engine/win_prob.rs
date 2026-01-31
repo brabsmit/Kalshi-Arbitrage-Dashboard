@@ -265,4 +265,35 @@ mod tests {
         let prob = nba.lookup(5, 96);
         assert_eq!(prob, 100);
     }
+
+    // ---- College basketball calibration ----
+
+    #[test]
+    fn test_college_home_up_5_halftime() {
+        let table = WinProbTable::new(3.5, 0.065, 0.25, 0.10, 1.0, 2400);
+        let prob = table.lookup(5, 40); // bucket 40 = halftime
+        assert!(prob >= 67 && prob <= 72, "got {prob}");
+    }
+
+    #[test]
+    fn test_college_home_up_10_late() {
+        let table = WinProbTable::new(3.5, 0.065, 0.25, 0.10, 1.0, 2400);
+        let prob = table.lookup(10, 76); // bucket 76 = ~2 min left
+        assert!(prob >= 96, "got {prob}");
+    }
+
+    #[test]
+    fn test_college_pregame_home_advantage() {
+        let table = WinProbTable::new(3.5, 0.065, 0.25, 0.10, 1.0, 2400);
+        let prob = table.lookup(0, 0);
+        assert!(prob >= 55 && prob <= 58, "got {prob}");
+    }
+
+    #[test]
+    fn test_college_fair_value_bridge() {
+        let table = WinProbTable::new(3.5, 0.065, 0.25, 0.10, 1.0, 2400);
+        let (home, away) = table.fair_value(8, 1800);
+        assert!(home >= 86 && home <= 90, "got {home}");
+        assert_eq!(home + away, 100);
+    }
 }
