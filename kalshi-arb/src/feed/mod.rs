@@ -1,3 +1,4 @@
+pub mod score_feed;
 pub mod the_odds_api;
 pub mod types;
 
