@@ -1028,16 +1028,6 @@ async fn main() -> Result<()> {
         }
     }
 
-    let odds_sports: Vec<String> = {
-        let es = enabled_sports.lock().unwrap();
-        SPORT_REGISTRY.iter()
-            .filter(|sd| es.is_enabled(sd.key))
-            .map(|sd| sd.key.to_string())
-            .filter(|s| !(config.score_feed.is_some() && s.as_str() == "basketball"))
-            .filter(|s| !(config.college_score_feed.is_some() && (s == "college-basketball" || s == "college-basketball-womens")))
-            .collect()
-    };
-    let all_sports: Vec<String> = enabled_sports.lock().unwrap().enabled_keys();
     let strategy_config = config.strategy.clone();
     let sim_config = config.simulation.clone().unwrap_or_default();
     let win_prob_config = config.win_prob.clone().unwrap_or_default();
@@ -1094,6 +1084,7 @@ async fn main() -> Result<()> {
 
     let sim_mode_engine = sim_mode;
     let state_tx_engine = state_tx.clone();
+    let enabled_sports_engine = enabled_sports.clone();
     tokio::spawn(async move {
         let mut is_paused = false;
 
@@ -1151,7 +1142,8 @@ async fn main() -> Result<()> {
                         // One-shot fetch for diagnostic view (use unfiltered sports list
                         // so score-feed sports like basketball still appear)
                         let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
-                        for diag_sport in &all_sports {
+                        let enabled_keys: Vec<String> = enabled_sports_engine.lock().unwrap().enabled_keys();
+                        for diag_sport in &enabled_keys {
                             match odds_feed.fetch_odds(diag_sport).await {
                                 Ok(updates) => {
                                     if let Some(quota) = odds_feed.last_quota() {
@@ -1206,100 +1198,120 @@ async fn main() -> Result<()> {
             earliest_commence = None;
             accumulated_rows.clear();
 
+            // Re-derive enabled sports each iteration (supports runtime toggles)
+            let odds_sports: Vec<String> = {
+                let es = enabled_sports_engine.lock().unwrap();
+                SPORT_REGISTRY.iter()
+                    .filter(|sd| es.is_enabled(sd.key))
+                    .map(|sd| sd.key.to_string())
+                    .filter(|s| !(score_poller.is_some() && s.as_str() == "basketball"))
+                    .filter(|s| !(college_score_poller.is_some() && (s == "college-basketball" || s == "college-basketball-womens")))
+                    .collect()
+            };
+
             // --- Score feed for NBA (if configured) ---
-            if let Some(ref mut poller) = score_poller {
-                let score_interval = if score_cached_updates.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live) {
-                    score_feed_live_interval
-                } else {
-                    score_feed_pre_game_interval
-                };
+            let nba_enabled = enabled_sports_engine.lock().unwrap().is_enabled("basketball");
+            if nba_enabled {
+                if let Some(ref mut poller) = score_poller {
+                    let score_interval = if score_cached_updates.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live) {
+                        score_feed_live_interval
+                    } else {
+                        score_feed_pre_game_interval
+                    };
 
-                let should_fetch_scores = match last_score_poll {
-                    Some(last) => cycle_start.duration_since(last) >= score_interval,
-                    None => true,
-                };
+                    let should_fetch_scores = match last_score_poll {
+                        Some(last) => cycle_start.duration_since(last) >= score_interval,
+                        None => true,
+                    };
 
-                if should_fetch_scores {
-                    match poller.fetch().await {
-                        Ok(updates) => {
-                            last_score_poll = Some(Instant::now());
-                            // Update staleness timestamps for ALL games returned
-                            for u in &updates {
-                                last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                    if should_fetch_scores {
+                        match poller.fetch().await {
+                            Ok(updates) => {
+                                last_score_poll = Some(Instant::now());
+                                // Update staleness timestamps for ALL games returned
+                                for u in &updates {
+                                    last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                                }
+                                score_cached_updates = updates;
                             }
-                            score_cached_updates = updates;
-                        }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "score feed fetch failed");
+                            Err(e) => {
+                                tracing::warn!(error = %e, "score feed fetch failed");
+                            }
                         }
                     }
-                }
 
-                // Process score updates (fresh or cached)
-                if !score_cached_updates.is_empty() {
-                    let result = process_score_updates(
-                        &score_cached_updates,
-                        &market_index,
-                        &live_book_engine,
-                        &strategy_config,
-                        &momentum_config,
-                        &mut velocity_trackers,
-                        &mut book_pressure_trackers,
-                        &scorer,
-                        sim_mode_engine,
-                        &state_tx_engine,
-                        cycle_start,
-                        &last_score_fetch,
-                        &sim_config,
-                        &win_prob_table,
-                    );
+                    // Process score updates (fresh or cached)
+                    if !score_cached_updates.is_empty() {
+                        let result = process_score_updates(
+                            &score_cached_updates,
+                            &market_index,
+                            &live_book_engine,
+                            &strategy_config,
+                            &momentum_config,
+                            &mut velocity_trackers,
+                            &mut book_pressure_trackers,
+                            &scorer,
+                            sim_mode_engine,
+                            &state_tx_engine,
+                            cycle_start,
+                            &last_score_fetch,
+                            &sim_config,
+                            &win_prob_table,
+                        );
 
-                    filter_live += result.filter_live;
-                    filter_pre_game += result.filter_pre_game;
-                    filter_closed += result.filter_closed;
-                    if let Some(ec) = result.earliest_commence {
-                        earliest_commence = Some(earliest_commence.map_or(ec, |e| e.min(ec)));
+                        filter_live += result.filter_live;
+                        filter_pre_game += result.filter_pre_game;
+                        filter_closed += result.filter_closed;
+                        if let Some(ec) = result.earliest_commence {
+                            earliest_commence = Some(earliest_commence.map_or(ec, |e| e.min(ec)));
+                        }
+                        accumulated_rows.extend(result.rows);
                     }
-                    accumulated_rows.extend(result.rows);
                 }
             }
 
             // --- College score feed (if configured) ---
             if let Some(ref mut college_poller) = college_score_poller {
-                let college_interval = if college_mens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
-                    || college_womens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
-                {
-                    college_score_live_interval
-                } else {
-                    college_score_pre_game_interval
-                };
+                let mens_enabled = enabled_sports_engine.lock().unwrap().is_enabled("college-basketball");
+                let womens_enabled = enabled_sports_engine.lock().unwrap().is_enabled("college-basketball-womens");
 
-                let should_fetch_college = match last_college_score_poll {
-                    Some(last) => cycle_start.duration_since(last) >= college_interval,
-                    None => true,
-                };
+                // Only fetch if at least one is enabled
+                if mens_enabled || womens_enabled {
+                    let college_interval = if college_mens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                        || college_womens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                    {
+                        college_score_live_interval
+                    } else {
+                        college_score_pre_game_interval
+                    };
 
-                if should_fetch_college {
-                    match college_poller.fetch().await {
-                        Ok((mens, womens)) => {
-                            last_college_score_poll = Some(Instant::now());
-                            for u in &mens {
-                                college_last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                    let should_fetch_college = match last_college_score_poll {
+                        Some(last) => cycle_start.duration_since(last) >= college_interval,
+                        None => true,
+                    };
+
+                    if should_fetch_college {
+                        match college_poller.fetch().await {
+                            Ok((mens, womens)) => {
+                                last_college_score_poll = Some(Instant::now());
+                                for u in &mens {
+                                    college_last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                                }
+                                for u in &womens {
+                                    college_last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                                }
+                                college_mens_cached = mens;
+                                college_womens_cached = womens;
                             }
-                            for u in &womens {
-                                college_last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                            Err(e) => {
+                                tracing::warn!(error = %e, "college score feed fetch failed");
                             }
-                            college_mens_cached = mens;
-                            college_womens_cached = womens;
-                        }
-                        Err(e) => {
-                            tracing::warn!(error = %e, "college score feed fetch failed");
                         }
                     }
                 }
 
-                // Process men's college scores
-                if !college_mens_cached.is_empty() {
+                // Process men's college scores (only if enabled)
+                if mens_enabled && !college_mens_cached.is_empty() {
                     let result = process_college_score_updates(
                         &college_mens_cached, "college-basketball",
                         &market_index, &live_book_engine, &strategy_config, &momentum_config,
@@ -1316,8 +1328,8 @@ async fn main() -> Result<()> {
                     accumulated_rows.extend(result.rows);
                 }
 
-                // Process women's college scores
-                if !college_womens_cached.is_empty() {
+                // Process women's college scores (only if enabled)
+                if womens_enabled && !college_womens_cached.is_empty() {
                     let result = process_college_score_updates(
                         &college_womens_cached, "college-basketball-womens",
                         &market_index, &live_book_engine, &strategy_config, &momentum_config,
@@ -1468,11 +1480,15 @@ async fn main() -> Result<()> {
 
             // Diagnostic-only fetch for score-feed sports (excluded from odds_sports
             // but still needed in the diagnostic view). Rate-limited to pre-game interval.
-            for sport in &all_sports {
-                if odds_sports.contains(sport) {
+            for sd in SPORT_REGISTRY {
+                let sport = sd.key;
+                if odds_sports.iter().any(|s| s == sport) {
                     continue; // already handled in the odds loop above
                 }
-                let should_fetch_diag = match last_poll.get(sport.as_str()) {
+                if !enabled_sports_engine.lock().unwrap().is_enabled(sport) {
+                    continue; // sport is toggled off
+                }
+                let should_fetch_diag = match last_poll.get(sport) {
                     Some(&last) => cycle_start.duration_since(last) >= pre_game_poll_interval,
                     None => true,
                 };
@@ -1538,7 +1554,8 @@ async fn main() -> Result<()> {
                                         // One-shot fetch for diagnostic view (during idle sleep;
                                         // use unfiltered sports list so score-feed sports still appear)
                                         let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
-                                        for diag_sport in &all_sports {
+                                        let enabled_keys: Vec<String> = enabled_sports_engine.lock().unwrap().enabled_keys();
+                                        for diag_sport in &enabled_keys {
                                             match odds_feed.fetch_odds(diag_sport).await {
                                                 Ok(updates) => {
                                                     if let Some(quota) = odds_feed.last_quota() {
