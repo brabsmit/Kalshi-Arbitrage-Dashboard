@@ -153,6 +153,53 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
 
     let pnl_span = Span::styled(pnl_val.clone(), Style::default().fg(num_color));
 
+    // Build sim stats spans (only shown in sim mode)
+    let sim_stats_spans: Vec<Span> = if state.sim_mode {
+        if state.sim_total_trades == 0 {
+            vec![
+                Span::styled(" | Trades: ", Style::default().fg(Color::DarkGray)),
+                Span::styled("0", Style::default().fg(Color::DarkGray)),
+            ]
+        } else {
+            let win_pct = state.sim_winning_trades * 100 / state.sim_total_trades;
+            let avg_slip = state.sim_total_slippage_cents as f64 / state.sim_total_trades as f64;
+
+            let win_color = if win_pct > 55 {
+                Color::Green
+            } else if win_pct >= 50 {
+                Color::Yellow
+            } else {
+                Color::Red
+            };
+
+            let slip_color = if avg_slip <= 0.0 {
+                Color::Green
+            } else {
+                Color::Yellow
+            };
+
+            vec![
+                Span::styled(" | Trades: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{}", state.sim_total_trades),
+                    Style::default().fg(Color::Cyan),
+                ),
+                Span::styled(" | Win: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{}%", win_pct),
+                    Style::default().fg(win_color),
+                ),
+                Span::styled(" | Avg Slip: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    format!("{:+.1}\u{00a2}", avg_slip),
+                    Style::default().fg(slip_color),
+                ),
+            ]
+        }
+    } else {
+        vec![]
+    };
+
     let row1_width = 1 + 5 + bal.len() + 3 + 5 + exp.len() + 3 + 5 + pnl_val.len();
     let inner_width = area.width.saturating_sub(2) as usize;
     let needs_wrap = row1_width + 3 + 4 + 4 + 3 + 4 + uptime.len() + 8 > inner_width;
@@ -171,7 +218,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
 
     let lines = if needs_wrap {
         vec![
-            Line::from([bal_exp_prefix, vec![pnl_span]].concat()),
+            Line::from([bal_exp_prefix, vec![pnl_span], sim_stats_spans].concat()),
             Line::from(vec![
                 Span::raw(" WS: "),
                 kalshi_status,
@@ -183,8 +230,9 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
         vec![Line::from(
             [
                 bal_exp_prefix,
+                vec![pnl_span],
+                sim_stats_spans,
                 vec![
-                    pnl_span,
                     Span::raw(" | WS: "),
                     kalshi_status,
                     Span::raw(format!(" | Up: {}", uptime)),
@@ -589,8 +637,8 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
-    let max_width = area.width.saturating_sub(2) as usize;
-    let visible_lines = area.height.saturating_sub(2) as usize;
+    let inner_width = area.width.saturating_sub(2) as usize;
+    let visible_lines = area.height.saturating_sub(4) as usize; // borders + header + padding
 
     let total = state.trades.len();
 
@@ -600,40 +648,89 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
         0
     };
 
-    let lines: Vec<Line> = state
+    // Fixed column widths: Time=8 Action=4 Price=6 Qty=4 Type=5 P&L=7 Slip=6 = 40
+    let fixed_cols: usize = 8 + 4 + 6 + 4 + 5 + 7 + 6;
+    let ticker_w = inner_width.saturating_sub(fixed_cols).max(4);
+
+    let header = Row::new(vec!["Time", "Action", "Ticker", "Price", "Qty", "Type", "P&L", "Slip"])
+        .style(Style::default().add_modifier(Modifier::BOLD));
+
+    let constraints = vec![
+        Constraint::Length(8),
+        Constraint::Length(4),
+        Constraint::Length(ticker_w as u16),
+        Constraint::Length(6),
+        Constraint::Length(4),
+        Constraint::Length(5),
+        Constraint::Length(7),
+        Constraint::Length(6),
+    ];
+
+    let rows: Vec<Row> = state
         .trades
         .iter()
         .rev()
         .skip(offset)
         .take(if state.trade_focus { visible_lines } else { 4 })
         .map(|t| {
-            let pnl = t
-                .pnl
-                .map(|p| format!(" {:+}c", p))
-                .unwrap_or_default();
-            let raw = format!(
-                " {} {} {}x {} @ {}c ({}){}",
-                t.time, t.action, t.quantity, t.ticker, t.price, t.order_type, pnl
-            );
-            Line::from(truncate_with_ellipsis(&raw, max_width).into_owned())
+            let pnl_cell = match t.pnl {
+                Some(p) if p > 0 => Cell::from(format!("{:+}c", p))
+                    .style(Style::default().fg(Color::Green)),
+                Some(p) if p < 0 => Cell::from(format!("{:+}c", p))
+                    .style(Style::default().fg(Color::Red)),
+                Some(_) => Cell::from("0c")
+                    .style(Style::default().fg(Color::DarkGray)),
+                None => Cell::from("\u{2014}")
+                    .style(Style::default().fg(Color::DarkGray)),
+            };
+
+            let slip_cell = match t.slippage {
+                Some(s) if s > 0 => Cell::from(format!("+{}", s))
+                    .style(Style::default().fg(Color::Yellow)),
+                Some(s) if s < 0 => Cell::from(format!("{}", s))
+                    .style(Style::default().fg(Color::Green)),
+                Some(_) => Cell::from("0")
+                    .style(Style::default().fg(Color::DarkGray)),
+                None => Cell::from("\u{2014}")
+                    .style(Style::default().fg(Color::DarkGray)),
+            };
+
+            let ticker = truncate_with_ellipsis(&t.ticker, ticker_w);
+
+            Row::new(vec![
+                Cell::from(t.time.clone()),
+                Cell::from(t.action.clone()),
+                Cell::from(ticker.into_owned()),
+                Cell::from(format!("{}c", t.price)),
+                Cell::from(t.quantity.to_string()),
+                Cell::from(t.order_type.clone()),
+                pnl_cell,
+                slip_cell,
+            ])
         })
         .collect();
+
+    let shown = rows.len();
 
     let title = if state.trade_focus {
         format!(
             " Recent Trades [{}/{}] ",
-            (offset + lines.len()).min(total),
+            (offset + shown).min(total),
             total,
         )
     } else {
         " Recent Trades ".to_string()
     };
 
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL);
-    let para = Paragraph::new(lines).block(block);
-    f.render_widget(para, area);
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL),
+        );
+
+    f.render_widget(table, area);
 }
 
 fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
