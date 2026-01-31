@@ -322,6 +322,8 @@ fn evaluate_matched_market(
     cycle_start: Instant,
     source: &str,
     sim_config: &config::SimulationConfig,
+    risk_config: &config::RiskConfig,
+    bankroll_cents: u64,
 ) -> EvalOutcome {
     // Check market is open
     let market_open = side_market.is_some_and(|sm| {
@@ -365,9 +367,9 @@ fn evaluate_matched_market(
         strategy_config.taker_edge_threshold,
         strategy_config.maker_edge_threshold,
         strategy_config.min_edge_after_fees,
-        100_000,  // TODO(task5): wire from config/balance
-        0.25,     // TODO(task5): wire from config.risk.kelly_fraction
-        100,      // TODO(task5): wire from config.risk.max_contracts_per_market
+        bankroll_cents,
+        risk_config.kelly_fraction,
+        risk_config.max_contracts_per_market,
     );
 
     // Bypass momentum gating for score-feed signals when configured.
@@ -436,7 +438,7 @@ fn evaluate_matched_market(
             strategy::TradeAction::Skip => unreachable!(),
         };
 
-        let qty = (5000u32 / fill_price).max(1);
+        let qty = signal.quantity;
         let is_taker = matches!(signal.action, strategy::TradeAction::TakerBuy);
         let entry_cost = (qty * fill_price) as i64;
         let entry_fee = calculate_fee(fill_price, qty, is_taker) as i64;
@@ -509,6 +511,8 @@ fn process_score_updates(
     last_score_fetch: &HashMap<String, Instant>,
     sim_config: &config::SimulationConfig,
     win_prob_table: &engine::win_prob::WinProbTable,
+    risk_config: &config::RiskConfig,
+    bankroll_cents: u64,
 ) -> SportProcessResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -578,7 +582,7 @@ fn process_score_updates(
                 velocity_score, staleness_secs, is_stale, side_market, now_utc,
                 live_book_engine, strategy_config, momentum_config,
                 book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                "score_feed", sim_config,
+                "score_feed", sim_config, risk_config, bankroll_cents,
             ) {
                 EvalOutcome::Closed => { filter_closed += 1; }
                 EvalOutcome::Evaluated(row) => {
@@ -612,6 +616,8 @@ fn process_college_score_updates(
     last_score_fetch: &HashMap<String, Instant>,
     sim_config: &config::SimulationConfig,
     win_prob_table: &engine::win_prob::WinProbTable,
+    risk_config: &config::RiskConfig,
+    bankroll_cents: u64,
 ) -> SportProcessResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -661,7 +667,7 @@ fn process_college_score_updates(
                 velocity_score, staleness_secs, is_stale, side_market, now_utc,
                 live_book_engine, strategy_config, momentum_config,
                 book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                "score_feed", sim_config,
+                "score_feed", sim_config, risk_config, bankroll_cents,
             ) {
                 EvalOutcome::Closed => { filter_closed += 1; }
                 EvalOutcome::Evaluated(row) => {
@@ -694,6 +700,8 @@ fn process_sport_updates(
     cycle_start: Instant,
     is_replay: bool,
     sim_config: &config::SimulationConfig,
+    risk_config: &config::RiskConfig,
+    bankroll_cents: u64,
 ) -> SportProcessResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -779,7 +787,7 @@ fn process_sport_updates(
                             velocity_score, staleness_secs, false, Some(side), now_utc,
                             live_book_engine, strategy_config, momentum_config,
                             book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                            label, sim_config,
+                            label, sim_config, risk_config, bankroll_cents,
                         ) {
                             EvalOutcome::Closed => { filter_closed += 1; }
                             EvalOutcome::Evaluated(row) => {
@@ -827,7 +835,7 @@ fn process_sport_updates(
                         velocity_score, staleness_secs, false, side_market, now_utc,
                         live_book_engine, strategy_config, momentum_config,
                         book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                        "odds_api", sim_config,
+                        "odds_api", sim_config, risk_config, bankroll_cents,
                     ) {
                         EvalOutcome::Closed => { filter_closed += 1; }
                         EvalOutcome::Evaluated(row) => {
@@ -1038,6 +1046,7 @@ async fn main() -> Result<()> {
     let sim_config = config.simulation.clone().unwrap_or_default();
     let win_prob_config = config.win_prob.clone().unwrap_or_default();
     let win_prob_table = engine::win_prob::WinProbTable::from_config(&win_prob_config);
+    let risk_config = config.risk.clone();
     let momentum_config = config.momentum.clone();
     let live_poll_interval = Duration::from_secs(
         config.odds_feed.live_poll_interval_s.unwrap_or(20),
@@ -1208,6 +1217,12 @@ async fn main() -> Result<()> {
             earliest_commence = None;
             accumulated_rows.clear();
 
+            // Compute bankroll for Kelly sizing
+            let bankroll_cents = {
+                let s = state_tx_engine.borrow();
+                if sim_mode_engine { s.sim_balance_cents.max(0) as u64 } else { s.balance_cents.max(0) as u64 }
+            };
+
             // Re-derive enabled sports each iteration (supports runtime toggles)
             let odds_sports: Vec<String> = {
                 let es = enabled_sports_engine.lock().unwrap();
@@ -1267,6 +1282,8 @@ async fn main() -> Result<()> {
                             &last_score_fetch,
                             &sim_config,
                             &win_prob_table,
+                            &risk_config,
+                            bankroll_cents,
                         );
 
                         filter_live += result.filter_live;
@@ -1328,6 +1345,7 @@ async fn main() -> Result<()> {
                         &mut velocity_trackers, &mut book_pressure_trackers, &scorer,
                         sim_mode_engine, &state_tx_engine, cycle_start,
                         &college_last_score_fetch, &sim_config, &college_win_prob_table,
+                        &risk_config, bankroll_cents,
                     );
                     filter_live += result.filter_live;
                     filter_pre_game += result.filter_pre_game;
@@ -1346,6 +1364,7 @@ async fn main() -> Result<()> {
                         &mut velocity_trackers, &mut book_pressure_trackers, &scorer,
                         sim_mode_engine, &state_tx_engine, cycle_start,
                         &college_last_score_fetch, &sim_config, &college_win_prob_table,
+                        &risk_config, bankroll_cents,
                     );
                     filter_live += result.filter_live;
                     filter_pre_game += result.filter_pre_game;
@@ -1476,6 +1495,8 @@ async fn main() -> Result<()> {
                         cycle_start,
                         !should_fetch,
                         &sim_config,
+                        &risk_config,
+                        bankroll_cents,
                     );
 
                     filter_live += result.filter_live;
