@@ -18,6 +18,77 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, watch};
 use tui::state::{AppState, MarketRow};
 
+pub struct SportDef {
+    pub key: &'static str,
+    pub series: &'static str,
+    pub label: &'static str,
+    pub hotkey: char,
+}
+
+pub const SPORT_REGISTRY: &[SportDef] = &[
+    SportDef { key: "basketball",               series: "KXNBAGAME",     label: "NBA",   hotkey: '1' },
+    SportDef { key: "american-football",         series: "KXNFLGAME",    label: "NFL",   hotkey: '2' },
+    SportDef { key: "baseball",                  series: "KXMLBGAME",    label: "MLB",   hotkey: '3' },
+    SportDef { key: "ice-hockey",                series: "KXNHLGAME",    label: "NHL",   hotkey: '4' },
+    SportDef { key: "college-basketball",        series: "KXNCAAMBGAME", label: "NCAAM", hotkey: '5' },
+    SportDef { key: "college-basketball-womens", series: "KXNCAAWBGAME", label: "NCAAW", hotkey: '6' },
+    SportDef { key: "soccer-epl",               series: "KXEPLGAME",    label: "EPL",   hotkey: '7' },
+    SportDef { key: "mma",                       series: "KXUFCFIGHT",   label: "UFC",   hotkey: '8' },
+];
+
+pub struct EnabledSports {
+    map: HashMap<String, bool>,
+    config_path: std::path::PathBuf,
+}
+
+impl EnabledSports {
+    pub fn from_config(sports: &config::SportsConfig, config_path: std::path::PathBuf) -> Self {
+        let mut map = HashMap::new();
+        map.insert("basketball".to_string(), sports.basketball);
+        map.insert("american-football".to_string(), sports.american_football);
+        map.insert("baseball".to_string(), sports.baseball);
+        map.insert("ice-hockey".to_string(), sports.ice_hockey);
+        map.insert("college-basketball".to_string(), sports.college_basketball);
+        map.insert("college-basketball-womens".to_string(), sports.college_basketball_womens);
+        map.insert("soccer-epl".to_string(), sports.soccer_epl);
+        map.insert("mma".to_string(), sports.mma);
+        Self { map, config_path }
+    }
+
+    pub fn is_enabled(&self, sport_key: &str) -> bool {
+        self.map.get(sport_key).copied().unwrap_or(false)
+    }
+
+    pub fn toggle(&mut self, sport_key: &str) {
+        if let Some(val) = self.map.get_mut(sport_key) {
+            *val = !*val;
+            self.persist();
+        }
+    }
+
+    fn persist(&self) {
+        let Ok(content) = std::fs::read_to_string(&self.config_path) else { return };
+        let Ok(mut doc) = content.parse::<toml::Value>() else { return };
+        if let Some(table) = doc.as_table_mut() {
+            let sports_table = table.entry("sports")
+                .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+            if let Some(st) = sports_table.as_table_mut() {
+                for (key, enabled) in &self.map {
+                    st.insert(key.clone(), toml::Value::Boolean(*enabled));
+                }
+            }
+            let _ = std::fs::write(&self.config_path, toml::to_string_pretty(&doc).unwrap_or_default());
+        }
+    }
+
+    pub fn enabled_keys(&self) -> Vec<String> {
+        self.map.iter()
+            .filter(|(_, &v)| v)
+            .map(|(k, _)| k.clone())
+            .collect()
+    }
+}
+
 /// Results from processing one sport's odds updates.
 struct SportProcessResult {
     filter_live: usize,
@@ -806,6 +877,10 @@ async fn main() -> Result<()> {
     let auth = Arc::new(KalshiAuth::new(kalshi_api_key, &pk_pem)?);
     let rest = Arc::new(KalshiRest::new(auth.clone(), &config.kalshi.api_base));
 
+    let enabled_sports = Arc::new(Mutex::new(
+        EnabledSports::from_config(&config.sports, Path::new("config.toml").to_path_buf())
+    ));
+
     // Channels
     let (state_tx, state_rx) = watch::channel({
         let mut s = AppState::new();
@@ -816,16 +891,9 @@ async fn main() -> Result<()> {
     let (kalshi_ws_tx, mut kalshi_ws_rx) = mpsc::channel(512);
 
     // --- Phase 1: Fetch Kalshi markets and build index ---
-    let sport_series = vec![
-        ("basketball", "KXNBAGAME"),
-        ("american-football", "KXNFLGAME"),
-        ("baseball", "KXMLBGAME"),
-        ("ice-hockey", "KXNHLGAME"),
-        ("college-basketball", "KXNCAAMBGAME"),
-        ("college-basketball-womens", "KXNCAAWBGAME"),
-        ("soccer-epl", "KXEPLGAME"),
-        ("mma", "KXUFCFIGHT"),
-    ];
+    let sport_series: Vec<(&str, &str)> = SPORT_REGISTRY.iter()
+        .map(|sd| (sd.key, sd.series))
+        .collect();
 
     let mut market_index: matcher::MarketIndex = HashMap::new();
     let mut all_tickers: Vec<String> = Vec::new();
@@ -960,11 +1028,16 @@ async fn main() -> Result<()> {
         }
     }
 
-    let odds_sports: Vec<String> = config.odds_feed.sports.iter()
-        .filter(|s| !(config.score_feed.is_some() && s.as_str() == "basketball"))
-        .filter(|s| !(config.college_score_feed.is_some() && (s.as_str() == "college-basketball" || s.as_str() == "college-basketball-womens")))
-        .cloned()
-        .collect();
+    let odds_sports: Vec<String> = {
+        let es = enabled_sports.lock().unwrap();
+        SPORT_REGISTRY.iter()
+            .filter(|sd| es.is_enabled(sd.key))
+            .map(|sd| sd.key.to_string())
+            .filter(|s| !(config.score_feed.is_some() && s.as_str() == "basketball"))
+            .filter(|s| !(config.college_score_feed.is_some() && (s == "college-basketball" || s == "college-basketball-womens")))
+            .collect()
+    };
+    let all_sports: Vec<String> = enabled_sports.lock().unwrap().enabled_keys();
     let strategy_config = config.strategy.clone();
     let sim_config = config.simulation.clone().unwrap_or_default();
     let win_prob_config = config.win_prob.clone().unwrap_or_default();
@@ -1075,9 +1148,10 @@ async fn main() -> Result<()> {
                     }
                     tui::TuiCommand::Quit => return,
                     tui::TuiCommand::FetchDiagnostic => {
-                        // One-shot fetch for diagnostic view
+                        // One-shot fetch for diagnostic view (use unfiltered sports list
+                        // so score-feed sports like basketball still appear)
                         let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
-                        for diag_sport in &odds_sports {
+                        for diag_sport in &all_sports {
                             match odds_feed.fetch_odds(diag_sport).await {
                                 Ok(updates) => {
                                     if let Some(quota) = odds_feed.last_quota() {
@@ -1392,6 +1466,36 @@ async fn main() -> Result<()> {
                 }
             }
 
+            // Diagnostic-only fetch for score-feed sports (excluded from odds_sports
+            // but still needed in the diagnostic view). Rate-limited to pre-game interval.
+            for sport in &all_sports {
+                if odds_sports.contains(sport) {
+                    continue; // already handled in the odds loop above
+                }
+                let should_fetch_diag = match last_poll.get(sport.as_str()) {
+                    Some(&last) => cycle_start.duration_since(last) >= pre_game_poll_interval,
+                    None => true,
+                };
+                if should_fetch_diag {
+                    match odds_feed.fetch_odds(sport).await {
+                        Ok(updates) => {
+                            last_poll.insert(sport.to_string(), Instant::now());
+                            let ctimes: Vec<String> = updates.iter()
+                                .map(|u| u.commence_time.clone())
+                                .collect();
+                            sport_commence_times.insert(sport.to_string(), ctimes);
+                            diagnostic_cache.insert(
+                                sport.to_string(),
+                                build_diagnostic_rows(&updates, sport, &market_index),
+                            );
+                        }
+                        Err(e) => {
+                            tracing::warn!(sport, error = %e, "diagnostic-only odds fetch failed");
+                        }
+                    }
+                }
+            }
+
             // If nothing is live, sleep until the next game starts
             if filter_live == 0 {
                 if let Some(next_start) = earliest_commence {
@@ -1431,9 +1535,10 @@ async fn main() -> Result<()> {
                                     }
                                     tui::TuiCommand::Quit => return,
                                     tui::TuiCommand::FetchDiagnostic => {
-                                        // One-shot fetch for diagnostic view (during idle sleep)
+                                        // One-shot fetch for diagnostic view (during idle sleep;
+                                        // use unfiltered sports list so score-feed sports still appear)
                                         let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
-                                        for diag_sport in &odds_sports {
+                                        for diag_sport in &all_sports {
                                             match odds_feed.fetch_odds(diag_sport).await {
                                                 Ok(updates) => {
                                                     if let Some(quota) = odds_feed.last_quota() {
