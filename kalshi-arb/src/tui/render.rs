@@ -485,8 +485,9 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     let inner_width = area.width.saturating_sub(2) as usize;
 
     // Responsive column dropping.
-    // Fixed column widths: Side=4 Qty=5 Entry=6 Bid=5 Sell=6 Edge=6 Tgt=7 Mkt=7 Age=6 = 52
-    // Drop order: Edge(6), Side(4), Age(6), Mkt(7)
+    // Fixed column widths: Side=4 Qty=5 Entry=6 Bid=5 Sell=6 Edge=6 Tgt=7 Mkt=7 Age=6 Src=6 = 58
+    // Drop order: Src(6), Edge(6), Side(4), Age(6), Mkt(7)
+    let show_src = inner_width >= 62;
     let show_edge = inner_width >= 56;
     let show_side = inner_width >= 48;
     let show_age = inner_width >= 44;
@@ -496,7 +497,8 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
         + if show_mkt { 7 } else { 0 }
         + if show_age { 6 } else { 0 }
         + if show_side { 4 } else { 0 }
-        + if show_edge { 6 } else { 0 };
+        + if show_edge { 6 } else { 0 }
+        + if show_src { 6 } else { 0 };
     let ticker_w = inner_width.saturating_sub(fixed).max(4);
 
     // Build header
@@ -507,6 +509,7 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     headers.push("Tgt");
     if show_mkt { headers.push("Mkt"); }
     if show_age { headers.push("Age"); }
+    if show_src { headers.push("Src"); }
 
     let header = Row::new(headers)
         .style(Style::default().add_modifier(Modifier::BOLD));
@@ -524,6 +527,7 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     constraints.push(Constraint::Length(7));
     if show_mkt { constraints.push(Constraint::Length(7)); }
     if show_age { constraints.push(Constraint::Length(6)); }
+    if show_src { constraints.push(Constraint::Length(6)); }
 
     let now = std::time::Instant::now();
 
@@ -613,6 +617,19 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
                 cells.push(Cell::from(age));
             }
 
+            if show_src {
+                let src_text = sp.trace.as_ref().map(|t| {
+                    match &t.fair_value_method {
+                        crate::pipeline::FairValueMethod::ScoreFeed { .. } => "score",
+                        crate::pipeline::FairValueMethod::OddsFeed { .. } => "odds",
+                    }
+                }).unwrap_or("\u{2014}");
+                cells.push(
+                    Cell::from(src_text.to_string())
+                        .style(Style::default().fg(Color::DarkGray)),
+                );
+            }
+
             Row::new(cells)
         })
         .collect();
@@ -661,13 +678,18 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
     };
 
     // Fixed column widths: Time=8 Action=4 Price=6 Qty=4 Type=5 P&L=7 Slip=6 = 40
-    let fixed_cols: usize = 8 + 4 + 6 + 4 + 5 + 7 + 6;
+    // Optional: SRC=6
+    let base_fixed: usize = 8 + 4 + 6 + 4 + 5 + 7 + 6; // 40
+    let show_src = inner_width >= base_fixed + 6 + 8; // need room for SRC + reasonable ticker
+    let fixed_cols = base_fixed + if show_src { 6 } else { 0 };
     let ticker_w = inner_width.saturating_sub(fixed_cols).max(4);
 
-    let header = Row::new(vec!["Time", "Action", "Ticker", "Price", "Qty", "Type", "P&L", "Slip"])
+    let mut headers = vec!["Time", "Action", "Ticker", "Price", "Qty", "Type", "P&L", "Slip"];
+    if show_src { headers.push("SRC"); }
+    let header = Row::new(headers)
         .style(Style::default().add_modifier(Modifier::BOLD));
 
-    let constraints = vec![
+    let mut constraints = vec![
         Constraint::Length(8),
         Constraint::Length(4),
         Constraint::Length(ticker_w as u16),
@@ -677,6 +699,7 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
         Constraint::Length(7),
         Constraint::Length(6),
     ];
+    if show_src { constraints.push(Constraint::Length(6)); }
 
     let rows: Vec<Row> = state
         .trades
@@ -709,7 +732,7 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
 
             let ticker = truncate_with_ellipsis(&t.ticker, ticker_w);
 
-            Row::new(vec![
+            let mut cells = vec![
                 Cell::from(t.time.clone()),
                 Cell::from(t.action.clone()),
                 Cell::from(ticker.into_owned()),
@@ -718,7 +741,19 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
                 Cell::from(t.order_type.clone()),
                 pnl_cell,
                 slip_cell,
-            ])
+            ];
+            if show_src {
+                let src_text = if t.source.is_empty() {
+                    "\u{2014}".to_string()
+                } else {
+                    truncate_with_ellipsis(&t.source, 6).into_owned()
+                };
+                cells.push(
+                    Cell::from(src_text)
+                        .style(Style::default().fg(Color::DarkGray)),
+                );
+            }
+            Row::new(cells)
         })
         .collect();
 
@@ -867,20 +902,15 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
 fn draw_sport_legend(f: &mut Frame, state: &AppState, area: Rect) {
     let mut spans: Vec<Span> = vec![Span::raw("  ")];
 
-    for sd in crate::SPORT_REGISTRY {
-        let enabled = state.enabled_sports.as_ref()
-            .and_then(|es| es.lock().ok())
-            .map(|es| es.is_enabled(sd.key))
-            .unwrap_or(true);
-
-        let style = if enabled {
+    for (_key, label, hotkey, enabled) in &state.sport_toggles {
+        let style = if *enabled {
             Style::default().fg(Color::Green)
         } else {
             Style::default().fg(Color::DarkGray)
         };
 
-        spans.push(Span::styled(format!("[{}]", sd.hotkey), Style::default().fg(Color::Yellow)));
-        spans.push(Span::styled(sd.label, style));
+        spans.push(Span::styled(format!("[{}]", hotkey), Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(label.as_str(), style));
         spans.push(Span::raw(" "));
     }
 

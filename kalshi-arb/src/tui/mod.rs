@@ -108,8 +108,11 @@ async fn tui_loop(
                                     return Ok(());
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
-                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
-                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    let key = state_rx.borrow().sport_toggles.iter()
+                                        .find(|(_, _, h, _)| *h == c)
+                                        .map(|(k, _, _, _)| k.clone());
+                                    if let Some(k) = key {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(k)).await;
                                     }
                                 }
                                 _ => {}
@@ -138,8 +141,11 @@ async fn tui_loop(
                                     return Ok(());
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
-                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
-                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    let key = state_rx.borrow().sport_toggles.iter()
+                                        .find(|(_, _, h, _)| *h == c)
+                                        .map(|(k, _, _, _)| k.clone());
+                                    if let Some(k) = key {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(k)).await;
                                     }
                                 }
                                 _ => {}
@@ -173,8 +179,11 @@ async fn tui_loop(
                                     return Ok(());
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
-                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
-                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    let key = state_rx.borrow().sport_toggles.iter()
+                                        .find(|(_, _, h, _)| *h == c)
+                                        .map(|(k, _, _, _)| k.clone());
+                                    if let Some(k) = key {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(k)).await;
                                     }
                                 }
                                 _ => {}
@@ -203,8 +212,11 @@ async fn tui_loop(
                                     return Ok(());
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
-                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
-                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    let key = state_rx.borrow().sport_toggles.iter()
+                                        .find(|(_, _, h, _)| *h == c)
+                                        .map(|(k, _, _, _)| k.clone());
+                                    if let Some(k) = key {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(k)).await;
                                     }
                                 }
                                 _ => {}
@@ -233,8 +245,11 @@ async fn tui_loop(
                                     return Ok(());
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
-                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
-                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    let key = state_rx.borrow().sport_toggles.iter()
+                                        .find(|(_, _, h, _)| *h == c)
+                                        .map(|(k, _, _, _)| k.clone());
+                                    if let Some(k) = key {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(k)).await;
                                     }
                                 }
                                 _ => {}
@@ -276,8 +291,11 @@ async fn tui_loop(
                                     }
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
-                                    if let Some(sd) = crate::SPORT_REGISTRY.iter().find(|sd| sd.hotkey == c) {
-                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(sd.key.to_string())).await;
+                                    let key = state_rx.borrow().sport_toggles.iter()
+                                        .find(|(_, _, h, _)| *h == c)
+                                        .map(|(k, _, _, _)| k.clone());
+                                    if let Some(k) = key {
+                                        let _ = cmd_tx.send(TuiCommand::ToggleSport(k)).await;
                                     }
                                 }
                                 _ => {}

@@ -539,6 +539,18 @@ pub fn build_diagnostic_rows(
         .collect()
 }
 
+/// Format fair value basis from SignalTrace inputs for display.
+pub fn format_fair_value_basis(trace: &SignalTrace) -> String {
+    match &trace.inputs {
+        FairValueInputs::Score { home_score, away_score, win_prob, .. } => {
+            format!("{}-{} (wp={:.2})", home_score, away_score, win_prob)
+        }
+        FairValueInputs::Odds { devigged_prob, .. } => {
+            format!("devig p={:.2}", devigged_prob)
+        }
+    }
+}
+
 /// Common evaluation pipeline for a matched Kalshi market.
 #[allow(clippy::too_many_arguments)]
 pub fn evaluate_matched_market(
@@ -564,6 +576,9 @@ pub fn evaluate_matched_market(
     sim_config: &crate::config::SimulationConfig,
     risk_config: &crate::config::RiskConfig,
     bankroll_cents: u64,
+    sport: &str,
+    fair_value_method: FairValueMethod,
+    fair_value_inputs: FairValueInputs,
 ) -> EvalOutcome {
     // Check market is open
     let market_open = side_market.is_some_and(|sm| {
@@ -613,6 +628,7 @@ pub fn evaluate_matched_market(
     );
 
     let bypass_momentum = momentum_config.bypass_for_score_signals && source == "score_feed";
+    let pre_gate_action = signal.action.clone();
     if !bypass_momentum {
         signal = strategy::momentum_gate(
             signal,
@@ -621,6 +637,7 @@ pub fn evaluate_matched_market(
             momentum_config.taker_momentum_threshold,
         );
     }
+    let momentum_gated = pre_gate_action != signal.action && !bypass_momentum;
 
     // Force skip if stale
     if is_stale {
@@ -637,6 +654,24 @@ pub fn evaluate_matched_market(
         strategy::TradeAction::TakerBuy => "TAKER",
         strategy::TradeAction::MakerBuy { .. } => "MAKER",
         strategy::TradeAction::Skip => "SKIP",
+    };
+
+    // Build signal trace for provenance
+    let trace = SignalTrace {
+        sport: sport.to_string(),
+        ticker: ticker.to_string(),
+        timestamp: Instant::now(),
+        fair_value_method,
+        fair_value_cents: fair,
+        inputs: fair_value_inputs,
+        best_bid: bid,
+        best_ask: ask,
+        edge: signal.edge,
+        action: action_str.to_string(),
+        net_profit_estimate: signal.net_profit_estimate,
+        quantity: signal.quantity,
+        momentum_score: momentum,
+        momentum_gated,
     };
 
     let row = MarketRow {
@@ -706,7 +741,7 @@ pub fn evaluate_matched_market(
                 entry_fee: entry_fee as u32,
                 filled_at: std::time::Instant::now(),
                 signal_ask,
-                trace: None,
+                trace: Some(trace.clone()),
             });
             s.push_trade(crate::tui::state::TradeRow {
                 time: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -717,8 +752,8 @@ pub fn evaluate_matched_market(
                 order_type: "SIM".to_string(),
                 pnl: None,
                 slippage: Some(slippage),
-                source: String::new(),
-                fair_value_basis: String::new(),
+                source: source.to_string(),
+                fair_value_basis: format_fair_value_basis(&trace),
             });
             s.push_log("TRADE", format!(
                 "SIM BUY {}x {} @ {}c (ask was {}c, slip {:+}c), sell target {}c",
@@ -819,12 +854,24 @@ fn process_score_updates(
                 if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
             });
 
+            let fv_method = FairValueMethod::ScoreFeed {
+                source: "score-feed".to_string(),
+            };
+            let fv_inputs = FairValueInputs::Score {
+                home_score: update.home_score as u32,
+                away_score: update.away_score as u32,
+                elapsed_secs: update.total_elapsed_seconds as u32,
+                period: format!("{}", update.period),
+                win_prob: home_fair as f64 / 100.0,
+            };
+
             match evaluate_matched_market(
                 &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
                 velocity_score, staleness_secs, is_stale, side_market, now_utc,
                 live_book_engine, strategy_config, momentum_config,
                 book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
                 "score_feed", sim_config, risk_config, bankroll_cents,
+                sport, fv_method, fv_inputs,
             ) {
                 EvalOutcome::Closed => { filter_closed += 1; }
                 EvalOutcome::Evaluated(row) => {
@@ -924,13 +971,15 @@ fn process_sport_updates(
                 let game = key.and_then(|k| market_index.get(&k));
 
                 if let Some(game) = game {
-                    let sides: Vec<(Option<&matcher::SideMarket>, u32, &str)> = vec![
-                        (game.home.as_ref(), strategy::fair_value_cents(home_fv), "HOME"),
-                        (game.away.as_ref(), strategy::fair_value_cents(away_fv), "AWAY"),
-                        (game.draw.as_ref(), strategy::fair_value_cents(draw_fv), "DRAW"),
+                    let bookmaker_names: Vec<String> = update.bookmakers
+                        .iter().map(|b| b.name.clone()).collect();
+                    let sides: Vec<(Option<&matcher::SideMarket>, u32, &str, f64)> = vec![
+                        (game.home.as_ref(), strategy::fair_value_cents(home_fv), "HOME", home_fv),
+                        (game.away.as_ref(), strategy::fair_value_cents(away_fv), "AWAY", away_fv),
+                        (game.draw.as_ref(), strategy::fair_value_cents(draw_fv), "DRAW", draw_fv),
                     ];
 
-                    for (side_opt, fair, label) in sides {
+                    for (side_opt, fair, label, devigged_prob) in sides {
                         let Some(side) = side_opt else { continue };
 
                         let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
@@ -940,12 +989,23 @@ fn process_sport_updates(
                                 age.num_seconds().max(0) as u64
                             });
 
+                        let fv_method = FairValueMethod::OddsFeed {
+                            source: "odds-api".to_string(),
+                        };
+                        let fv_inputs = FairValueInputs::Odds {
+                            home_odds: bm.home_odds,
+                            away_odds: bm.away_odds,
+                            bookmakers: bookmaker_names.clone(),
+                            devigged_prob,
+                        };
+
                         match evaluate_matched_market(
                             &side.ticker, fair, side.yes_bid, side.yes_ask, false,
                             velocity_score, staleness_secs, false, Some(side), now_utc,
                             live_book_engine, strategy_config, momentum_config,
                             book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
                             label, sim_config, risk_config, bankroll_cents,
+                            sport, fv_method, fv_inputs,
                         ) {
                             EvalOutcome::Closed => { filter_closed += 1; }
                             EvalOutcome::Evaluated(row) => {
@@ -981,12 +1041,25 @@ fn process_sport_updates(
                             age.num_seconds().max(0) as u64
                         });
 
+                    let bookmaker_names: Vec<String> = update.bookmakers
+                        .iter().map(|b| b.name.clone()).collect();
+                    let fv_method = FairValueMethod::OddsFeed {
+                        source: "odds-api".to_string(),
+                    };
+                    let fv_inputs = FairValueInputs::Odds {
+                        home_odds: bm.home_odds,
+                        away_odds: bm.away_odds,
+                        bookmakers: bookmaker_names,
+                        devigged_prob: home_fv,
+                    };
+
                     match evaluate_matched_market(
                         &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
                         velocity_score, staleness_secs, false, side_market, now_utc,
                         live_book_engine, strategy_config, momentum_config,
                         book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
                         "odds_api", sim_config, risk_config, bankroll_cents,
+                        sport, fv_method, fv_inputs,
                     ) {
                         EvalOutcome::Closed => { filter_closed += 1; }
                         EvalOutcome::Evaluated(row) => {

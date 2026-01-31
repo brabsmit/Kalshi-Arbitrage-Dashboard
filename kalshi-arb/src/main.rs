@@ -752,6 +752,9 @@ async fn main() -> Result<()> {
                                 if pnl > 0 {
                                     s.sim_winning_trades += 1;
                                 }
+                                let (sell_source, sell_basis) = pos.trace.as_ref()
+                                    .map(|t| (t.sport.clone(), pipeline::format_fair_value_basis(t)))
+                                    .unwrap_or_default();
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
                                     action: "SELL".to_string(),
@@ -761,8 +764,8 @@ async fn main() -> Result<()> {
                                     order_type: "SIM".to_string(),
                                     pnl: Some(pnl as i32),
                                     slippage: None,
-                                    source: String::new(),
-                                    fair_value_basis: String::new(),
+                                    source: sell_source,
+                                    fair_value_basis: sell_basis,
                                 });
                                 s.push_log("TRADE", format!(
                                     "SIM SELL {}x {} @ {}c, P&L: {:+}c",
@@ -809,6 +812,9 @@ async fn main() -> Result<()> {
                                 if pnl > 0 {
                                     s.sim_winning_trades += 1;
                                 }
+                                let (sell_source, sell_basis) = pos.trace.as_ref()
+                                    .map(|t| (t.sport.clone(), pipeline::format_fair_value_basis(t)))
+                                    .unwrap_or_default();
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
                                     action: "SELL".to_string(),
@@ -818,8 +824,8 @@ async fn main() -> Result<()> {
                                     order_type: "SIM".to_string(),
                                     pnl: Some(pnl as i32),
                                     slippage: None,
-                                    source: String::new(),
-                                    fair_value_basis: String::new(),
+                                    source: sell_source,
+                                    fair_value_basis: sell_basis,
                                 });
                                 s.push_log("TRADE", format!(
                                     "SIM SELL {}x {} @ {}c, P&L: {:+}c",

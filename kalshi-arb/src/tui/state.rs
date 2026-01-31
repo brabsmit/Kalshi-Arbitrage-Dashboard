@@ -1,5 +1,4 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
@@ -63,7 +62,8 @@ pub struct AppState {
     pub diagnostic_focus: bool,
     pub diagnostic_scroll_offset: usize,
     pub live_book: HashMap<String, (u32, u32, u32, u32)>,
-    pub enabled_sports: Option<Arc<Mutex<crate::EnabledSports>>>,
+    /// Per-sport toggle state: (key, label, hotkey, enabled)
+    pub sport_toggles: Vec<(String, String, char, bool)>,
     pub odds_source: String,
 }
 
@@ -164,7 +164,7 @@ impl AppState {
             diagnostic_focus: false,
             diagnostic_scroll_offset: 0,
             live_book: HashMap::new(),
-            enabled_sports: None,
+            sport_toggles: Vec::new(),
             odds_source: "ODDS-API".to_string(),
         }
     }
