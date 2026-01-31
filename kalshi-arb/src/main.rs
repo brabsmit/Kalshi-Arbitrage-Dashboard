@@ -249,6 +249,7 @@ fn evaluate_matched_market(
     state_tx: &watch::Sender<AppState>,
     cycle_start: Instant,
     source: &str,
+    sim_config: &config::SimulationConfig,
 ) -> EvalOutcome {
     // Check market is open
     let market_open = side_market.is_some_and(|sm| {
@@ -345,11 +346,27 @@ fn evaluate_matched_market(
 
     // Simulation mode
     if sim_mode && signal.action != strategy::TradeAction::Skip {
-        let entry_price = signal.price;
-        let qty = (5000u32 / entry_price).max(1);
-        let entry_cost = (qty * entry_price) as i64;
-        let entry_fee = calculate_fee(entry_price, qty, true) as i64;
+        let signal_ask = ask;
+        let fill_price = match &signal.action {
+            strategy::TradeAction::TakerBuy => ask,
+            strategy::TradeAction::MakerBuy { bid_price } => *bid_price,
+            strategy::TradeAction::Skip => unreachable!(),
+        };
+
+        let qty = (5000u32 / fill_price).max(1);
+        let is_taker = matches!(signal.action, strategy::TradeAction::TakerBuy);
+        let entry_cost = (qty * fill_price) as i64;
+        let entry_fee = calculate_fee(fill_price, qty, is_taker) as i64;
         let total_cost = entry_cost + entry_fee;
+
+        let sell_target = if sim_config.use_break_even_exit {
+            let total_entry = (qty * fill_price) + calculate_fee(fill_price, qty, is_taker);
+            engine::fees::break_even_sell_price(total_entry, qty, false)
+        } else {
+            fair
+        };
+
+        let slippage = fill_price as i32 - signal_ask as i32;
 
         let ticker_owned = ticker.to_string();
         state_tx.send_modify(|s| {
@@ -363,25 +380,25 @@ fn evaluate_matched_market(
             s.sim_positions.push(tui::state::SimPosition {
                 ticker: ticker_owned.clone(),
                 quantity: qty,
-                entry_price,
-                sell_price: fair,
+                entry_price: fill_price,
+                sell_price: sell_target,
                 entry_fee: entry_fee as u32,
                 filled_at: std::time::Instant::now(),
-                signal_ask: entry_price,
+                signal_ask,
             });
             s.push_trade(tui::state::TradeRow {
                 time: chrono::Local::now().format("%H:%M:%S").to_string(),
                 action: "BUY".to_string(),
                 ticker: ticker_owned.clone(),
-                price: entry_price,
+                price: fill_price,
                 quantity: qty,
                 order_type: "SIM".to_string(),
                 pnl: None,
-                slippage: None,
+                slippage: Some(slippage),
             });
             s.push_log("TRADE", format!(
-                "SIM BUY {}x {} @ {}¢, sell target {}¢",
-                qty, ticker_owned, entry_price, fair
+                "SIM BUY {}x {} @ {}¢ (ask was {}¢, slip {:+}¢), sell target {}¢",
+                qty, ticker_owned, fill_price, signal_ask, slippage, sell_target
             ));
         });
     }
@@ -406,6 +423,7 @@ fn process_score_updates(
     state_tx: &watch::Sender<AppState>,
     cycle_start: Instant,
     last_score_fetch: &HashMap<String, Instant>,
+    sim_config: &config::SimulationConfig,
 ) -> SportProcessResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -475,7 +493,7 @@ fn process_score_updates(
                 velocity_score, staleness_secs, is_stale, side_market, now_utc,
                 live_book_engine, strategy_config, momentum_config,
                 book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                "score_feed",
+                "score_feed", sim_config,
             ) {
                 EvalOutcome::Closed => { filter_closed += 1; }
                 EvalOutcome::Evaluated(row) => {
@@ -507,6 +525,7 @@ fn process_sport_updates(
     state_tx: &watch::Sender<AppState>,
     cycle_start: Instant,
     is_replay: bool,
+    sim_config: &config::SimulationConfig,
 ) -> SportProcessResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -592,7 +611,7 @@ fn process_sport_updates(
                             velocity_score, staleness_secs, false, Some(side), now_utc,
                             live_book_engine, strategy_config, momentum_config,
                             book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                            label,
+                            label, sim_config,
                         ) {
                             EvalOutcome::Closed => { filter_closed += 1; }
                             EvalOutcome::Evaluated(row) => {
@@ -640,7 +659,7 @@ fn process_sport_updates(
                         velocity_score, staleness_secs, false, side_market, now_utc,
                         live_book_engine, strategy_config, momentum_config,
                         book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                        "odds_api",
+                        "odds_api", sim_config,
                     ) {
                         EvalOutcome::Closed => { filter_closed += 1; }
                         EvalOutcome::Evaluated(row) => {
@@ -854,6 +873,7 @@ async fn main() -> Result<()> {
         .cloned()
         .collect();
     let strategy_config = config.strategy.clone();
+    let sim_config = config.simulation.clone().unwrap_or_default();
     let momentum_config = config.momentum.clone();
     let live_poll_interval = Duration::from_secs(
         config.odds_feed.live_poll_interval_s.unwrap_or(20),
@@ -1032,6 +1052,7 @@ async fn main() -> Result<()> {
                         &state_tx_engine,
                         cycle_start,
                         &last_score_fetch,
+                        &sim_config,
                     );
 
                     filter_live += result.filter_live;
@@ -1162,6 +1183,7 @@ async fn main() -> Result<()> {
                         &state_tx_engine,
                         cycle_start,
                         !should_fetch,
+                        &sim_config,
                     );
 
                     filter_live += result.filter_live;
