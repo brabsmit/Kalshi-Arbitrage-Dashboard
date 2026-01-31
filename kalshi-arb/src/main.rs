@@ -2,6 +2,7 @@ mod config;
 mod engine;
 mod feed;
 mod kalshi;
+mod pipeline;
 mod tui;
 
 use anyhow::Result;
