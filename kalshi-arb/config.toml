@@ -1,6 +1,6 @@
 [college_score_feed]
-espn_mens_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard"
-espn_womens_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard"
+espn_mens_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50&limit=400"
+espn_womens_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50&limit=400"
 live_poll_interval_s = 1
 pre_game_poll_interval_s = 60
 request_timeout_ms = 1000
