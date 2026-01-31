@@ -1222,6 +1222,7 @@ async fn main() -> Result<()> {
     let state_tx_display = state_tx.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_millis(200));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             interval.tick().await;
             // Clone the book snapshot and release the lock immediately
