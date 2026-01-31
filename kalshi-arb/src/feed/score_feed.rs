@@ -44,11 +44,11 @@ impl ScoreUpdate {
         }
         if period <= 4 {
             let completed_periods = (period - 1) as u16;
-            completed_periods * 720 + (720 - clock_seconds)
+            completed_periods * 720 + 720u16.saturating_sub(clock_seconds)
         } else {
             // Overtime: regulation (2880s) + completed OT periods
             let ot_period = (period - 5) as u16; // 0-indexed OT
-            2880 + ot_period * 300 + (300 - clock_seconds)
+            2880 + ot_period * 300 + 300u16.saturating_sub(clock_seconds)
         }
     }
 
@@ -60,11 +60,11 @@ impl ScoreUpdate {
         }
         if period <= 2 {
             let completed = (period - 1) as u16;
-            completed * 1200 + (1200 - clock_seconds)
+            completed * 1200 + 1200u16.saturating_sub(clock_seconds)
         } else {
             // Overtime: regulation (2400s) + completed OT periods
             let ot_period = (period - 3) as u16;
-            2400 + ot_period * 300 + (300 - clock_seconds)
+            2400 + ot_period * 300 + 300u16.saturating_sub(clock_seconds)
         }
     }
 }
@@ -639,5 +639,19 @@ mod tests {
     #[test]
     fn test_college_elapsed_overtime_end() {
         assert_eq!(ScoreUpdate::compute_elapsed_college(3, 0), 2700);
+    }
+
+    #[test]
+    fn test_compute_elapsed_no_overflow_on_large_clock() {
+        // Regression: college clock (1200s) passed through NBA compute_elapsed
+        // must not panic with subtract-overflow
+        assert_eq!(ScoreUpdate::compute_elapsed(1, 1200), 0);
+        assert_eq!(ScoreUpdate::compute_elapsed(2, 1200), 720);
+    }
+
+    #[test]
+    fn test_compute_elapsed_college_no_overflow_on_large_clock() {
+        // Clock exceeding half length should saturate to 0 elapsed-in-period
+        assert_eq!(ScoreUpdate::compute_elapsed_college(1, 1500), 0);
     }
 }
