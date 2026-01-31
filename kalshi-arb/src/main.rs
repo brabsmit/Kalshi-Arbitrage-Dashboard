@@ -134,6 +134,224 @@ fn build_diagnostic_rows(
         .collect()
 }
 
+/// Process score feed updates for NBA games through the fair-value/matching/evaluation pipeline.
+/// Uses WinProbTable for fair value instead of sportsbook odds devigging.
+/// Includes staleness tracking: forces Skip when score data > 10s old.
+#[allow(clippy::too_many_arguments)]
+fn process_score_updates(
+    updates: &[feed::score_feed::ScoreUpdate],
+    market_index: &matcher::MarketIndex,
+    live_book_engine: &LiveBook,
+    strategy_config: &config::StrategyConfig,
+    momentum_config: &config::MomentumConfig,
+    velocity_trackers: &mut HashMap<String, VelocityTracker>,
+    book_pressure_trackers: &mut HashMap<String, BookPressureTracker>,
+    scorer: &MomentumScorer,
+    sim_mode: bool,
+    state_tx: &watch::Sender<AppState>,
+    cycle_start: Instant,
+    last_score_fetch: &HashMap<String, Instant>,
+) -> SportProcessResult {
+    let mut filter_live: usize = 0;
+    let mut filter_pre_game: usize = 0;
+    let mut filter_closed: usize = 0;
+    let earliest_commence: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut rows: HashMap<String, MarketRow> = HashMap::new();
+
+    let now_utc = chrono::Utc::now();
+
+    for update in updates {
+        match update.game_status {
+            feed::score_feed::GameStatus::PreGame => {
+                filter_pre_game += 1;
+                continue;
+            }
+            feed::score_feed::GameStatus::Finished => {
+                filter_closed += 1;
+                continue;
+            }
+            _ => {} // Live or Halftime — process
+        }
+
+        // Check staleness (Task 8)
+        let staleness_secs = last_score_fetch.get(&update.game_id)
+            .map(|t| cycle_start.duration_since(*t).as_secs());
+        let is_stale = staleness_secs.is_some_and(|s| s > 10);
+
+        // Compute fair value from score
+        let score_diff = update.home_score as i32 - update.away_score as i32;
+        let (home_fair, _away_fair) = if update.period > 4 {
+            // Overtime: compute elapsed within the OT period
+            let ot_elapsed = update.total_elapsed_seconds.saturating_sub(2880);
+            engine::win_prob::WinProbTable::fair_value_overtime(score_diff, ot_elapsed)
+        } else {
+            engine::win_prob::WinProbTable::fair_value(score_diff, update.total_elapsed_seconds)
+        };
+
+        // Velocity tracking (use fair value as implied prob for compatibility)
+        let vt = velocity_trackers
+            .entry(update.game_id.clone())
+            .or_insert_with(|| VelocityTracker::new(momentum_config.velocity_window_size));
+        vt.push(home_fair as f64 / 100.0, Instant::now());
+        let velocity_score = vt.score();
+
+        // Try to find the Kalshi market for this game
+        // Use today's date in Eastern time for matching
+        let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+        let today = chrono::Utc::now().with_timezone(&eastern).date_naive();
+
+        if let Some(mkt) = matcher::find_match(
+            market_index,
+            "basketball",
+            &update.home_team,
+            &update.away_team,
+            today,
+        ) {
+            let fair = home_fair;
+
+            // Check market is open
+            let key_check = matcher::generate_key("basketball", &update.home_team, &update.away_team, today);
+            let game_check = key_check.and_then(|k| market_index.get(&k));
+            let side_market = game_check.and_then(|g| {
+                if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
+            });
+            let market_open = side_market.is_some_and(|sm| {
+                (sm.status == "open" || sm.status == "active")
+                    && sm.close_time.as_deref()
+                        .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
+                        .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc)
+            });
+            if !market_open {
+                filter_closed += 1;
+                continue;
+            }
+            filter_live += 1;
+
+            // Get live bid/ask from orderbook
+            let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
+                if let Some(&(yes_bid, yes_ask, _, _)) = book.get(&mkt.ticker) {
+                    if yes_ask > 0 { (yes_bid, yes_ask) } else { (mkt.best_bid, mkt.best_ask) }
+                } else {
+                    (mkt.best_bid, mkt.best_ask)
+                }
+            } else {
+                (mkt.best_bid, mkt.best_ask)
+            };
+
+            // Book pressure
+            let bpt = book_pressure_trackers
+                .entry(mkt.ticker.clone())
+                .or_insert_with(|| BookPressureTracker::new(10));
+            if let Ok(book) = live_book_engine.lock() {
+                if let Some(&(yb, _ya, _nb, _na)) = book.get(&mkt.ticker) {
+                    bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
+                }
+            }
+            let pressure_score = bpt.score();
+            let momentum = scorer.composite(velocity_score, pressure_score);
+
+            // Evaluate strategy
+            let mut signal = strategy::evaluate(
+                fair, bid, ask,
+                strategy_config.taker_edge_threshold,
+                strategy_config.maker_edge_threshold,
+                strategy_config.min_edge_after_fees,
+            );
+
+            signal = strategy::momentum_gate(
+                signal,
+                momentum,
+                momentum_config.maker_momentum_threshold,
+                momentum_config.taker_momentum_threshold,
+            );
+
+            // Force skip if stale (Task 8)
+            if is_stale {
+                signal = strategy::StrategySignal {
+                    action: strategy::TradeAction::Skip,
+                    price: 0,
+                    edge: signal.edge,
+                    net_profit_estimate: 0,
+                };
+            }
+
+            let action_str = match &signal.action {
+                strategy::TradeAction::TakerBuy => "TAKER",
+                strategy::TradeAction::MakerBuy { .. } => "MAKER",
+                strategy::TradeAction::Skip => "SKIP",
+            };
+
+            rows.insert(mkt.ticker.clone(), MarketRow {
+                ticker: mkt.ticker.clone(),
+                fair_value: fair,
+                bid,
+                ask,
+                edge: signal.edge,
+                action: action_str.to_string(),
+                latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+                momentum_score: momentum,
+                staleness_secs,
+            });
+
+            if signal.action != strategy::TradeAction::Skip {
+                tracing::warn!(
+                    ticker = %mkt.ticker,
+                    action = %action_str,
+                    price = signal.price,
+                    edge = signal.edge,
+                    net = signal.net_profit_estimate,
+                    inverse = mkt.is_inverse,
+                    momentum = format!("{:.0}", momentum),
+                    source = "score_feed",
+                    "signal detected (dry run)"
+                );
+            }
+
+            // Simulation mode
+            if sim_mode && signal.action != strategy::TradeAction::Skip {
+                let entry_price = signal.price;
+                let qty = (5000u32 / entry_price).max(1);
+                let entry_cost = (qty * entry_price) as i64;
+                let entry_fee = calculate_fee(entry_price, qty, true) as i64;
+                let total_cost = entry_cost + entry_fee;
+
+                state_tx.send_modify(|s| {
+                    if s.sim_balance_cents < total_cost {
+                        return;
+                    }
+                    if s.sim_positions.iter().any(|p| p.ticker == mkt.ticker) {
+                        return;
+                    }
+                    s.sim_balance_cents -= total_cost;
+                    s.sim_positions.push(tui::state::SimPosition {
+                        ticker: mkt.ticker.clone(),
+                        quantity: qty,
+                        entry_price,
+                        sell_price: fair,
+                        entry_fee: entry_fee as u32,
+                        filled_at: std::time::Instant::now(),
+                    });
+                    s.push_trade(tui::state::TradeRow {
+                        time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                        action: "BUY".to_string(),
+                        ticker: mkt.ticker.clone(),
+                        price: entry_price,
+                        quantity: qty,
+                        order_type: "SIM".to_string(),
+                        pnl: None,
+                    });
+                    s.push_log("TRADE", format!(
+                        "SIM BUY {}x {} @ {}¢, sell target {}¢ (score feed)",
+                        qty, mkt.ticker, entry_price, fair
+                    ));
+                });
+            }
+        }
+    }
+
+    SportProcessResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows }
+}
+
 /// Process odds updates for a single sport through the filter/matching/evaluation pipeline.
 /// When `is_replay` is true, velocity trackers are not updated (avoids skewing momentum
 /// with duplicate data on poll-skip cycles).
@@ -702,7 +920,10 @@ async fn main() -> Result<()> {
         }
     }
 
-    let odds_sports = config.odds_feed.sports.clone();
+    let odds_sports: Vec<String> = config.odds_feed.sports.iter()
+        .filter(|s| !(config.score_feed.is_some() && s.as_str() == "basketball"))
+        .cloned()
+        .collect();
     let strategy_config = config.strategy.clone();
     let momentum_config = config.momentum.clone();
     let live_poll_interval = Duration::from_secs(
@@ -712,6 +933,22 @@ async fn main() -> Result<()> {
         config.odds_feed.pre_game_poll_interval_s.unwrap_or(120),
     );
     let quota_warning_threshold = config.odds_feed.quota_warning_threshold.unwrap_or(100);
+
+    let mut score_poller = config.score_feed.as_ref().map(|sf| {
+        feed::score_feed::ScorePoller::new(
+            &sf.nba_api_url,
+            &sf.espn_api_url,
+            sf.request_timeout_ms,
+            sf.failover_threshold,
+        )
+    });
+    let score_feed_live_interval = config.score_feed.as_ref()
+        .map(|sf| Duration::from_secs(sf.live_poll_interval_s))
+        .unwrap_or(Duration::from_secs(3));
+    let score_feed_pre_game_interval = config.score_feed.as_ref()
+        .map(|sf| Duration::from_secs(sf.pre_game_poll_interval_s))
+        .unwrap_or(Duration::from_secs(60));
+
     let rest_for_engine = rest.clone();
 
     let sim_mode_engine = sim_mode;
@@ -740,6 +977,10 @@ async fn main() -> Result<()> {
         let mut diagnostic_cache: HashMap<String, Vec<tui::state::DiagnosticRow>> = HashMap::new();
         // Per-sport cached odds updates (for replay on poll-skip cycles)
         let mut sport_cached_updates: HashMap<String, Vec<feed::types::OddsUpdate>> = HashMap::new();
+        // Score feed state
+        let mut last_score_poll: Option<Instant> = None;
+        let mut last_score_fetch: HashMap<String, Instant> = HashMap::new();
+        let mut score_cached_updates: Vec<feed::score_feed::ScoreUpdate> = Vec::new();
 
         // Filter statistics
         let mut filter_live: usize;
@@ -817,6 +1058,62 @@ async fn main() -> Result<()> {
             filter_closed = 0;
             earliest_commence = None;
             accumulated_rows.clear();
+
+            // --- Score feed for NBA (if configured) ---
+            if let Some(ref mut poller) = score_poller {
+                let score_interval = if score_cached_updates.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live) {
+                    score_feed_live_interval
+                } else {
+                    score_feed_pre_game_interval
+                };
+
+                let should_fetch_scores = match last_score_poll {
+                    Some(last) => cycle_start.duration_since(last) >= score_interval,
+                    None => true,
+                };
+
+                if should_fetch_scores {
+                    match poller.fetch().await {
+                        Ok(updates) => {
+                            last_score_poll = Some(Instant::now());
+                            // Update staleness timestamps for ALL games returned
+                            for u in &updates {
+                                last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                            }
+                            score_cached_updates = updates;
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "score feed fetch failed");
+                        }
+                    }
+                }
+
+                // Process score updates (fresh or cached)
+                if !score_cached_updates.is_empty() {
+                    let result = process_score_updates(
+                        &score_cached_updates,
+                        &market_index,
+                        &live_book_engine,
+                        &strategy_config,
+                        &momentum_config,
+                        &mut velocity_trackers,
+                        &mut book_pressure_trackers,
+                        &scorer,
+                        sim_mode_engine,
+                        &state_tx_engine,
+                        cycle_start,
+                        &last_score_fetch,
+                    );
+
+                    filter_live += result.filter_live;
+                    filter_pre_game += result.filter_pre_game;
+                    filter_closed += result.filter_closed;
+                    if let Some(ec) = result.earliest_commence {
+                        earliest_commence = Some(earliest_commence.map_or(ec, |e| e.min(ec)));
+                    }
+                    accumulated_rows.extend(result.rows);
+                }
+            }
 
             for sport in &odds_sports {
                 // Determine if any event in this sport is live
@@ -1045,7 +1342,7 @@ async fn main() -> Result<()> {
             });
 
             // Update TUI state with live sports info
-            let live_sports: Vec<String> = sport_commence_times.iter()
+            let mut live_sports: Vec<String> = sport_commence_times.iter()
                 .filter(|(_, times)| {
                     let now = chrono::Utc::now();
                     times.iter().any(|ct| {
@@ -1056,6 +1353,13 @@ async fn main() -> Result<()> {
                 })
                 .map(|(sport, _)| sport.clone())
                 .collect();
+
+            // Add basketball to live_sports if score feed has live games
+            if score_poller.is_some() && score_cached_updates.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live) {
+                if !live_sports.contains(&"basketball".to_string()) {
+                    live_sports.push("basketball".to_string());
+                }
+            }
 
             state_tx_engine.send_modify(|state| {
                 state.markets = market_rows;
