@@ -27,8 +27,90 @@ struct SportProcessResult {
     rows: HashMap<String, MarketRow>,
 }
 
-/// Live orderbook: ticker -> (best_yes_bid, best_yes_ask, best_no_bid, best_no_ask)
-type LiveBook = Arc<Mutex<HashMap<String, (u32, u32, u32, u32)>>>;
+/// Per-ticker orderbook depth: price_cents -> quantity for each side.
+/// Supports snapshot replacement and incremental delta application.
+#[derive(Debug, Clone)]
+struct DepthBook {
+    yes: HashMap<u32, i64>,
+    no: HashMap<u32, i64>,
+}
+
+impl DepthBook {
+    fn new() -> Self {
+        Self {
+            yes: HashMap::new(),
+            no: HashMap::new(),
+        }
+    }
+
+    /// Replace entire book from a snapshot message.
+    /// Prefers dollar-based fields; falls back to legacy cent fields.
+    fn apply_snapshot(&mut self, snap: &kalshi::types::OrderbookSnapshot) {
+        self.yes.clear();
+        self.no.clear();
+
+        if !snap.yes_dollars.is_empty() || !snap.no_dollars.is_empty() {
+            for (price_str, qty) in &snap.yes_dollars {
+                if let Ok(d) = price_str.parse::<f64>() {
+                    let cents = (d * 100.0).round() as u32;
+                    if *qty > 0 {
+                        self.yes.insert(cents, *qty);
+                    }
+                }
+            }
+            for (price_str, qty) in &snap.no_dollars {
+                if let Ok(d) = price_str.parse::<f64>() {
+                    let cents = (d * 100.0).round() as u32;
+                    if *qty > 0 {
+                        self.no.insert(cents, *qty);
+                    }
+                }
+            }
+        } else {
+            for level in &snap.yes {
+                if level[1] > 0 {
+                    self.yes.insert(level[0] as u32, level[1]);
+                }
+            }
+            for level in &snap.no {
+                if level[1] > 0 {
+                    self.no.insert(level[0] as u32, level[1]);
+                }
+            }
+        }
+    }
+
+    /// Apply an incremental delta at one price level.
+    fn apply_delta(&mut self, side: &str, price_cents: u32, delta: i64) {
+        let book = if side == "yes" { &mut self.yes } else { &mut self.no };
+        let qty = book.entry(price_cents).or_insert(0);
+        *qty += delta;
+        if *qty <= 0 {
+            book.remove(&price_cents);
+        }
+    }
+
+    /// Apply a delta using dollar-string price (e.g. "0.5500").
+    fn apply_delta_dollars(&mut self, side: &str, price_dollars: &str, delta: i64) {
+        if let Ok(d) = price_dollars.parse::<f64>() {
+            let cents = (d * 100.0).round() as u32;
+            self.apply_delta(side, cents, delta);
+        }
+    }
+
+    /// Derive best bid/ask from current depth.
+    /// Returns (yes_bid, yes_ask, no_bid, no_ask).
+    fn best_bid_ask(&self) -> (u32, u32, u32, u32) {
+        let yes_bid = self.yes.keys().copied().max().unwrap_or(0);
+        let no_bid = self.no.keys().copied().max().unwrap_or(0);
+        let yes_ask = if no_bid > 0 { 100 - no_bid } else { 0 };
+        let no_ask = if yes_bid > 0 { 100 - yes_bid } else { 0 };
+        (yes_bid, yes_ask, no_bid, no_ask)
+    }
+}
+
+/// Live orderbook: ticker -> full depth book
+type LiveBook = Arc<Mutex<HashMap<String, DepthBook>>>;
 
 /// Extract last name from a full name (for MMA fighter matching).
 /// "Alex Volkanovski" -> "Volkanovski", "Benoit Saint-Denis" -> "Saint-Denis"
@@ -181,7 +263,8 @@ fn evaluate_matched_market(
 
     // Get live bid/ask from orderbook
     let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
-        if let Some(&(yes_bid, yes_ask, _, _)) = book.get(ticker) {
+        if let Some(depth) = book.get(ticker) {
+            let (yes_bid, yes_ask, _, _) = depth.best_bid_ask();
             if yes_ask > 0 { (yes_bid, yes_ask) } else { (fallback_bid, fallback_ask) }
         } else {
             (fallback_bid, fallback_ask)
@@ -195,7 +278,8 @@ fn evaluate_matched_market(
         .entry(ticker.to_string())
         .or_insert_with(|| BookPressureTracker::new(10));
     if let Ok(book) = live_book_engine.lock() {
-        if let Some(&(yb, _ya, _nb, _na)) = book.get(ticker) {
+        if let Some(depth) = book.get(ticker) {
+            let (yb, _, _, _) = depth.best_bid_ask();
             bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
         }
     }
@@ -1251,32 +1335,13 @@ async fn main() -> Result<()> {
                     });
                 }
                 kalshi::ws::KalshiWsEvent::Snapshot(snap) => {
-                    // Prefer dollar fields (current API), fall back to legacy cent fields
-                    let yes_bid = if !snap.yes_dollars.is_empty() {
-                        snap.yes_dollars.iter()
-                            .filter(|(_, q)| *q > 0)
-                            .filter_map(|(p, _)| p.parse::<f64>().ok())
-                            .map(|d| (d * 100.0).round() as u32)
-                            .max().unwrap_or(0)
-                    } else {
-                        snap.yes.iter()
-                            .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0)
-                    };
-                    let no_bid = if !snap.no_dollars.is_empty() {
-                        snap.no_dollars.iter()
-                            .filter(|(_, q)| *q > 0)
-                            .filter_map(|(p, _)| p.parse::<f64>().ok())
-                            .map(|d| (d * 100.0).round() as u32)
-                            .max().unwrap_or(0)
-                    } else {
-                        snap.no.iter()
-                            .filter(|l| l[1] > 0).map(|l| l[0] as u32).max().unwrap_or(0)
-                    };
-                    let yes_ask = if no_bid > 0 { 100 - no_bid } else { 0 };
-                    let no_ask = if yes_bid > 0 { 100 - yes_bid } else { 0 };
+                    // Build DepthBook from snapshot and derive best bid/ask
+                    let mut depth = DepthBook::new();
+                    depth.apply_snapshot(&snap);
+                    let (yes_bid, _yes_ask, _no_bid, _no_ask) = depth.best_bid_ask();
 
                     if let Ok(mut book) = live_book_ws.lock() {
-                        book.insert(snap.market_ticker.clone(), (yes_bid, yes_ask, no_bid, no_ask));
+                        book.insert(snap.market_ticker.clone(), depth);
                     }
 
                     // Sim fill detection: check if any sim position's sell is filled
@@ -1320,7 +1385,10 @@ async fn main() -> Result<()> {
                     if sim_mode_ws {
                         if let Ok(book) = live_book_ws.lock() {
                             let book_snapshot: Vec<(String, u32)> = book.iter()
-                                .map(|(t, (yb, _, _, _))| (t.clone(), *yb))
+                                .map(|(t, depth)| {
+                                    let (yb, _, _, _) = depth.best_bid_ask();
+                                    (t.clone(), yb)
+                                })
                                 .collect();
                             drop(book);
                             state_tx_ws.send_modify(|s| {
@@ -1384,7 +1452,8 @@ async fn main() -> Result<()> {
             }
             state_tx_display.send_modify(|state| {
                 for row in &mut state.markets {
-                    if let Some(&(yb, ya, _, _)) = snapshot.get(&row.ticker) {
+                    if let Some(depth) = snapshot.get(&row.ticker) {
+                        let (yb, ya, _, _) = depth.best_bid_ask();
                         if ya > 0 {
                             row.bid = yb;
                             row.ask = ya;
@@ -1401,4 +1470,115 @@ async fn main() -> Result<()> {
 
     tracing::debug!("shutting down");
     Ok(())
+}
+
+#[cfg(test)]
+mod depth_book_tests {
+    use super::*;
+
+    #[test]
+    fn test_empty_book_returns_zeros() {
+        let book = DepthBook::new();
+        assert_eq!(book.best_bid_ask(), (0, 0, 0, 0));
+    }
+
+    #[test]
+    fn test_snapshot_dollar_format() {
+        let mut book = DepthBook::new();
+        let snap = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![],
+            no: vec![],
+            yes_dollars: vec![
+                ("0.5500".into(), 10),
+                ("0.5400".into(), 20),
+            ],
+            no_dollars: vec![
+                ("0.4800".into(), 5),
+                ("0.4700".into(), 15),
+            ],
+        };
+        book.apply_snapshot(&snap);
+        assert_eq!(book.best_bid_ask(), (55, 52, 48, 45));
+    }
+
+    #[test]
+    fn test_snapshot_legacy_cent_format() {
+        let mut book = DepthBook::new();
+        let snap = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![[60, 10], [58, 20]],
+            no: vec![[42, 5]],
+            yes_dollars: vec![],
+            no_dollars: vec![],
+        };
+        book.apply_snapshot(&snap);
+        assert_eq!(book.best_bid_ask(), (60, 58, 42, 40));
+    }
+
+    #[test]
+    fn test_snapshot_replaces_previous() {
+        let mut book = DepthBook::new();
+        let snap1 = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![], no: vec![],
+            yes_dollars: vec![("0.9000".into(), 10)],
+            no_dollars: vec![("0.1500".into(), 5)],
+        };
+        book.apply_snapshot(&snap1);
+        assert_eq!(book.best_bid_ask().0, 90);
+
+        let snap2 = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![], no: vec![],
+            yes_dollars: vec![("0.5000".into(), 10)],
+            no_dollars: vec![("0.5200".into(), 5)],
+        };
+        book.apply_snapshot(&snap2);
+        assert_eq!(book.best_bid_ask().0, 50);
+    }
+
+    #[test]
+    fn test_delta_adds_quantity() {
+        let mut book = DepthBook::new();
+        let snap = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![], no: vec![],
+            yes_dollars: vec![("0.5000".into(), 10)],
+            no_dollars: vec![("0.5200".into(), 5)],
+        };
+        book.apply_snapshot(&snap);
+        book.apply_delta("yes", 55, 20);
+        let (yb, _, _, _) = book.best_bid_ask();
+        assert_eq!(yb, 55);
+    }
+
+    #[test]
+    fn test_delta_removes_level_at_zero() {
+        let mut book = DepthBook::new();
+        let snap = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![], no: vec![],
+            yes_dollars: vec![("0.5500".into(), 10), ("0.5000".into(), 20)],
+            no_dollars: vec![("0.4800".into(), 5)],
+        };
+        book.apply_snapshot(&snap);
+        assert_eq!(book.best_bid_ask().0, 55);
+        book.apply_delta("yes", 55, -10);
+        assert_eq!(book.best_bid_ask().0, 50);
+    }
+
+    #[test]
+    fn test_delta_dollar_format() {
+        let mut book = DepthBook::new();
+        let snap = kalshi::types::OrderbookSnapshot {
+            market_ticker: "TEST".into(),
+            yes: vec![], no: vec![],
+            yes_dollars: vec![("0.5000".into(), 10)],
+            no_dollars: vec![("0.5200".into(), 5)],
+        };
+        book.apply_snapshot(&snap);
+        book.apply_delta_dollars("yes", "0.5500", 20);
+        assert_eq!(book.best_bid_ask().0, 55);
+    }
 }
