@@ -206,7 +206,7 @@ pub fn normalize_team(sport: &str, name: &str) -> String {
         "TIGERS", "ROYALS", "TWINS", "ASTROS", "ANGELS", "ATHLETICS", "MARINERS",
         "BRAVES", "MARLINS", "METS", "PHILLIES", "NATIONALS", "CUBS", "REDS",
         "BREWERS", "PIRATES", "DIAMONDBACKS", "ROCKIES", "DODGERS", "PADRES",
-        // College
+        // College – power conferences
         "AGGIES", "WILDCATS", "BULLDOGS", "CRIMSON TIDE", "VOLUNTEERS",
         "GATORS", "GAMECOCKS", "RAZORBACKS", "LONGHORNS", "SOONERS", "JAYHAWKS",
         "CYCLONES", "MOUNTAINEERS", "HUSKIES", "TROJANS",
@@ -215,17 +215,50 @@ pub fn normalize_team(sport: &str, name: &str) -> String {
         "BUCKEYES", "NITTANY LIONS", "TERRAPINS", "SCARLET KNIGHTS", "HOOSIERS",
         "FIGHTING IRISH", "BLUE DEVILS", "TAR HEELS", "ORANGE", "DEMON DEACONS",
         "YELLOW JACKETS", "SEMINOLES", "ORANGEMEN",
+        "WOLFPACK", "HOKIES", "MUSTANGS", "BEARCATS", "HORNED FROGS",
+        "RED RAIDERS", "KNIGHTS", "BLUEJAYS", "BLUE DEMONS", "HOYAS",
+        "GOLDEN EAGLES", "FRIARS", "RED STORM", "MUSKETEERS",
+        "FIGHTING ILLINI", "GOLDEN GOPHERS", "BOILERMAKERS", "REBELS",
+        "COMMODORES", "OWLS",
+        // College – mid-majors
+        "AZTECS", "LOBOS", "SHOCKERS", "MIDSHIPMEN", "GREEN WAVE",
+        "GOLDEN HURRICANE", "ROADRUNNERS", "MEAN GREEN", "GAELS", "DUKES",
+        "BILLIKENS", "SPIDERS", "RAMBLERS", "MINUTEMEN", "EXPLORERS",
+        "BONNIES", "WAVES", "PILOTS", "TOREROS", "DONS", "BOBCATS",
+        "PEACOCKS", "CATAMOUNTS", "COLONIALS", "WOLF PACK",
+        // College – smaller conferences
+        "TERRIERS", "BISON", "CRUSADERS", "LEOPARDS", "BLACK KNIGHTS",
+        "PHOENIX", "SEAWOLVES", "DRAGONS", "BLUE HENS", "FIGHTING CAMELS",
+        "SYCAMORES", "BEACONS", "MASTODONS", "SALUKIS", "RACERS",
+        "SKYHAWKS", "LUMBERJACKS", "COLONELS", "CHANTICLEERS",
+        "THUNDERING HERD", "REDHAWKS", "MONARCHS", "VANDALS", "CRIMSON",
+        "QUAKERS", "ANTEATERS", "GAUCHOS", "MOCS", "PALADINS", "KEYDETS",
+        "STAGS", "JASPERS", "RED FOXES", "PURPLE EAGLES", "BRONCS",
+        "GOLDEN GRIFFINS", "PURPLE ACES", "REDBIRDS", "NORSE",
+        "GOLDEN GRIZZLIES", "MOUNTAIN HAWKS", "GREYHOUNDS", "PRIDE",
+        "TRIBE", "PIONEERS", "JACKRABBITS", "RED WOLVES", "WARHAWKS",
+        "RAGIN CAJUNS", "THUNDERBIRDS", "LANCERS", "ANTELOPES",
+        "GOVERNORS", "OSPREYS", "HATTERS", "MATADORS", "HIGHLANDERS",
+        "TRITONS", "BIG RED", "BIG GREEN", "RATTLERS", "DELTA DEVILS",
+        "PRIVATEERS", "DEMONS", "SCREAMING EAGLES", "LEATHERNECKS",
+        "TRAILBLAZERS", "RAINBOW WARRIORS",
     ];
 
+    // Find the longest matching suffix so multi-word mascots (e.g. "GOLDEN EAGLES")
+    // always win over shorter pro entries (e.g. "EAGLES") regardless of list order.
+    let mut best_stripped: Option<String> = None;
+    let mut best_len = 0;
     for suffix in &suffixes {
-        // Match JS behavior: suffix must be at end of string, preceded by whitespace
         if let Some(stripped) = s.strip_suffix(suffix) {
             let stripped = stripped.trim_end();
-            if !stripped.is_empty() {
-                s = stripped.to_string();
-                break;
+            if !stripped.is_empty() && suffix.len() > best_len {
+                best_stripped = Some(stripped.to_string());
+                best_len = suffix.len();
             }
         }
+    }
+    if let Some(m) = best_stripped {
+        s = m;
     }
 
     // Remove all spaces and non-alphanumeric
@@ -539,6 +572,83 @@ mod tests {
         assert_eq!(team_code("soccer-epl", "Manchester City"), Some("MCI"));
         assert_eq!(team_code("soccer-epl", "Nottingham Forest"), Some("NFO"));
         assert_eq!(team_code("soccer-epl", "Nottingham"), Some("NFO"));
+    }
+
+    #[test]
+    fn test_normalize_college_suffix_stripping() {
+        let s = "college-basketball";
+        // Power conference mascots
+        assert_eq!(normalize_team(s, "Duke Blue Devils"), "DUKE");
+        assert_eq!(normalize_team(s, "Virginia Tech Hokies"), "VIRGINIATECH");
+        assert_eq!(normalize_team(s, "NC State Wolfpack"), "NCSTATE");
+        assert_eq!(normalize_team(s, "Texas Tech Red Raiders"), "TEXASTECH");
+        assert_eq!(normalize_team(s, "Cincinnati Bearcats"), "CINCINNATI");
+        assert_eq!(normalize_team(s, "Purdue Boilermakers"), "PURDUE");
+        assert_eq!(normalize_team(s, "Illinois Fighting Illini"), "ILLINOIS");
+        assert_eq!(normalize_team(s, "Minnesota Golden Gophers"), "MINNESOTA");
+        assert_eq!(normalize_team(s, "TCU Horned Frogs"), "TCU");
+        assert_eq!(normalize_team(s, "Georgetown Hoyas"), "GEORGETOWN");
+        assert_eq!(normalize_team(s, "Xavier Musketeers"), "XAVIER");
+        assert_eq!(normalize_team(s, "DePaul Blue Demons"), "DEPAUL");
+        assert_eq!(normalize_team(s, "Creighton Bluejays"), "CREIGHTON");
+        assert_eq!(normalize_team(s, "Providence Friars"), "PROVIDENCE");
+        assert_eq!(normalize_team(s, "UCF Knights"), "UCF");
+        assert_eq!(normalize_team(s, "Ole Miss Rebels"), "OLEMISS");
+        assert_eq!(normalize_team(s, "Vanderbilt Commodores"), "VANDERBILT");
+        // Mid-major mascots
+        assert_eq!(normalize_team(s, "San Diego State Aztecs"), "SANDIEGOSTATE");
+        assert_eq!(normalize_team(s, "Wichita State Shockers"), "WICHITASTATE");
+        assert_eq!(normalize_team(s, "Saint Peter's Peacocks"), "STPETERS");
+        assert_eq!(normalize_team(s, "Western Carolina Catamounts"), "WESTERNCAROLINA");
+        // Smaller conference mascots
+        assert_eq!(normalize_team(s, "Army Black Knights"), "ARMY");
+        assert_eq!(normalize_team(s, "Holy Cross Crusaders"), "HOLYCROSS");
+        assert_eq!(normalize_team(s, "Bucknell Bison"), "BUCKNELL");
+        assert_eq!(normalize_team(s, "Stony Brook Seawolves"), "STONYBROOK");
+        assert_eq!(normalize_team(s, "Elon Phoenix"), "ELON");
+        assert_eq!(normalize_team(s, "Indiana State Sycamores"), "INDIANASTATE");
+        assert_eq!(normalize_team(s, "Valparaiso Beacons"), "VALPARAISO");
+    }
+
+    #[test]
+    fn test_longest_suffix_wins() {
+        let s = "college-basketball";
+        // "GOLDEN EAGLES" must beat "EAGLES" (NFL entry)
+        assert_eq!(normalize_team(s, "Marquette Golden Eagles"), "MARQUETTE");
+        // "BLACK KNIGHTS" must beat "KNIGHTS"
+        assert_eq!(normalize_team(s, "Army Black Knights"), "ARMY");
+        // "GOLDEN GRIZZLIES" must beat "GRIZZLIES" (NBA entry)
+        assert_eq!(normalize_team(s, "Oakland Golden Grizzlies"), "OAKLAND");
+        // "PURPLE EAGLES" must beat "EAGLES"
+        assert_eq!(normalize_team(s, "Niagara Purple Eagles"), "NIAGARA");
+        // "MOUNTAIN HAWKS" must beat "HAWKS" (NBA entry)
+        assert_eq!(normalize_team(s, "Lehigh Mountain Hawks"), "LEHIGH");
+        // "RED RAIDERS" must beat "RAIDERS" (NFL entry)
+        assert_eq!(normalize_team(s, "Texas Tech Red Raiders"), "TEXASTECH");
+        // "SCREAMING EAGLES" must beat "EAGLES"
+        assert_eq!(normalize_team(s, "Southern Indiana Screaming Eagles"), "SOUTHERNINDIANA");
+        // "DELTA DEVILS" must beat "DEVILS" (NHL entry)
+        assert_eq!(normalize_team(s, "Mississippi Valley State Delta Devils"), "MISSISSIPPIVALLEYSTA");
+        // "RAINBOW WARRIORS" must beat "WARRIORS" (NBA entry)
+        assert_eq!(normalize_team(s, "Hawaii Rainbow Warriors"), "HAWAII");
+    }
+
+    #[test]
+    fn test_college_cross_source_matching() {
+        let s = "college-basketball";
+        let d = NaiveDate::from_ymd_opt(2026, 1, 31).unwrap();
+        // Polymarket full names should match Kalshi location-only names
+        let k_poly = generate_key(s, "Duke Blue Devils", "Virginia Tech Hokies", d).unwrap();
+        let k_kalshi = generate_key(s, "Duke", "Virginia Tech", d).unwrap();
+        assert_eq!(k_poly, k_kalshi);
+
+        let k_poly = generate_key(s, "Marquette Golden Eagles", "Seton Hall Pirates", d).unwrap();
+        let k_kalshi = generate_key(s, "Marquette", "Seton Hall", d).unwrap();
+        assert_eq!(k_poly, k_kalshi);
+
+        let k_poly = generate_key(s, "Texas Tech Red Raiders", "UCF Knights", d).unwrap();
+        let k_kalshi = generate_key(s, "Texas Tech", "UCF", d).unwrap();
+        assert_eq!(k_poly, k_kalshi);
     }
 
     #[test]
