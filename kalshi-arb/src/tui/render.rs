@@ -271,7 +271,7 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
 
     let fixed_cols_full: usize = 5 + 5 + 5 + 6 + 8 + 8; // fair+bid+ask+edge+action+latency = 37
 
-    let (headers, constraints, ticker_w, drop_latency, drop_action) = if inner_width < 45 {
+    let (headers, constraints, ticker_w, drop_latency, drop_action, drop_stale) = if inner_width < 45 {
         // Drop both Latency and Action
         let fixed = 5 + 5 + 5 + 6 + 5; // fair+bid+ask+edge+mom
         let ticker_w = inner_width.saturating_sub(fixed).max(4);
@@ -285,7 +285,7 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 Constraint::Length(6),
                 Constraint::Length(5),
             ],
-            ticker_w, true, true,
+            ticker_w, true, true, true,
         )
     } else if inner_width < 55 {
         // Drop Latency only
@@ -302,13 +302,13 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 Constraint::Length(5),
                 Constraint::Length(8),
             ],
-            ticker_w, true, false,
+            ticker_w, true, false, true,
         )
     } else {
-        let fixed_with_mom = fixed_cols_full + 5; // +mom column
+        let fixed_with_mom = fixed_cols_full + 5 + 7; // +mom +stale columns
         let ticker_w = inner_width.saturating_sub(fixed_with_mom).max(4);
         (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Action", "Latency"],
+            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Stale", "Action", "Latency"],
             vec![
                 Constraint::Length(ticker_w as u16),
                 Constraint::Length(5),
@@ -316,10 +316,11 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 Constraint::Length(5),
                 Constraint::Length(6),
                 Constraint::Length(5),
+                Constraint::Length(7),
                 Constraint::Length(8),
                 Constraint::Length(8),
             ],
-            ticker_w, false, false,
+            ticker_w, false, false, false,
         )
     };
 
@@ -349,6 +350,20 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 Cell::from(format!("{:.0}", m.momentum_score))
                     .style(Style::default().fg(mom_color)),
             ];
+            if !drop_stale {
+                let stale_text = m.staleness_secs
+                    .map(|s| format!("{}s", s))
+                    .unwrap_or_else(|| "\u{2014}".to_string());
+                let stale_color = match m.staleness_secs {
+                    Some(s) if s < 30 => Color::Green,
+                    Some(s) if s < 60 => Color::Yellow,
+                    Some(_) => Color::Red,
+                    None => Color::DarkGray,
+                };
+                cells.push(
+                    Cell::from(stale_text).style(Style::default().fg(stale_color)),
+                );
+            }
             if !drop_action {
                 cells.push(Cell::from(m.action.clone()));
             }
