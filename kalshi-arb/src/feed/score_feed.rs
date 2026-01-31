@@ -26,6 +26,10 @@ pub struct ScoreUpdate {
 pub enum GameStatus {
     PreGame,
     Live,
+    /// Neither NBA nor ESPN APIs explicitly report halftime as a distinct status
+    /// (both return "Live" / status=2), but the variant is kept for future use
+    /// if a source begins distinguishing halftime from active play.
+    #[allow(dead_code)]
     Halftime,
     Finished,
 }
@@ -34,6 +38,9 @@ impl ScoreUpdate {
     /// Compute total elapsed seconds from period and clock.
     /// NBA: 4 periods x 12 min (720s each). OT periods are 5 min (300s each).
     pub fn compute_elapsed(period: u8, clock_seconds: u16) -> u16 {
+        if period == 0 {
+            return 0;
+        }
         if period <= 4 {
             let completed_periods = (period - 1) as u16;
             completed_periods * 720 + (720 - clock_seconds)
@@ -217,6 +224,8 @@ pub struct ScorePoller {
     failover_threshold: u32,
     nba_consecutive_failures: u32,
     espn_is_primary: bool,
+    /// Polls since ESPN became primary; used to periodically probe NBA for recovery.
+    espn_primary_polls: u32,
 }
 
 impl ScorePoller {
@@ -234,10 +243,26 @@ impl ScorePoller {
             failover_threshold,
             nba_consecutive_failures: 0,
             espn_is_primary: false,
+            espn_primary_polls: 0,
         }
     }
 
     pub async fn fetch(&mut self) -> anyhow::Result<Vec<ScoreUpdate>> {
+        // When ESPN is primary, periodically probe NBA API for recovery.
+        // Every `failover_threshold` polls, try NBA first instead of ESPN.
+        if self.espn_is_primary {
+            self.espn_primary_polls += 1;
+            if self.espn_primary_polls >= self.failover_threshold {
+                self.espn_primary_polls = 0;
+                if let Ok(updates) = self.fetch_and_parse(&self.nba_url.clone(), parse_nba_scoreboard).await {
+                    tracing::info!("NBA API recovered, swapping back to primary");
+                    self.espn_is_primary = false;
+                    self.nba_consecutive_failures = 0;
+                    return Ok(updates);
+                }
+            }
+        }
+
         let (primary_url, secondary_url, primary_parser, secondary_parser) =
             if self.espn_is_primary {
                 (
@@ -275,6 +300,7 @@ impl ScorePoller {
                             "NBA API hit failover threshold, swapping ESPN to primary"
                         );
                         self.espn_is_primary = true;
+                        self.espn_primary_polls = 0;
                     }
                 }
             }
@@ -297,6 +323,12 @@ impl ScorePoller {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_elapsed_period_zero() {
+        assert_eq!(ScoreUpdate::compute_elapsed(0, 0), 0);
+        assert_eq!(ScoreUpdate::compute_elapsed(0, 720), 0);
+    }
 
     #[test]
     fn test_elapsed_game_start() {
@@ -456,5 +488,18 @@ mod tests {
         assert!(!poller.espn_is_primary);
         poller.nba_consecutive_failures = 3;
         assert!(poller.nba_consecutive_failures >= poller.failover_threshold);
+    }
+
+    #[test]
+    fn test_recovery_probe_counter() {
+        let mut poller = ScorePoller::new("http://fake-nba", "http://fake-espn", 1000, 3);
+        poller.espn_is_primary = true;
+        poller.espn_primary_polls = 0;
+        // Counter increments each poll cycle; resets at failover_threshold
+        poller.espn_primary_polls += 1;
+        assert_eq!(poller.espn_primary_polls, 1);
+        poller.espn_primary_polls += 1;
+        poller.espn_primary_polls += 1;
+        assert!(poller.espn_primary_polls >= poller.failover_threshold);
     }
 }

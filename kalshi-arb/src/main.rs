@@ -134,6 +134,175 @@ fn build_diagnostic_rows(
         .collect()
 }
 
+/// Result of evaluating a single matched market through the common pipeline.
+enum EvalOutcome {
+    /// Market is closed or filtered out.
+    Closed,
+    /// Market was evaluated successfully.
+    Evaluated(MarketRow),
+}
+
+/// Common evaluation pipeline for a matched Kalshi market.
+/// Given a fair value and matched ticker, runs through: market open check →
+/// bid/ask lookup → book pressure → strategy eval → momentum gate →
+/// staleness check → row construction → signal logging → sim fill.
+#[allow(clippy::too_many_arguments)]
+fn evaluate_matched_market(
+    ticker: &str,
+    fair: u32,
+    fallback_bid: u32,
+    fallback_ask: u32,
+    is_inverse: bool,
+    velocity_score: f64,
+    staleness_secs: Option<u64>,
+    is_stale: bool,
+    side_market: Option<&matcher::SideMarket>,
+    now_utc: chrono::DateTime<chrono::Utc>,
+    live_book_engine: &LiveBook,
+    strategy_config: &config::StrategyConfig,
+    momentum_config: &config::MomentumConfig,
+    book_pressure_trackers: &mut HashMap<String, BookPressureTracker>,
+    scorer: &MomentumScorer,
+    sim_mode: bool,
+    state_tx: &watch::Sender<AppState>,
+    cycle_start: Instant,
+    source: &str,
+) -> EvalOutcome {
+    // Check market is open
+    let market_open = side_market.is_some_and(|sm| {
+        (sm.status == "open" || sm.status == "active")
+            && sm.close_time.as_deref()
+                .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
+                .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc)
+    });
+    if !market_open {
+        return EvalOutcome::Closed;
+    }
+
+    // Get live bid/ask from orderbook
+    let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
+        if let Some(&(yes_bid, yes_ask, _, _)) = book.get(ticker) {
+            if yes_ask > 0 { (yes_bid, yes_ask) } else { (fallback_bid, fallback_ask) }
+        } else {
+            (fallback_bid, fallback_ask)
+        }
+    } else {
+        (fallback_bid, fallback_ask)
+    };
+
+    // Book pressure
+    let bpt = book_pressure_trackers
+        .entry(ticker.to_string())
+        .or_insert_with(|| BookPressureTracker::new(10));
+    if let Ok(book) = live_book_engine.lock() {
+        if let Some(&(yb, _ya, _nb, _na)) = book.get(ticker) {
+            bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
+        }
+    }
+    let pressure_score = bpt.score();
+    let momentum = scorer.composite(velocity_score, pressure_score);
+
+    // Evaluate strategy
+    let mut signal = strategy::evaluate(
+        fair, bid, ask,
+        strategy_config.taker_edge_threshold,
+        strategy_config.maker_edge_threshold,
+        strategy_config.min_edge_after_fees,
+    );
+
+    signal = strategy::momentum_gate(
+        signal,
+        momentum,
+        momentum_config.maker_momentum_threshold,
+        momentum_config.taker_momentum_threshold,
+    );
+
+    // Force skip if stale
+    if is_stale {
+        signal = strategy::StrategySignal {
+            action: strategy::TradeAction::Skip,
+            price: 0,
+            edge: signal.edge,
+            net_profit_estimate: 0,
+        };
+    }
+
+    let action_str = match &signal.action {
+        strategy::TradeAction::TakerBuy => "TAKER",
+        strategy::TradeAction::MakerBuy { .. } => "MAKER",
+        strategy::TradeAction::Skip => "SKIP",
+    };
+
+    let row = MarketRow {
+        ticker: ticker.to_string(),
+        fair_value: fair,
+        bid,
+        ask,
+        edge: signal.edge,
+        action: action_str.to_string(),
+        latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+        momentum_score: momentum,
+        staleness_secs,
+    };
+
+    if signal.action != strategy::TradeAction::Skip {
+        tracing::warn!(
+            ticker = %ticker,
+            action = %action_str,
+            price = signal.price,
+            edge = signal.edge,
+            net = signal.net_profit_estimate,
+            inverse = is_inverse,
+            momentum = format!("{:.0}", momentum),
+            source = source,
+            "signal detected (dry run)"
+        );
+    }
+
+    // Simulation mode
+    if sim_mode && signal.action != strategy::TradeAction::Skip {
+        let entry_price = signal.price;
+        let qty = (5000u32 / entry_price).max(1);
+        let entry_cost = (qty * entry_price) as i64;
+        let entry_fee = calculate_fee(entry_price, qty, true) as i64;
+        let total_cost = entry_cost + entry_fee;
+
+        let ticker_owned = ticker.to_string();
+        state_tx.send_modify(|s| {
+            if s.sim_balance_cents < total_cost {
+                return;
+            }
+            if s.sim_positions.iter().any(|p| p.ticker == ticker_owned) {
+                return;
+            }
+            s.sim_balance_cents -= total_cost;
+            s.sim_positions.push(tui::state::SimPosition {
+                ticker: ticker_owned.clone(),
+                quantity: qty,
+                entry_price,
+                sell_price: fair,
+                entry_fee: entry_fee as u32,
+                filled_at: std::time::Instant::now(),
+            });
+            s.push_trade(tui::state::TradeRow {
+                time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                action: "BUY".to_string(),
+                ticker: ticker_owned.clone(),
+                price: entry_price,
+                quantity: qty,
+                order_type: "SIM".to_string(),
+                pnl: None,
+            });
+            s.push_log("TRADE", format!(
+                "SIM BUY {}x {} @ {}¢, sell target {}¢",
+                qty, ticker_owned, entry_price, fair
+            ));
+        });
+    }
+
+    EvalOutcome::Evaluated(row)
+}
+
 /// Process score feed updates for NBA games through the fair-value/matching/evaluation pipeline.
 /// Uses WinProbTable for fair value instead of sportsbook odds devigging.
 /// Includes staleness tracking: forces Skip when score data > 10s old.
@@ -209,142 +378,24 @@ fn process_score_updates(
         ) {
             let fair = home_fair;
 
-            // Check market is open
             let key_check = matcher::generate_key("basketball", &update.home_team, &update.away_team, today);
             let game_check = key_check.and_then(|k| market_index.get(&k));
             let side_market = game_check.and_then(|g| {
                 if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
             });
-            let market_open = side_market.is_some_and(|sm| {
-                (sm.status == "open" || sm.status == "active")
-                    && sm.close_time.as_deref()
-                        .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
-                        .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc)
-            });
-            if !market_open {
-                filter_closed += 1;
-                continue;
-            }
-            filter_live += 1;
 
-            // Get live bid/ask from orderbook
-            let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
-                if let Some(&(yes_bid, yes_ask, _, _)) = book.get(&mkt.ticker) {
-                    if yes_ask > 0 { (yes_bid, yes_ask) } else { (mkt.best_bid, mkt.best_ask) }
-                } else {
-                    (mkt.best_bid, mkt.best_ask)
+            match evaluate_matched_market(
+                &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
+                velocity_score, staleness_secs, is_stale, side_market, now_utc,
+                live_book_engine, strategy_config, momentum_config,
+                book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
+                "score_feed",
+            ) {
+                EvalOutcome::Closed => { filter_closed += 1; }
+                EvalOutcome::Evaluated(row) => {
+                    filter_live += 1;
+                    rows.insert(mkt.ticker.clone(), row);
                 }
-            } else {
-                (mkt.best_bid, mkt.best_ask)
-            };
-
-            // Book pressure
-            let bpt = book_pressure_trackers
-                .entry(mkt.ticker.clone())
-                .or_insert_with(|| BookPressureTracker::new(10));
-            if let Ok(book) = live_book_engine.lock() {
-                if let Some(&(yb, _ya, _nb, _na)) = book.get(&mkt.ticker) {
-                    bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
-                }
-            }
-            let pressure_score = bpt.score();
-            let momentum = scorer.composite(velocity_score, pressure_score);
-
-            // Evaluate strategy
-            let mut signal = strategy::evaluate(
-                fair, bid, ask,
-                strategy_config.taker_edge_threshold,
-                strategy_config.maker_edge_threshold,
-                strategy_config.min_edge_after_fees,
-            );
-
-            signal = strategy::momentum_gate(
-                signal,
-                momentum,
-                momentum_config.maker_momentum_threshold,
-                momentum_config.taker_momentum_threshold,
-            );
-
-            // Force skip if stale (Task 8)
-            if is_stale {
-                signal = strategy::StrategySignal {
-                    action: strategy::TradeAction::Skip,
-                    price: 0,
-                    edge: signal.edge,
-                    net_profit_estimate: 0,
-                };
-            }
-
-            let action_str = match &signal.action {
-                strategy::TradeAction::TakerBuy => "TAKER",
-                strategy::TradeAction::MakerBuy { .. } => "MAKER",
-                strategy::TradeAction::Skip => "SKIP",
-            };
-
-            rows.insert(mkt.ticker.clone(), MarketRow {
-                ticker: mkt.ticker.clone(),
-                fair_value: fair,
-                bid,
-                ask,
-                edge: signal.edge,
-                action: action_str.to_string(),
-                latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
-                momentum_score: momentum,
-                staleness_secs,
-            });
-
-            if signal.action != strategy::TradeAction::Skip {
-                tracing::warn!(
-                    ticker = %mkt.ticker,
-                    action = %action_str,
-                    price = signal.price,
-                    edge = signal.edge,
-                    net = signal.net_profit_estimate,
-                    inverse = mkt.is_inverse,
-                    momentum = format!("{:.0}", momentum),
-                    source = "score_feed",
-                    "signal detected (dry run)"
-                );
-            }
-
-            // Simulation mode
-            if sim_mode && signal.action != strategy::TradeAction::Skip {
-                let entry_price = signal.price;
-                let qty = (5000u32 / entry_price).max(1);
-                let entry_cost = (qty * entry_price) as i64;
-                let entry_fee = calculate_fee(entry_price, qty, true) as i64;
-                let total_cost = entry_cost + entry_fee;
-
-                state_tx.send_modify(|s| {
-                    if s.sim_balance_cents < total_cost {
-                        return;
-                    }
-                    if s.sim_positions.iter().any(|p| p.ticker == mkt.ticker) {
-                        return;
-                    }
-                    s.sim_balance_cents -= total_cost;
-                    s.sim_positions.push(tui::state::SimPosition {
-                        ticker: mkt.ticker.clone(),
-                        quantity: qty,
-                        entry_price,
-                        sell_price: fair,
-                        entry_fee: entry_fee as u32,
-                        filled_at: std::time::Instant::now(),
-                    });
-                    s.push_trade(tui::state::TradeRow {
-                        time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                        action: "BUY".to_string(),
-                        ticker: mkt.ticker.clone(),
-                        price: entry_price,
-                        quantity: qty,
-                        order_type: "SIM".to_string(),
-                        pnl: None,
-                    });
-                    s.push_log("TRADE", format!(
-                        "SIM BUY {}x {} @ {}¢, sell target {}¢ (score feed)",
-                        qty, mkt.ticker, entry_price, fair
-                    ));
-                });
             }
         }
     }
@@ -443,59 +494,6 @@ fn process_sport_updates(
                     for (side_opt, fair, label) in sides {
                         let Some(side) = side_opt else { continue };
 
-                        let market_open = (side.status == "open" || side.status == "active")
-                            && side.close_time.as_deref()
-                                .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
-                                .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc);
-                        if !market_open {
-                            filter_closed += 1;
-                            continue;
-                        }
-                        filter_live += 1;
-
-                        let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
-                            if let Some(&(yb, ya, _, _)) = book.get(&side.ticker) {
-                                if ya > 0 { (yb, ya) } else { (side.yes_bid, side.yes_ask) }
-                            } else {
-                                (side.yes_bid, side.yes_ask)
-                            }
-                        } else {
-                            (side.yes_bid, side.yes_ask)
-                        };
-
-                        // Book pressure reads live orderbook data (not cached odds),
-                        // so it is intentionally NOT guarded by is_replay.
-                        let bpt = book_pressure_trackers
-                            .entry(side.ticker.clone())
-                            .or_insert_with(|| BookPressureTracker::new(10));
-                        if let Ok(book) = live_book_engine.lock() {
-                            if let Some(&(yb, _ya, _nb, _na)) = book.get(&side.ticker) {
-                                bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
-                            }
-                        }
-                        let pressure_score = bpt.score();
-                        let momentum = scorer.composite(velocity_score, pressure_score);
-
-                        let signal = strategy::evaluate(
-                            fair, bid, ask,
-                            strategy_config.taker_edge_threshold,
-                            strategy_config.maker_edge_threshold,
-                            strategy_config.min_edge_after_fees,
-                        );
-
-                        let signal = strategy::momentum_gate(
-                            signal,
-                            momentum,
-                            momentum_config.maker_momentum_threshold,
-                            momentum_config.taker_momentum_threshold,
-                        );
-
-                        let action_str = match &signal.action {
-                            strategy::TradeAction::TakerBuy => "TAKER",
-                            strategy::TradeAction::MakerBuy { .. } => "MAKER",
-                            strategy::TradeAction::Skip => "SKIP",
-                        };
-
                         let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
                             .ok()
                             .map(|dt| {
@@ -503,69 +501,18 @@ fn process_sport_updates(
                                 age.num_seconds().max(0) as u64
                             });
 
-                        rows.insert(side.ticker.clone(), MarketRow {
-                            ticker: side.ticker.clone(),
-                            fair_value: fair,
-                            bid,
-                            ask,
-                            edge: signal.edge,
-                            action: action_str.to_string(),
-                            latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
-                            momentum_score: momentum,
-                            staleness_secs,
-                        });
-
-                        if signal.action != strategy::TradeAction::Skip {
-                            tracing::warn!(
-                                ticker = %side.ticker,
-                                action = %action_str,
-                                side = label,
-                                price = signal.price,
-                                edge = signal.edge,
-                                net = signal.net_profit_estimate,
-                                momentum = format!("{:.0}", momentum),
-                                "signal detected (dry run)"
-                            );
-                        }
-
-                        if sim_mode && signal.action != strategy::TradeAction::Skip {
-                            let entry_price = signal.price;
-                            let qty = (5000u32 / entry_price).max(1);
-                            let entry_cost = (qty * entry_price) as i64;
-                            let entry_fee = calculate_fee(entry_price, qty, true) as i64;
-                            let total_cost = entry_cost + entry_fee;
-
-                            let ticker_clone = side.ticker.clone();
-                            state_tx.send_modify(|s| {
-                                if s.sim_balance_cents < total_cost {
-                                    return;
-                                }
-                                if s.sim_positions.iter().any(|p| p.ticker == ticker_clone) {
-                                    return;
-                                }
-                                s.sim_balance_cents -= total_cost;
-                                s.sim_positions.push(tui::state::SimPosition {
-                                    ticker: ticker_clone.clone(),
-                                    quantity: qty,
-                                    entry_price,
-                                    sell_price: fair,
-                                    entry_fee: entry_fee as u32,
-                                    filled_at: std::time::Instant::now(),
-                                });
-                                s.push_trade(tui::state::TradeRow {
-                                    time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    action: "BUY".to_string(),
-                                    ticker: ticker_clone.clone(),
-                                    price: entry_price,
-                                    quantity: qty,
-                                    order_type: "SIM".to_string(),
-                                    pnl: None,
-                                });
-                                s.push_log("TRADE", format!(
-                                    "SIM BUY {}x {} @ {}¢, sell target {}¢",
-                                    qty, ticker_clone, entry_price, fair
-                                ));
-                            });
+                        match evaluate_matched_market(
+                            &side.ticker, fair, side.yes_bid, side.yes_ask, false,
+                            velocity_score, staleness_secs, false, Some(side), now_utc,
+                            live_book_engine, strategy_config, momentum_config,
+                            book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
+                            label,
+                        ) {
+                            EvalOutcome::Closed => { filter_closed += 1; }
+                            EvalOutcome::Evaluated(row) => {
+                                filter_live += 1;
+                                rows.insert(side.ticker.clone(), row);
+                            }
                         }
                     }
                 }
@@ -594,60 +541,6 @@ fn process_sport_updates(
                     let side_market = game_check.and_then(|g| {
                         if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
                     });
-                    let market_open = side_market.is_some_and(|sm| {
-                        (sm.status == "open" || sm.status == "active")
-                            && sm.close_time.as_deref()
-                                .and_then(|ct| chrono::DateTime::parse_from_rfc3339(ct).ok())
-                                .is_none_or(|ct| ct.with_timezone(&chrono::Utc) > now_utc)
-                    });
-                    if !market_open {
-                        filter_closed += 1;
-                        continue;
-                    }
-                    filter_live += 1;
-
-                    let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
-                        if let Some(&(yes_bid, yes_ask, _, _)) = book.get(&mkt.ticker) {
-                            if yes_ask > 0 { (yes_bid, yes_ask) } else { (mkt.best_bid, mkt.best_ask) }
-                        } else {
-                            (mkt.best_bid, mkt.best_ask)
-                        }
-                    } else {
-                        (mkt.best_bid, mkt.best_ask)
-                    };
-
-                    // Book pressure reads live orderbook data (not cached odds),
-                    // so it is intentionally NOT guarded by is_replay.
-                    let bpt = book_pressure_trackers
-                        .entry(mkt.ticker.clone())
-                        .or_insert_with(|| BookPressureTracker::new(10));
-                    if let Ok(book) = live_book_engine.lock() {
-                        if let Some(&(yb, _ya, _nb, _na)) = book.get(&mkt.ticker) {
-                            bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
-                        }
-                    }
-                    let pressure_score = bpt.score();
-                    let momentum = scorer.composite(velocity_score, pressure_score);
-
-                    let signal = strategy::evaluate(
-                        fair, bid, ask,
-                        strategy_config.taker_edge_threshold,
-                        strategy_config.maker_edge_threshold,
-                        strategy_config.min_edge_after_fees,
-                    );
-
-                    let signal = strategy::momentum_gate(
-                        signal,
-                        momentum,
-                        momentum_config.maker_momentum_threshold,
-                        momentum_config.taker_momentum_threshold,
-                    );
-
-                    let action_str = match &signal.action {
-                        strategy::TradeAction::TakerBuy => "TAKER",
-                        strategy::TradeAction::MakerBuy { .. } => "MAKER",
-                        strategy::TradeAction::Skip => "SKIP",
-                    };
 
                     let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
                         .ok()
@@ -656,68 +549,18 @@ fn process_sport_updates(
                             age.num_seconds().max(0) as u64
                         });
 
-                    rows.insert(mkt.ticker.clone(), MarketRow {
-                        ticker: mkt.ticker.clone(),
-                        fair_value: fair,
-                        bid,
-                        ask,
-                        edge: signal.edge,
-                        action: action_str.to_string(),
-                        latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
-                        momentum_score: momentum,
-                        staleness_secs,
-                    });
-
-                    if signal.action != strategy::TradeAction::Skip {
-                        tracing::warn!(
-                            ticker = %mkt.ticker,
-                            action = %action_str,
-                            price = signal.price,
-                            edge = signal.edge,
-                            net = signal.net_profit_estimate,
-                            inverse = mkt.is_inverse,
-                            momentum = format!("{:.0}", momentum),
-                            "signal detected (dry run)"
-                        );
-                    }
-
-                    if sim_mode && signal.action != strategy::TradeAction::Skip {
-                        let entry_price = signal.price;
-                        let qty = (5000u32 / entry_price).max(1);
-                        let entry_cost = (qty * entry_price) as i64;
-                        let entry_fee = calculate_fee(entry_price, qty, true) as i64;
-                        let total_cost = entry_cost + entry_fee;
-
-                        state_tx.send_modify(|s| {
-                            if s.sim_balance_cents < total_cost {
-                                return;
-                            }
-                            if s.sim_positions.iter().any(|p| p.ticker == mkt.ticker) {
-                                return;
-                            }
-                            s.sim_balance_cents -= total_cost;
-                            s.sim_positions.push(tui::state::SimPosition {
-                                ticker: mkt.ticker.clone(),
-                                quantity: qty,
-                                entry_price,
-                                sell_price: fair,
-                                entry_fee: entry_fee as u32,
-                                filled_at: std::time::Instant::now(),
-                            });
-                            s.push_trade(tui::state::TradeRow {
-                                time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                action: "BUY".to_string(),
-                                ticker: mkt.ticker.clone(),
-                                price: entry_price,
-                                quantity: qty,
-                                order_type: "SIM".to_string(),
-                                pnl: None,
-                            });
-                            s.push_log("TRADE", format!(
-                                "SIM BUY {}x {} @ {}¢, sell target {}¢",
-                                qty, mkt.ticker, entry_price, fair
-                            ));
-                        });
+                    match evaluate_matched_market(
+                        &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
+                        velocity_score, staleness_secs, false, side_market, now_utc,
+                        live_book_engine, strategy_config, momentum_config,
+                        book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
+                        "odds_api",
+                    ) {
+                        EvalOutcome::Closed => { filter_closed += 1; }
+                        EvalOutcome::Evaluated(row) => {
+                            filter_live += 1;
+                            rows.insert(mkt.ticker.clone(), row);
+                        }
                     }
                 }
             }
@@ -1355,10 +1198,11 @@ async fn main() -> Result<()> {
                 .collect();
 
             // Add basketball to live_sports if score feed has live games
-            if score_poller.is_some() && score_cached_updates.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live) {
-                if !live_sports.contains(&"basketball".to_string()) {
-                    live_sports.push("basketball".to_string());
-                }
+            if score_poller.is_some()
+                && score_cached_updates.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                && !live_sports.contains(&"basketball".to_string())
+            {
+                live_sports.push("basketball".to_string());
             }
 
             state_tx_engine.send_modify(|state| {
