@@ -1,5 +1,6 @@
 use reqwest::Client;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -226,6 +227,10 @@ pub struct ScorePoller {
     espn_is_primary: bool,
     /// Polls since ESPN became primary; used to periodically probe NBA for recovery.
     espn_primary_polls: u32,
+    /// Last ETag received per URL, for conditional GET
+    last_etag: HashMap<String, String>,
+    /// Cached response text per URL, returned on 304 Not Modified
+    cached_response: HashMap<String, Vec<ScoreUpdate>>,
 }
 
 impl ScorePoller {
@@ -244,6 +249,8 @@ impl ScorePoller {
             nba_consecutive_failures: 0,
             espn_is_primary: false,
             espn_primary_polls: 0,
+            last_etag: HashMap::new(),
+            cached_response: HashMap::new(),
         }
     }
 
@@ -254,7 +261,8 @@ impl ScorePoller {
             self.espn_primary_polls += 1;
             if self.espn_primary_polls >= self.failover_threshold {
                 self.espn_primary_polls = 0;
-                if let Ok(updates) = self.fetch_and_parse(&self.nba_url.clone(), parse_nba_scoreboard).await {
+                let url = self.nba_url.clone();
+                if let Ok(updates) = self.fetch_and_parse(&url, parse_nba_scoreboard).await {
                     tracing::info!("NBA API recovered, swapping back to primary");
                     self.espn_is_primary = false;
                     self.nba_consecutive_failures = 0;
@@ -266,21 +274,21 @@ impl ScorePoller {
         let (primary_url, secondary_url, primary_parser, secondary_parser) =
             if self.espn_is_primary {
                 (
-                    &self.espn_url,
-                    &self.nba_url,
+                    self.espn_url.clone(),
+                    self.nba_url.clone(),
                     parse_espn_scoreboard as fn(&str) -> _,
                     parse_nba_scoreboard as fn(&str) -> _,
                 )
             } else {
                 (
-                    &self.nba_url,
-                    &self.espn_url,
+                    self.nba_url.clone(),
+                    self.espn_url.clone(),
                     parse_nba_scoreboard as fn(&str) -> _,
                     parse_espn_scoreboard as fn(&str) -> _,
                 )
             };
 
-        match self.fetch_and_parse(primary_url, primary_parser).await {
+        match self.fetch_and_parse(&primary_url, primary_parser).await {
             Ok(updates) => {
                 if !self.espn_is_primary {
                     self.nba_consecutive_failures = 0;
@@ -306,17 +314,37 @@ impl ScorePoller {
             }
         }
 
-        self.fetch_and_parse(secondary_url, secondary_parser).await
+        self.fetch_and_parse(&secondary_url, secondary_parser).await
     }
 
     async fn fetch_and_parse(
-        &self,
+        &mut self,
         url: &str,
         parser: fn(&str) -> anyhow::Result<Vec<ScoreUpdate>>,
     ) -> anyhow::Result<Vec<ScoreUpdate>> {
-        let resp = self.client.get(url).timeout(self.timeout).send().await?;
+        let mut req = self.client.get(url).timeout(self.timeout);
+        if let Some(etag) = self.last_etag.get(url) {
+            req = req.header("If-None-Match", etag.as_str());
+        }
+        let resp = req.send().await?;
+
+        if resp.status() == reqwest::StatusCode::NOT_MODIFIED {
+            if let Some(cached) = self.cached_response.get(url) {
+                return Ok(cached.clone());
+            }
+        }
+
+        // Store ETag from response if present
+        if let Some(etag) = resp.headers().get("etag") {
+            if let Ok(etag_str) = etag.to_str() {
+                self.last_etag.insert(url.to_string(), etag_str.to_string());
+            }
+        }
+
         let text = resp.text().await?;
-        parser(&text)
+        let updates = parser(&text)?;
+        self.cached_response.insert(url.to_string(), updates.clone());
+        Ok(updates)
     }
 }
 
