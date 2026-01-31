@@ -15,8 +15,10 @@ pub struct Config {
     pub odds_feed: OddsFeedConfig,
     pub momentum: MomentumConfig,
     pub score_feed: Option<ScoreFeedConfig>,
+    pub college_score_feed: Option<CollegeScoreFeedConfig>,
     pub simulation: Option<SimulationConfig>,
     pub win_prob: Option<WinProbConfig>,
+    pub college_win_prob: Option<WinProbConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -66,6 +68,15 @@ pub struct ScoreFeedConfig {
     pub live_poll_interval_s: u64,
     pub pre_game_poll_interval_s: u64,
     pub failover_threshold: u32,
+    pub request_timeout_ms: u64,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct CollegeScoreFeedConfig {
+    pub espn_mens_url: String,
+    pub espn_womens_url: String,
+    pub live_poll_interval_s: u64,
+    pub pre_game_poll_interval_s: u64,
     pub request_timeout_ms: u64,
 }
 

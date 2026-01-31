@@ -247,6 +247,15 @@ mod tests {
     }
 
     #[test]
+    fn test_college_table_from_defaults() {
+        let table = WinProbTable::new(3.5, 0.065, 0.25, 0.10, 1.0, 2400);
+        let prob = table.lookup(0, 0);
+        assert!(prob >= 56 && prob <= 62, "got {prob}");
+        let prob = table.lookup(0, 80);
+        assert_eq!(prob, 57);
+    }
+
+    #[test]
     fn test_nba_unchanged_with_regulation_secs() {
         let nba = WinProbTable::new(2.5, 0.065, 0.25, 0.10, 1.0, 2880);
         let prob = nba.lookup(0, 0);
