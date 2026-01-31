@@ -1197,6 +1197,8 @@ async fn main() -> Result<()> {
         let mut college_last_score_fetch: HashMap<String, Instant> = HashMap::new();
         let mut college_mens_cached: Vec<feed::score_feed::ScoreUpdate> = Vec::new();
         let mut college_womens_cached: Vec<feed::score_feed::ScoreUpdate> = Vec::new();
+        // Force score feed re-fetch after idle sleep wakeup
+        let mut force_score_refetch = false;
 
         // Filter statistics
         let mut filter_live: usize;
@@ -1361,12 +1363,13 @@ async fn main() -> Result<()> {
                         score_feed_pre_game_interval
                     };
 
-                    let should_fetch_scores = match last_score_poll {
+                    let should_fetch_scores = force_score_refetch || match last_score_poll {
                         Some(last) => cycle_start.duration_since(last) >= score_interval,
                         None => true,
                     };
 
                     if should_fetch_scores {
+                        force_score_refetch = false;
                         match poller.fetch().await {
                             Ok(updates) => {
                                 last_score_poll = Some(Instant::now());
@@ -1429,12 +1432,13 @@ async fn main() -> Result<()> {
                         college_score_pre_game_interval
                     };
 
-                    let should_fetch_college = match last_college_score_poll {
+                    let should_fetch_college = force_score_refetch || match last_college_score_poll {
                         Some(last) => cycle_start.duration_since(last) >= college_interval,
                         None => true,
                     };
 
                     if should_fetch_college {
+                        force_score_refetch = false;
                         match college_poller.fetch().await {
                             Ok((mens, womens)) => {
                                 last_college_score_poll = Some(Instant::now());
@@ -1682,14 +1686,32 @@ async fn main() -> Result<()> {
                 }
             }
 
+            // Check if any score-feed sport has a game whose commence_time has passed.
+            // In this case, the game may have started and we need the score feed to detect it.
+            let score_feed_game_commenced = sport_commence_times.iter().any(|(sport, times)| {
+                // Only check sports handled by score feed (excluded from odds_sports)
+                !odds_sports.iter().any(|s| s == sport)
+                    && times.iter().any(|ct| {
+                        chrono::DateTime::parse_from_rfc3339(ct)
+                            .ok()
+                            .is_some_and(|dt| dt < chrono::Utc::now())
+                    })
+            });
+
             // If nothing is live, sleep until the next game starts
-            if filter_live == 0 {
+            // (but skip idle sleep if a score-feed game has commenced — the score feed
+            // needs the 1s cycle loop to poll for status transitions)
+            if filter_live == 0 && !score_feed_game_commenced {
                 if let Some(next_start) = earliest_commence {
                     let now_utc = chrono::Utc::now();
                     if next_start > now_utc {
                         let wait = (next_start - now_utc).to_std().unwrap_or(Duration::from_secs(5));
                         // Cap at pre_game_poll_interval to allow index refresh
-                        let capped_wait = wait.min(pre_game_poll_interval);
+                        let capped_wait = if score_poller.is_some() || college_score_poller.is_some() {
+                            wait.min(pre_game_poll_interval).min(score_feed_pre_game_interval)
+                        } else {
+                            wait.min(pre_game_poll_interval)
+                        };
 
                         // Update TUI state before sleeping (so countdown is visible)
                         let live_sports_empty: Vec<String> = Vec::new();
@@ -1771,6 +1793,7 @@ async fn main() -> Result<()> {
                                 }
                             }
                         }
+                        force_score_refetch = true;
                         continue; // restart loop (re-check everything)
                     }
                 }
