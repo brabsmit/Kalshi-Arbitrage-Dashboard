@@ -37,7 +37,7 @@ velocity_window_size = 10
 [score_feed]
 nba_api_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
 espn_api_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
-live_poll_interval_s = 3
+live_poll_interval_s = 1
 pre_game_poll_interval_s = 60
 failover_threshold = 5
 request_timeout_ms = 1000

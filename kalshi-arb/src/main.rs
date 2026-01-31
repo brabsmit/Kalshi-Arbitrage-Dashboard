@@ -1336,8 +1336,9 @@ async fn main() -> Result<()> {
                 }
             }
 
-            // Short sleep — per-sport timers handle individual scheduling
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            // Short sleep — must be <= shortest poll interval (score feed)
+            // so score updates are evaluated promptly after fetch.
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
     });
 
