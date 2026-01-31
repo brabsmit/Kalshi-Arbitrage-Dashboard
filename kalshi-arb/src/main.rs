@@ -516,6 +516,89 @@ fn process_score_updates(
     SportProcessResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows }
 }
 
+/// Process score feed updates for college basketball games.
+/// Same pipeline as NBA score processing but uses college sport keys
+/// and period structure (2 halves, OT at period 3+).
+#[allow(clippy::too_many_arguments)]
+fn process_college_score_updates(
+    updates: &[feed::score_feed::ScoreUpdate],
+    sport: &str,
+    market_index: &matcher::MarketIndex,
+    live_book_engine: &LiveBook,
+    strategy_config: &config::StrategyConfig,
+    momentum_config: &config::MomentumConfig,
+    velocity_trackers: &mut HashMap<String, VelocityTracker>,
+    book_pressure_trackers: &mut HashMap<String, BookPressureTracker>,
+    scorer: &MomentumScorer,
+    sim_mode: bool,
+    state_tx: &watch::Sender<AppState>,
+    cycle_start: Instant,
+    last_score_fetch: &HashMap<String, Instant>,
+    sim_config: &config::SimulationConfig,
+    win_prob_table: &engine::win_prob::WinProbTable,
+) -> SportProcessResult {
+    let mut filter_live: usize = 0;
+    let mut filter_pre_game: usize = 0;
+    let mut filter_closed: usize = 0;
+    let earliest_commence: Option<chrono::DateTime<chrono::Utc>> = None;
+    let mut rows: HashMap<String, MarketRow> = HashMap::new();
+    let now_utc = chrono::Utc::now();
+
+    for update in updates {
+        match update.game_status {
+            feed::score_feed::GameStatus::PreGame => { filter_pre_game += 1; continue; }
+            feed::score_feed::GameStatus::Finished => { filter_closed += 1; continue; }
+            _ => {}
+        }
+
+        let staleness_secs = last_score_fetch.get(&update.game_id)
+            .map(|t| cycle_start.duration_since(*t).as_secs());
+        let is_stale = staleness_secs.is_some_and(|s| s > 10);
+
+        let score_diff = update.home_score as i32 - update.away_score as i32;
+        let (home_fair, _away_fair) = if update.period > 2 {
+            let ot_elapsed = update.total_elapsed_seconds.saturating_sub(2400);
+            win_prob_table.fair_value_overtime(score_diff, ot_elapsed)
+        } else {
+            win_prob_table.fair_value(score_diff, update.total_elapsed_seconds)
+        };
+
+        let vt = velocity_trackers
+            .entry(update.game_id.clone())
+            .or_insert_with(|| VelocityTracker::new(momentum_config.velocity_window_size));
+        vt.push(home_fair as f64 / 100.0, Instant::now());
+        let velocity_score = vt.score();
+
+        let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+        let today = chrono::Utc::now().with_timezone(&eastern).date_naive();
+
+        if let Some(mkt) = matcher::find_match(market_index, sport, &update.home_team, &update.away_team, today) {
+            let fair = home_fair;
+            let key_check = matcher::generate_key(sport, &update.home_team, &update.away_team, today);
+            let game_check = key_check.and_then(|k| market_index.get(&k));
+            let side_market = game_check.and_then(|g| {
+                if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
+            });
+
+            match evaluate_matched_market(
+                &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
+                velocity_score, staleness_secs, is_stale, side_market, now_utc,
+                live_book_engine, strategy_config, momentum_config,
+                book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
+                "score_feed", sim_config,
+            ) {
+                EvalOutcome::Closed => { filter_closed += 1; }
+                EvalOutcome::Evaluated(row) => {
+                    filter_live += 1;
+                    rows.insert(mkt.ticker.clone(), row);
+                }
+            }
+        }
+    }
+
+    SportProcessResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows }
+}
+
 /// Process odds updates for a single sport through the filter/matching/evaluation pipeline.
 /// When `is_replay` is true, velocity trackers are not updated (avoids skewing momentum
 /// with duplicate data on poll-skip cycles).
@@ -879,6 +962,7 @@ async fn main() -> Result<()> {
 
     let odds_sports: Vec<String> = config.odds_feed.sports.iter()
         .filter(|s| !(config.score_feed.is_some() && s.as_str() == "basketball"))
+        .filter(|s| !(config.college_score_feed.is_some() && (s.as_str() == "college-basketball" || s.as_str() == "college-basketball-womens")))
         .cloned()
         .collect();
     let strategy_config = config.strategy.clone();
@@ -908,6 +992,30 @@ async fn main() -> Result<()> {
     let score_feed_pre_game_interval = config.score_feed.as_ref()
         .map(|sf| Duration::from_secs(sf.pre_game_poll_interval_s))
         .unwrap_or(Duration::from_secs(60));
+
+    let mut college_score_poller = config.college_score_feed.as_ref().map(|csf| {
+        feed::score_feed::CollegeScorePoller::new(
+            &csf.espn_mens_url,
+            &csf.espn_womens_url,
+            csf.request_timeout_ms,
+        )
+    });
+    let college_score_live_interval = config.college_score_feed.as_ref()
+        .map(|csf| Duration::from_secs(csf.live_poll_interval_s))
+        .unwrap_or(Duration::from_secs(3));
+    let college_score_pre_game_interval = config.college_score_feed.as_ref()
+        .map(|csf| Duration::from_secs(csf.pre_game_poll_interval_s))
+        .unwrap_or(Duration::from_secs(60));
+
+    let college_win_prob_config = config.college_win_prob.clone().unwrap_or(config::WinProbConfig {
+        home_advantage: 3.5,
+        k_start: 0.065,
+        k_range: 0.25,
+        ot_k_start: 0.10,
+        ot_k_range: 1.0,
+        regulation_secs: Some(2400),
+    });
+    let college_win_prob_table = engine::win_prob::WinProbTable::from_config(&college_win_prob_config);
 
     let rest_for_engine = rest.clone();
 
@@ -941,6 +1049,11 @@ async fn main() -> Result<()> {
         let mut last_score_poll: Option<Instant> = None;
         let mut last_score_fetch: HashMap<String, Instant> = HashMap::new();
         let mut score_cached_updates: Vec<feed::score_feed::ScoreUpdate> = Vec::new();
+        // College score feed state
+        let mut last_college_score_poll: Option<Instant> = None;
+        let mut college_last_score_fetch: HashMap<String, Instant> = HashMap::new();
+        let mut college_mens_cached: Vec<feed::score_feed::ScoreUpdate> = Vec::new();
+        let mut college_womens_cached: Vec<feed::score_feed::ScoreUpdate> = Vec::new();
 
         // Filter statistics
         let mut filter_live: usize;
@@ -1067,6 +1180,77 @@ async fn main() -> Result<()> {
                         &win_prob_table,
                     );
 
+                    filter_live += result.filter_live;
+                    filter_pre_game += result.filter_pre_game;
+                    filter_closed += result.filter_closed;
+                    if let Some(ec) = result.earliest_commence {
+                        earliest_commence = Some(earliest_commence.map_or(ec, |e| e.min(ec)));
+                    }
+                    accumulated_rows.extend(result.rows);
+                }
+            }
+
+            // --- College score feed (if configured) ---
+            if let Some(ref mut college_poller) = college_score_poller {
+                let college_interval = if college_mens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                    || college_womens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                {
+                    college_score_live_interval
+                } else {
+                    college_score_pre_game_interval
+                };
+
+                let should_fetch_college = match last_college_score_poll {
+                    Some(last) => cycle_start.duration_since(last) >= college_interval,
+                    None => true,
+                };
+
+                if should_fetch_college {
+                    match college_poller.fetch().await {
+                        Ok((mens, womens)) => {
+                            last_college_score_poll = Some(Instant::now());
+                            for u in &mens {
+                                college_last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                            }
+                            for u in &womens {
+                                college_last_score_fetch.insert(u.game_id.clone(), Instant::now());
+                            }
+                            college_mens_cached = mens;
+                            college_womens_cached = womens;
+                        }
+                        Err(e) => {
+                            tracing::warn!(error = %e, "college score feed fetch failed");
+                        }
+                    }
+                }
+
+                // Process men's college scores
+                if !college_mens_cached.is_empty() {
+                    let result = process_college_score_updates(
+                        &college_mens_cached, "college-basketball",
+                        &market_index, &live_book_engine, &strategy_config, &momentum_config,
+                        &mut velocity_trackers, &mut book_pressure_trackers, &scorer,
+                        sim_mode_engine, &state_tx_engine, cycle_start,
+                        &college_last_score_fetch, &sim_config, &college_win_prob_table,
+                    );
+                    filter_live += result.filter_live;
+                    filter_pre_game += result.filter_pre_game;
+                    filter_closed += result.filter_closed;
+                    if let Some(ec) = result.earliest_commence {
+                        earliest_commence = Some(earliest_commence.map_or(ec, |e| e.min(ec)));
+                    }
+                    accumulated_rows.extend(result.rows);
+                }
+
+                // Process women's college scores
+                if !college_womens_cached.is_empty() {
+                    let result = process_college_score_updates(
+                        &college_womens_cached, "college-basketball-womens",
+                        &market_index, &live_book_engine, &strategy_config, &momentum_config,
+                        &mut velocity_trackers, &mut book_pressure_trackers, &scorer,
+                        sim_mode_engine, &state_tx_engine, cycle_start,
+                        &college_last_score_fetch, &sim_config, &college_win_prob_table,
+                    );
                     filter_live += result.filter_live;
                     filter_pre_game += result.filter_pre_game;
                     filter_closed += result.filter_closed;
@@ -1323,6 +1507,19 @@ async fn main() -> Result<()> {
                 && !live_sports.contains(&"basketball".to_string())
             {
                 live_sports.push("basketball".to_string());
+            }
+
+            if college_score_poller.is_some() {
+                if college_mens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                    && !live_sports.contains(&"college-basketball".to_string())
+                {
+                    live_sports.push("college-basketball".to_string());
+                }
+                if college_womens_cached.iter().any(|u| u.game_status == feed::score_feed::GameStatus::Live)
+                    && !live_sports.contains(&"college-basketball-womens".to_string())
+                {
+                    live_sports.push("college-basketball-womens".to_string());
+                }
             }
 
             state_tx_engine.send_modify(|state| {
