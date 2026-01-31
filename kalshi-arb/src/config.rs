@@ -12,6 +12,8 @@ pub struct Config {
     pub risk: RiskConfig,
     pub execution: ExecutionConfig,
     pub kalshi: KalshiConfig,
+    #[serde(default)]
+    pub sports: SportsConfig,
     pub odds_feed: OddsFeedConfig,
     pub momentum: MomentumConfig,
     pub score_feed: Option<ScoreFeedConfig>,
@@ -50,10 +52,60 @@ pub struct KalshiConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct SportsConfig {
+    #[serde(default)]
+    pub basketball: bool,
+    #[serde(default, alias = "american-football")]
+    pub american_football: bool,
+    #[serde(default)]
+    pub baseball: bool,
+    #[serde(default, alias = "ice-hockey")]
+    pub ice_hockey: bool,
+    #[serde(default, alias = "college-basketball")]
+    pub college_basketball: bool,
+    #[serde(default, alias = "college-basketball-womens")]
+    pub college_basketball_womens: bool,
+    #[serde(default, alias = "soccer-epl")]
+    pub soccer_epl: bool,
+    #[serde(default)]
+    pub mma: bool,
+}
+
+impl Default for SportsConfig {
+    fn default() -> Self {
+        Self {
+            basketball: true,
+            american_football: true,
+            baseball: true,
+            ice_hockey: true,
+            college_basketball: true,
+            college_basketball_womens: true,
+            soccer_epl: true,
+            mma: true,
+        }
+    }
+}
+
+impl SportsConfig {
+    /// Return the list of enabled sport keys (using the hyphenated API names).
+    pub fn enabled_keys(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        if self.basketball { out.push("basketball".to_string()); }
+        if self.american_football { out.push("american-football".to_string()); }
+        if self.baseball { out.push("baseball".to_string()); }
+        if self.ice_hockey { out.push("ice-hockey".to_string()); }
+        if self.college_basketball { out.push("college-basketball".to_string()); }
+        if self.college_basketball_womens { out.push("college-basketball-womens".to_string()); }
+        if self.soccer_epl { out.push("soccer-epl".to_string()); }
+        if self.mma { out.push("mma".to_string()); }
+        out
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 #[allow(dead_code)]
 pub struct OddsFeedConfig {
     pub provider: String,
-    pub sports: Vec<String>,
     pub base_url: String,
     pub bookmakers: String,
     pub live_poll_interval_s: Option<u64>,
@@ -236,6 +288,7 @@ mod tests {
         assert_eq!(config.momentum.taker_momentum_threshold, 75);
         assert_eq!(config.momentum.cancel_threshold, 30);
         assert!(config.odds_feed.live_poll_interval_s.is_some());
+        assert!(config.sports.basketball);
     }
 }
 
