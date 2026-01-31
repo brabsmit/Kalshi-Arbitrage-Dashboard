@@ -245,6 +245,8 @@ fn process_sport_updates(
                             (side.yes_bid, side.yes_ask)
                         };
 
+                        // Book pressure reads live orderbook data (not cached odds),
+                        // so it is intentionally NOT guarded by is_replay.
                         let bpt = book_pressure_trackers
                             .entry(side.ticker.clone())
                             .or_insert_with(|| BookPressureTracker::new(10));
@@ -388,6 +390,8 @@ fn process_sport_updates(
                         (mkt.best_bid, mkt.best_ask)
                     };
 
+                    // Book pressure reads live orderbook data (not cached odds),
+                    // so it is intentionally NOT guarded by is_replay.
                     let bpt = book_pressure_trackers
                         .entry(mkt.ticker.clone())
                         .or_insert_with(|| BookPressureTracker::new(10));
@@ -854,10 +858,10 @@ async fn main() -> Result<()> {
                 };
 
                 if should_fetch {
-                    last_poll.insert(sport.to_string(), Instant::now());
-
                     match odds_feed.fetch_odds(sport).await {
                         Ok(updates) => {
+                            last_poll.insert(sport.to_string(), Instant::now());
+
                             // Store commence times for live detection
                             let ctimes: Vec<String> = updates.iter()
                                 .map(|u| u.commence_time.clone())
