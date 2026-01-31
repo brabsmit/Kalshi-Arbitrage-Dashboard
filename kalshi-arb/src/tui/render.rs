@@ -990,4 +990,24 @@ mod tests {
     fn test_truncate_zero_width() {
         assert_eq!(truncate_with_ellipsis("hello", 0), "");
     }
+
+    #[test]
+    fn test_format_age_seconds() {
+        assert_eq!(format_age(std::time::Duration::from_secs(0)), "0s");
+        assert_eq!(format_age(std::time::Duration::from_secs(45)), "45s");
+        assert_eq!(format_age(std::time::Duration::from_secs(59)), "59s");
+    }
+
+    #[test]
+    fn test_format_age_minutes() {
+        assert_eq!(format_age(std::time::Duration::from_secs(60)), "1m");
+        assert_eq!(format_age(std::time::Duration::from_secs(754)), "12m");
+        assert_eq!(format_age(std::time::Duration::from_secs(3599)), "59m");
+    }
+
+    #[test]
+    fn test_format_age_hours() {
+        assert_eq!(format_age(std::time::Duration::from_secs(3600)), "1h00m");
+        assert_eq!(format_age(std::time::Duration::from_secs(7380)), "2h03m");
+    }
 }
