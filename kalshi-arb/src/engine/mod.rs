@@ -1,4 +1,5 @@
 pub mod fees;
+pub mod kelly;
 pub mod matcher;
 pub mod momentum;
 pub mod risk;
