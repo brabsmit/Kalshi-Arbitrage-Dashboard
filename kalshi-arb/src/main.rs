@@ -484,6 +484,22 @@ async fn main() -> Result<()> {
                 // Skip if not enough time has passed since last poll for this sport
                 if let Some(&last) = last_poll.get(sport.as_str()) {
                     if cycle_start.duration_since(last) < interval {
+                        // Still account for cached upcoming games from previous poll
+                        if let Some(times) = sport_commence_times.get(sport.as_str()) {
+                            let now_utc = chrono::Utc::now();
+                            for ct_str in times {
+                                if let Ok(ct) = chrono::DateTime::parse_from_rfc3339(ct_str) {
+                                    let ct_utc = ct.with_timezone(&chrono::Utc);
+                                    if ct_utc > now_utc {
+                                        filter_pre_game += 1;
+                                        earliest_commence = Some(match earliest_commence {
+                                            Some(existing) => existing.min(ct_utc),
+                                            None => ct_utc,
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         continue;
                     }
                 }
