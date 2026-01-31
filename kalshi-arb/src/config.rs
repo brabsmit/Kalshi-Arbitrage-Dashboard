@@ -234,14 +234,16 @@ impl Config {
             Ok(c) => c,
             Err(_) => return,
         };
+        // Strip BOM if present (common on Windows-created files)
+        let content = content.strip_prefix('\u{feff}').unwrap_or(&content);
         for line in content.lines() {
-            let line = line.trim();
+            let line = line.trim().trim_matches('\r');
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
             if let Some((key, value)) = line.split_once('=') {
                 let key = key.trim();
-                let value = value.trim();
+                let value = value.trim().trim_matches('"').trim_matches('\'');
                 if std::env::var(key).is_err() {
                     std::env::set_var(key, value);
                 }
@@ -253,7 +255,7 @@ impl Config {
     /// Prompted values are saved to .env for future runs.
     pub fn kalshi_api_key() -> Result<String> {
         match std::env::var("KALSHI_API_KEY") {
-            Ok(key) if !key.is_empty() => Ok(key),
+            Ok(key) if !key.is_empty() => Ok(sanitize_key(&key)),
             _ => {
                 let key = prompt("Kalshi API Key")?;
                 save_env_var("KALSHI_API_KEY", &key);
@@ -267,7 +269,7 @@ impl Config {
     /// Prompted path is saved to .env for future runs.
     pub fn kalshi_private_key_pem() -> Result<String> {
         let path = match std::env::var("KALSHI_PRIVATE_KEY_PATH") {
-            Ok(p) if !p.is_empty() => p,
+            Ok(p) if !p.is_empty() => sanitize_key(&p),
             _ => {
                 let p = prompt("Kalshi Private Key file path")?;
                 save_env_var("KALSHI_PRIVATE_KEY_PATH", &p);
@@ -282,8 +284,29 @@ impl Config {
             path.clone()
         };
 
-        std::fs::read_to_string(&expanded)
-            .with_context(|| format!("Failed to read private key file: {}", expanded))
+        let pem = std::fs::read_to_string(&expanded)
+            .with_context(|| format!("Failed to read private key file: {}", expanded))?;
+
+        let byte_count = pem.len();
+        let has_cr = pem.contains('\r');
+        let has_bom = pem.starts_with('\u{feff}');
+
+        // Detect PEM type for diagnostics
+        let pem_type = if pem.contains("BEGIN RSA PRIVATE KEY") {
+            "PKCS#1"
+        } else if pem.contains("BEGIN PRIVATE KEY") {
+            "PKCS#8"
+        } else {
+            "UNKNOWN"
+        };
+
+        println!("  Private key file: {} ({} bytes, format: {}, CR: {}, BOM: {})",
+            expanded, byte_count, pem_type, has_cr, has_bom);
+
+        // Strip BOM and carriage returns
+        let pem = pem.strip_prefix('\u{feff}').unwrap_or(&pem).to_string();
+
+        Ok(pem)
     }
 
     pub fn odds_api_key() -> Result<String> {
@@ -323,6 +346,13 @@ mod tests {
         assert!(config.odds_feed.live_poll_interval_s.is_some());
         assert!(config.sports.basketball);
     }
+}
+
+/// Strip carriage returns, BOM, and other invisible chars from a key/path value.
+fn sanitize_key(raw: &str) -> String {
+    raw.replace(['\r', '\u{feff}', '\u{200b}'], "")
+        .trim()
+        .to_string()
 }
 
 /// Append a KEY=VALUE line to .env and set it in the current process.

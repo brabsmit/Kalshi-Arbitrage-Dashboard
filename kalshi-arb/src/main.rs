@@ -896,6 +896,18 @@ async fn main() -> Result<()> {
     let auth = Arc::new(KalshiAuth::new(kalshi_api_key, &pk_pem)?);
     let rest = Arc::new(KalshiRest::new(auth.clone(), &config.kalshi.api_base));
 
+    // Pre-flight: verify authentication works before proceeding
+    print!("  Verifying Kalshi authentication... ");
+    { use std::io::Write; std::io::stdout().flush()?; }
+    match rest.preflight_auth_check().await {
+        Ok(()) => println!("OK"),
+        Err(e) => {
+            println!("FAILED");
+            anyhow::bail!("{}", e);
+        }
+    }
+    println!();
+
     let enabled_sports = Arc::new(Mutex::new(
         EnabledSports::from_config(&config.sports, Path::new("config.toml").to_path_buf())
     ));

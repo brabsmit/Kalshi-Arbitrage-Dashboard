@@ -36,17 +36,41 @@ impl KalshiWs {
         tickers: Vec<String>,
         tx: mpsc::Sender<KalshiWsEvent>,
     ) -> Result<()> {
+        let mut consecutive_auth_failures = 0u32;
         loop {
             match self.connect_and_listen(&tickers, &tx).await {
                 Ok(()) => {
+                    consecutive_auth_failures = 0;
                     tracing::warn!("kalshi WS closed cleanly, reconnecting...");
                 }
                 Err(e) => {
-                    tracing::error!("kalshi WS error: {:#}, reconnecting in 2s...", e);
+                    let err_str = format!("{:#}", e);
+                    let is_auth = err_str.contains("401") || err_str.contains("Unauthorized");
+                    if is_auth {
+                        consecutive_auth_failures += 1;
+                        tracing::error!(
+                            "kalshi WS auth failure #{}: {:#}",
+                            consecutive_auth_failures, e
+                        );
+                        if consecutive_auth_failures >= 3 {
+                            tracing::error!(
+                                "3 consecutive WS auth failures — stopping reconnects. \
+                                 Check API key/private key pair and system clock."
+                            );
+                            let _ = tx.send(KalshiWsEvent::Disconnected(
+                                "Authentication failed repeatedly (401). Check credentials.".to_string()
+                            )).await;
+                            return Err(e);
+                        }
+                    } else {
+                        consecutive_auth_failures = 0;
+                        tracing::error!("kalshi WS error: {:#}, reconnecting in 2s...", e);
+                    }
                     let _ = tx.send(KalshiWsEvent::Disconnected(format!("{:#}", e))).await;
                 }
             }
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let delay = if consecutive_auth_failures > 0 { 5 } else { 2 };
+            tokio::time::sleep(std::time::Duration::from_secs(delay)).await;
         }
     }
 
@@ -71,9 +95,27 @@ impl KalshiWs {
             );
         }
 
-        let (ws_stream, _) = tokio_tungstenite::connect_async(request)
-            .await
-            .context("WS connection failed")?;
+        let (ws_stream, _) = match tokio_tungstenite::connect_async(request).await {
+            Ok(pair) => pair,
+            Err(e) => {
+                let err_str = format!("{:#}", e);
+                if err_str.contains("401") || err_str.contains("Unauthorized") {
+                    tracing::error!(
+                        "WS auth rejected (401). Timestamp used: {}ms. \
+                         Check: API key matches private key, system clock is accurate, \
+                         key file has no Windows line-ending issues.",
+                        KalshiAuth::timestamp_ms()
+                    );
+                    anyhow::bail!(
+                        "WebSocket authentication failed (401 Unauthorized). \
+                         The pre-flight REST check passed, so this may be a timing/clock issue. \
+                         System timestamp: {}ms since epoch",
+                        KalshiAuth::timestamp_ms()
+                    );
+                }
+                return Err(anyhow::anyhow!(e).context("WS connection failed"));
+            }
+        };
 
         let (mut write, mut read) = ws_stream.split();
         tracing::debug!("kalshi WS connected");

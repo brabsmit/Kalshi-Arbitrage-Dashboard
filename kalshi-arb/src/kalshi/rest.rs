@@ -97,6 +97,46 @@ impl KalshiRest {
         Ok(resp.market_positions)
     }
 
+    /// Pre-flight check: verify API key + signature auth works before starting WS.
+    /// Calls the balance endpoint and checks for 401.
+    pub async fn preflight_auth_check(&self) -> Result<()> {
+        let path = "/trade-api/v2/portfolio/balance";
+        let url = format!("{}{}", self.base_url, path);
+        let headers = self.auth.headers("GET", path)?;
+        let mut req = self.client.get(&url);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+        let resp = req.send().await.context("Auth pre-flight request failed")?;
+        let status = resp.status();
+        if status.as_u16() == 401 {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Authentication failed (401 Unauthorized).\n\
+                 Possible causes:\n\
+                 - API key does not match the private key (keys are generated as a pair)\n\
+                 - Private key file has Windows line endings (\\r\\n) or BOM characters\n\
+                 - System clock is significantly out of sync\n\
+                 - API key has been revoked or expired on Kalshi\n\
+                 Server response: {}",
+                body
+            );
+        }
+        if status.as_u16() == 403 {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Authorization failed (403 Forbidden) — key is valid but lacks permissions.\n\
+                 Server response: {}",
+                body
+            );
+        }
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("Auth pre-flight failed ({}): {}", status, body);
+        }
+        Ok(())
+    }
+
     /// Authenticated GET request.
     async fn get_authed<T: serde::de::DeserializeOwned>(&self, url: &str, path: &str) -> Result<T> {
         let headers = self.auth.headers("GET", path)?;

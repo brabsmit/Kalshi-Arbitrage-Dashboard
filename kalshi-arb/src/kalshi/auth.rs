@@ -12,19 +12,61 @@ pub struct KalshiAuth {
 
 impl KalshiAuth {
     pub fn new(api_key: String, private_key_pem: &str) -> Result<Self> {
+        // Validate API key looks reasonable
+        let api_key = api_key.trim().to_string();
+        if api_key.is_empty() {
+            anyhow::bail!("API key is empty");
+        }
+        if api_key.len() < 10 {
+            anyhow::bail!("API key too short ({} chars) — check for truncation", api_key.len());
+        }
+        if api_key.bytes().any(|b| !(0x20..=0x7e).contains(&b)) {
+            anyhow::bail!(
+                "API key contains non-printable characters — check for BOM, \\r, or copy-paste artifacts \
+                 (first 20 bytes: {:?})",
+                &api_key.as_bytes()[..api_key.len().min(20)]
+            );
+        }
+
+        // Validate PEM has expected structure
+        let pem_trimmed = private_key_pem.trim();
+        if !pem_trimmed.contains("BEGIN") || !pem_trimmed.contains("END") {
+            anyhow::bail!(
+                "Private key does not look like PEM (missing BEGIN/END markers). \
+                 File starts with: {:?}",
+                &pem_trimmed[..pem_trimmed.len().min(60)]
+            );
+        }
+
         let der = pem_to_der(private_key_pem)?;
+
+        if der.len() < 100 {
+            anyhow::bail!(
+                "Decoded private key is suspiciously small ({} bytes) — \
+                 file may be truncated or corrupted",
+                der.len()
+            );
+        }
 
         // Try PKCS#8 first, then fall back to PKCS#1 with wrapping
         let key_pair = match RsaKeyPair::from_pkcs8(&der) {
             Ok(kp) => kp,
-            Err(_) => {
+            Err(pkcs8_err) => {
                 // Key is likely PKCS#1 (BEGIN RSA PRIVATE KEY).
                 // Wrap the raw PKCS#1 DER in a PKCS#8 envelope.
                 let pkcs8 = wrap_pkcs1_in_pkcs8(&der);
                 RsaKeyPair::from_pkcs8(&pkcs8)
-                    .map_err(|e| anyhow::anyhow!("Failed to parse RSA key (tried PKCS#8 and PKCS#1): {}", e))?
+                    .map_err(|pkcs1_err| anyhow::anyhow!(
+                        "Failed to parse RSA key:\n  PKCS#8: {}\n  PKCS#1: {}\n  \
+                         DER size: {} bytes. Check that the key file is not corrupted.",
+                        pkcs8_err, pkcs1_err, der.len()
+                    ))?
             }
         };
+
+        let key_bits = key_pair.public().modulus_len() * 8;
+        println!("  RSA key loaded: {} bits, API key: {}...",
+            key_bits, &api_key[..api_key.len().min(8)]);
 
         Ok(Self {
             api_key,
@@ -75,9 +117,11 @@ impl KalshiAuth {
 /// Convert PEM-encoded private key to DER bytes.
 /// Handles both PKCS#1 (BEGIN RSA PRIVATE KEY) and PKCS#8 (BEGIN PRIVATE KEY).
 fn pem_to_der(pem: &str) -> Result<Vec<u8>> {
+    let pem = pem.replace('\r', "");
     let pem = pem.trim();
     let b64: String = pem
         .lines()
+        .map(|line| line.trim())
         .filter(|line| !line.starts_with("-----"))
         .collect::<Vec<_>>()
         .join("");
