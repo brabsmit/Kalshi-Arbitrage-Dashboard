@@ -78,6 +78,9 @@ pub struct MomentumConfig {
     pub book_pressure_weight: f64,
     pub cancel_check_interval_ms: u64,
     pub velocity_window_size: usize,
+    /// Bypass momentum gating for score-feed signals (where speed is the edge).
+    #[serde(default)]
+    pub bypass_for_score_signals: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]

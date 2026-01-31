@@ -295,12 +295,19 @@ fn evaluate_matched_market(
         strategy_config.min_edge_after_fees,
     );
 
-    signal = strategy::momentum_gate(
-        signal,
-        momentum,
-        momentum_config.maker_momentum_threshold,
-        momentum_config.taker_momentum_threshold,
-    );
+    // Bypass momentum gating for score-feed signals when configured.
+    // Score-derived edge comes from knowing the score before sportsbooks
+    // update — requiring momentum confirmation adds delay that erodes
+    // the speed advantage.
+    let bypass_momentum = momentum_config.bypass_for_score_signals && source == "score_feed";
+    if !bypass_momentum {
+        signal = strategy::momentum_gate(
+            signal,
+            momentum,
+            momentum_config.maker_momentum_threshold,
+            momentum_config.taker_momentum_threshold,
+        );
+    }
 
     // Force skip if stale
     if is_stale {

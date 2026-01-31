@@ -33,6 +33,7 @@ velocity_weight = 0.6
 book_pressure_weight = 0.4
 cancel_check_interval_ms = 100
 velocity_window_size = 10
+bypass_for_score_signals = true
 
 [score_feed]
 nba_api_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
