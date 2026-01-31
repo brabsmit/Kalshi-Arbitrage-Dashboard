@@ -63,3 +63,65 @@ pub struct ApiQuota {
     pub requests_used: u64,
     pub requests_remaining: u64,
 }
+
+/// DraftKings sportsbook API response types.
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DkResponse {
+    pub event_group: Option<DkEventGroup>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DkEventGroup {
+    #[serde(default)]
+    pub events: Vec<DkEvent>,
+    #[serde(default)]
+    pub offer_categories: Vec<DkOfferCategory>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct DkEvent {
+    pub event_id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub start_date: String,
+    #[serde(default)]
+    pub team_name1: Option<String>,
+    #[serde(default)]
+    pub team_name2: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
+pub struct DkOfferCategory {
+    #[serde(default)]
+    pub offer_category_id: u64,
+    #[serde(default)]
+    pub offers: Vec<Vec<DkOffer>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DkOffer {
+    #[serde(default)]
+    pub event_id: u64,
+    #[serde(default)]
+    pub outcomes: Vec<DkOutcome>,
+    #[serde(default)]
+    pub is_suspended: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DkOutcome {
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub odds_american: String,
+}

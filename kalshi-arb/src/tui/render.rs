@@ -256,9 +256,9 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     };
 
     let title = if state.sim_mode {
-        " Kalshi Arb Engine [SIMULATION] "
+        format!(" Kalshi Arb Engine [SIMULATION] [{}] ", state.odds_source)
     } else {
-        " Kalshi Arb Engine "
+        format!(" Kalshi Arb Engine [{}] ", state.odds_source)
     };
 
     let title_style = if state.sim_mode {
@@ -268,7 +268,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     };
 
     let block = Block::default()
-        .title(Span::styled(title, title_style))
+        .title(Span::styled(&title, title_style))
         .borders(Borders::ALL);
     let para = Paragraph::new(lines).block(block);
     f.render_widget(para, area);

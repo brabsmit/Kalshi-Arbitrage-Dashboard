@@ -9,7 +9,7 @@ use config::Config;
 use engine::fees::calculate_fee;
 use engine::momentum::{BookPressureTracker, MomentumScorer, VelocityTracker};
 use engine::{matcher, strategy};
-use feed::{the_odds_api::TheOddsApi, OddsFeed};
+use feed::{draftkings::DraftKingsFeed, the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -881,7 +881,13 @@ async fn main() -> Result<()> {
 
     let kalshi_api_key = Config::kalshi_api_key()?;
     let pk_pem = Config::kalshi_private_key_pem()?;
-    let odds_api_key = Config::odds_api_key()?;
+    let source_strategy = config.odds_feed.source_strategy.clone();
+    let needs_odds_api = matches!(source_strategy.as_str(), "the-odds-api" | "draftkings+fallback" | "blend");
+    let odds_api_key = if needs_odds_api {
+        Some(Config::odds_api_key()?)
+    } else {
+        std::env::var("ODDS_API_KEY").ok().filter(|k| !k.is_empty())
+    };
 
     println!();
     println!("  All keys loaded. Starting engine...");
@@ -1019,28 +1025,71 @@ async fn main() -> Result<()> {
         }
     });
 
-    // --- Phase 3: Spawn odds polling loop ---
-    let mut odds_feed = TheOddsApi::new(odds_api_key, &config.odds_feed.base_url, &config.odds_feed.bookmakers);
+    // --- Phase 3: Construct odds feed(s) based on source strategy ---
+    let dk_config = config.draftkings_feed.clone().unwrap_or_default();
+    let mut dk_feed: Option<DraftKingsFeed> = None;
+    let mut odds_api_feed: Option<TheOddsApi> = None;
 
-    // Validate API key and seed quota display before TUI starts
-    match odds_feed.check_quota().await {
-        Ok(quota) => {
-            println!("  Odds API OK: {}/{} requests remaining",
-                quota.requests_remaining,
-                quota.requests_used + quota.requests_remaining,
-            );
-            state_tx.send_modify(|s| {
-                s.api_requests_used = quota.requests_used;
-                s.api_requests_remaining = quota.requests_remaining;
-                s.api_burn_rate = 0.0;
-                s.api_hours_remaining = f64::INFINITY;
-            });
+    match source_strategy.as_str() {
+        "draftkings" => {
+            dk_feed = Some(DraftKingsFeed::new(&dk_config));
+            println!("  Odds source: DraftKings (direct scrape)");
         }
-        Err(e) => {
-            eprintln!("  Odds API error: {:#}", e);
+        "the-odds-api" => {
+            let key = odds_api_key.clone().expect("odds API key required for the-odds-api strategy");
+            odds_api_feed = Some(TheOddsApi::new(key, &config.odds_feed.base_url, &config.odds_feed.bookmakers));
+        }
+        "draftkings+fallback" => {
+            dk_feed = Some(DraftKingsFeed::new(&dk_config));
+            let key = odds_api_key.clone().expect("odds API key required for fallback strategy");
+            odds_api_feed = Some(TheOddsApi::new(key, &config.odds_feed.base_url, &config.odds_feed.bookmakers));
+            println!("  Odds source: DraftKings + The-Odds-API fallback");
+        }
+        "blend" => {
+            dk_feed = Some(DraftKingsFeed::new(&dk_config));
+            let key = odds_api_key.clone().expect("odds API key required for blend strategy");
+            odds_api_feed = Some(TheOddsApi::new(key, &config.odds_feed.base_url, &config.odds_feed.bookmakers));
+            println!("  Odds source: Blend (DraftKings + The-Odds-API)");
+        }
+        other => {
+            eprintln!("  Unknown source_strategy: {}", other);
             std::process::exit(1);
         }
     }
+
+    // Validate API key and seed quota display before TUI starts (only if using The-Odds-API)
+    if let Some(ref mut oaf) = odds_api_feed {
+        match oaf.check_quota().await {
+            Ok(quota) => {
+                println!("  Odds API OK: {}/{} requests remaining",
+                    quota.requests_remaining,
+                    quota.requests_used + quota.requests_remaining,
+                );
+                state_tx.send_modify(|s| {
+                    s.api_requests_used = quota.requests_used;
+                    s.api_requests_remaining = quota.requests_remaining;
+                    s.api_burn_rate = 0.0;
+                    s.api_hours_remaining = f64::INFINITY;
+                });
+            }
+            Err(e) => {
+                eprintln!("  Odds API error: {:#}", e);
+                std::process::exit(1);
+            }
+        }
+    }
+
+    // Set TUI source indicator
+    let source_label = match source_strategy.as_str() {
+        "draftkings" => "DK",
+        "the-odds-api" => "ODDS-API",
+        "draftkings+fallback" => "DK+FB",
+        "blend" => "BLEND",
+        _ => "UNKNOWN",
+    };
+    state_tx.send_modify(|s| {
+        s.odds_source = source_label.to_string();
+    });
 
     let strategy_config = config.strategy.clone();
     let sim_config = config.simulation.clone().unwrap_or_default();
@@ -1055,6 +1104,9 @@ async fn main() -> Result<()> {
         config.odds_feed.pre_game_poll_interval_s.unwrap_or(120),
     );
     let quota_warning_threshold = config.odds_feed.quota_warning_threshold.unwrap_or(100);
+    let dk_live_poll_interval = Duration::from_secs(dk_config.live_poll_interval_s);
+    let dk_pre_game_poll_interval = Duration::from_secs(dk_config.pre_game_poll_interval_s);
+    let source_strategy_engine = source_strategy.clone();
 
     let mut score_poller = config.score_feed.as_ref().map(|sf| {
         feed::score_feed::ScorePoller::new(
@@ -1140,6 +1192,59 @@ async fn main() -> Result<()> {
         let mut filter_closed: usize;
         let mut earliest_commence: Option<chrono::DateTime<chrono::Utc>>;
 
+        // Macro to dispatch fetch through the configured source strategy
+        macro_rules! fetch_odds {
+            ($sport:expr) => {{
+                match source_strategy_engine.as_str() {
+                    "draftkings" => {
+                        dk_feed.as_mut().unwrap().fetch_odds($sport).await
+                    }
+                    "the-odds-api" => {
+                        odds_api_feed.as_mut().unwrap().fetch_odds($sport).await
+                    }
+                    "draftkings+fallback" => {
+                        match dk_feed.as_mut().unwrap().fetch_odds($sport).await {
+                            Ok(updates) => Ok(updates),
+                            Err(e) => {
+                                tracing::warn!("DK fetch failed, falling back: {e}");
+                                odds_api_feed.as_mut().unwrap().fetch_odds($sport).await
+                            }
+                        }
+                    }
+                    "blend" => {
+                        let dk_result = dk_feed.as_mut().unwrap().fetch_odds($sport).await;
+                        let api_result = odds_api_feed.as_mut().unwrap().fetch_odds($sport).await;
+                        match (dk_result, api_result) {
+                            (Ok(mut dk), Ok(api)) => {
+                                let dk_events: std::collections::HashSet<String> = dk.iter()
+                                    .map(|u| format!("{}-{}", u.home_team, u.away_team))
+                                    .collect();
+                                for update in api {
+                                    let key = format!("{}-{}", update.home_team, update.away_team);
+                                    if dk_events.contains(&key) {
+                                        if let Some(dk_update) = dk.iter_mut()
+                                            .find(|u| format!("{}-{}", u.home_team, u.away_team) == key)
+                                        {
+                                            dk_update.bookmakers.extend(update.bookmakers);
+                                        }
+                                    } else {
+                                        dk.push(update);
+                                    }
+                                }
+                                Ok(dk)
+                            }
+                            (Ok(dk), Err(_)) => Ok(dk),
+                            (Err(_), Ok(api)) => Ok(api),
+                            (Err(e1), Err(e2)) => {
+                                Err(anyhow::anyhow!("Both feeds failed: DK={e1}, API={e2}"))
+                            }
+                        }
+                    }
+                    _ => Err(anyhow::anyhow!("unknown source_strategy")),
+                }
+            }};
+        }
+
         loop {
             // Drain TUI commands
             while let Ok(cmd) = cmd_rx.try_recv() {
@@ -1163,9 +1268,9 @@ async fn main() -> Result<()> {
                         let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
                         let enabled_keys: Vec<String> = enabled_sports_engine.lock().unwrap().enabled_keys();
                         for diag_sport in &enabled_keys {
-                            match odds_feed.fetch_odds(diag_sport).await {
+                            match fetch_odds!(diag_sport) {
                                 Ok(updates) => {
-                                    if let Some(quota) = odds_feed.last_quota() {
+                                    if let Some(quota) = odds_api_feed.as_ref().and_then(|f| f.last_quota()) {
                                         api_request_times.push_back(Instant::now());
                                         let one_hour_ago = Instant::now() - Duration::from_secs(3600);
                                         while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
@@ -1419,10 +1524,20 @@ async fn main() -> Result<()> {
                 // Check if quota is critically low — force pre-game interval
                 let quota_low = !api_request_times.is_empty()
                     && state_tx_engine.borrow().api_requests_remaining < quota_warning_threshold;
-                let interval = if quota_low || !is_live {
-                    pre_game_poll_interval
+                let effective_live = if dk_feed.is_some() && source_strategy_engine != "the-odds-api" {
+                    dk_live_poll_interval
                 } else {
                     live_poll_interval
+                };
+                let effective_pre_game = if dk_feed.is_some() && source_strategy_engine != "the-odds-api" {
+                    dk_pre_game_poll_interval
+                } else {
+                    pre_game_poll_interval
+                };
+                let interval = if quota_low || !is_live {
+                    effective_pre_game
+                } else {
+                    effective_live
                 };
 
                 // Determine if we should fetch fresh data or replay cached
@@ -1432,7 +1547,7 @@ async fn main() -> Result<()> {
                 };
 
                 if should_fetch {
-                    match odds_feed.fetch_odds(sport).await {
+                    match fetch_odds!(sport) {
                         Ok(updates) => {
                             last_poll.insert(sport.to_string(), Instant::now());
 
@@ -1443,7 +1558,7 @@ async fn main() -> Result<()> {
                             sport_commence_times.insert(sport.to_string(), ctimes);
 
                             // Update API quota
-                            if let Some(quota) = odds_feed.last_quota() {
+                            if let Some(quota) = odds_api_feed.as_ref().and_then(|f| f.last_quota()) {
                                 api_request_times.push_back(Instant::now());
                                 let one_hour_ago = Instant::now() - Duration::from_secs(3600);
                                 while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
@@ -1524,7 +1639,7 @@ async fn main() -> Result<()> {
                     None => true,
                 };
                 if should_fetch_diag {
-                    match odds_feed.fetch_odds(sport).await {
+                    match fetch_odds!(sport) {
                         Ok(updates) => {
                             last_poll.insert(sport.to_string(), Instant::now());
                             let now_utc = chrono::Utc::now();
@@ -1603,9 +1718,9 @@ async fn main() -> Result<()> {
                                         let mut diag_rows: Vec<tui::state::DiagnosticRow> = Vec::new();
                                         let enabled_keys: Vec<String> = enabled_sports_engine.lock().unwrap().enabled_keys();
                                         for diag_sport in &enabled_keys {
-                                            match odds_feed.fetch_odds(diag_sport).await {
+                                            match fetch_odds!(diag_sport) {
                                                 Ok(updates) => {
-                                                    if let Some(quota) = odds_feed.last_quota() {
+                                                    if let Some(quota) = odds_api_feed.as_ref().and_then(|f| f.last_quota()) {
                                                         api_request_times.push_back(Instant::now());
                                                         let one_hour_ago = Instant::now() - Duration::from_secs(3600);
                                                         while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {

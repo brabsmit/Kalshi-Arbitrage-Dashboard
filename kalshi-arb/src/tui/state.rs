@@ -64,6 +64,7 @@ pub struct AppState {
     pub diagnostic_scroll_offset: usize,
     pub live_book: HashMap<String, (u32, u32, u32, u32)>,
     pub enabled_sports: Option<Arc<Mutex<crate::EnabledSports>>>,
+    pub odds_source: String,
 }
 
 #[derive(Debug, Clone)]
@@ -161,6 +162,7 @@ impl AppState {
             diagnostic_scroll_offset: 0,
             live_book: HashMap::new(),
             enabled_sports: None,
+            odds_source: "ODDS-API".to_string(),
         }
     }
 

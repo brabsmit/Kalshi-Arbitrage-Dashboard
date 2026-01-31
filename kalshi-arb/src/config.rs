@@ -15,6 +15,7 @@ pub struct Config {
     #[serde(default)]
     pub sports: SportsConfig,
     pub odds_feed: OddsFeedConfig,
+    pub draftkings_feed: Option<DraftKingsFeedConfig>,
     pub momentum: MomentumConfig,
     pub score_feed: Option<ScoreFeedConfig>,
     pub college_score_feed: Option<CollegeScoreFeedConfig>,
@@ -112,6 +113,37 @@ pub struct OddsFeedConfig {
     pub live_poll_interval_s: Option<u64>,
     pub pre_game_poll_interval_s: Option<u64>,
     pub quota_warning_threshold: Option<u64>,
+    #[serde(default = "default_source_strategy")]
+    pub source_strategy: String,
+}
+
+fn default_source_strategy() -> String {
+    "the-odds-api".to_string()
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)]
+pub struct DraftKingsFeedConfig {
+    #[serde(default = "default_dk_live_poll")]
+    pub live_poll_interval_s: u64,
+    #[serde(default = "default_dk_pre_game_poll")]
+    pub pre_game_poll_interval_s: u64,
+    #[serde(default = "default_dk_timeout")]
+    pub request_timeout_ms: u64,
+}
+
+fn default_dk_live_poll() -> u64 { 3 }
+fn default_dk_pre_game_poll() -> u64 { 30 }
+fn default_dk_timeout() -> u64 { 5000 }
+
+impl Default for DraftKingsFeedConfig {
+    fn default() -> Self {
+        Self {
+            live_poll_interval_s: 3,
+            pre_game_poll_interval_s: 30,
+            request_timeout_ms: 5000,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
