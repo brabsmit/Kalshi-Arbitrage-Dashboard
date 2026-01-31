@@ -1072,12 +1072,18 @@ fn draw_diagnostic_footer(f: &mut Frame, area: Rect) {
 }
 
 fn truncate_with_ellipsis(s: &str, max_width: usize) -> Cow<'_, str> {
-    if s.len() <= max_width {
+    let char_count = s.chars().count();
+    if char_count <= max_width {
         Cow::Borrowed(s)
     } else if max_width <= 3 {
         Cow::Owned(".".repeat(max_width))
     } else {
-        Cow::Owned(format!("{}...", &s[..max_width - 3]))
+        let end = s
+            .char_indices()
+            .nth(max_width - 3)
+            .map(|(i, _)| i)
+            .unwrap_or(s.len());
+        Cow::Owned(format!("{}...", &s[..end]))
     }
 }
 
@@ -1123,6 +1129,18 @@ mod tests {
     #[test]
     fn test_truncate_zero_width() {
         assert_eq!(truncate_with_ellipsis("hello", 0), "");
+    }
+
+    #[test]
+    fn test_truncate_multibyte_chars() {
+        // ¢ is 2 bytes in UTF-8; must not panic when truncation lands inside it
+        let s = "price 1¢ ok";
+        assert_eq!(truncate_with_ellipsis(s, 9), "price ...");
+        // The exact crash string from production
+        let prod = "SIM BUY 10x KXNCAAMBGAME-26JAN31UNCGT-GT @ 1¢ (ask was 1¢, slip +0¢), sell target 2¢";
+        let result = truncate_with_ellipsis(prod, 72);
+        assert!(result.ends_with("..."));
+        assert!(result.chars().count() <= 72);
     }
 
     #[test]
