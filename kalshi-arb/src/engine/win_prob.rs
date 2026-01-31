@@ -71,6 +71,22 @@ impl WinProbTable {
         let prob = 1.0 / (1.0 + (-k * adjusted_diff).exp());
         (prob * 100.0).round().clamp(0.0, 100.0) as u8
     }
+
+    /// Convert a live score + elapsed seconds into (home_fair, away_fair) in cents.
+    /// Both values sum to 100.
+    pub fn fair_value(score_diff: i32, total_elapsed_seconds: u16) -> (u32, u32) {
+        let time_bucket = total_elapsed_seconds / 30;
+        let home = Self::lookup(score_diff, time_bucket) as u32;
+        (home, 100 - home)
+    }
+
+    /// Same but for overtime periods.
+    /// `ot_elapsed_seconds` = seconds elapsed within the current OT period.
+    pub fn fair_value_overtime(score_diff: i32, ot_elapsed_seconds: u16) -> (u32, u32) {
+        let time_bucket = ot_elapsed_seconds / 30;
+        let home = Self::lookup_overtime(score_diff, time_bucket) as u32;
+        (home, 100 - home)
+    }
 }
 
 #[cfg(test)]
@@ -171,5 +187,29 @@ mod tests {
         // 3 min into OT with a 3-point lead should be ~73-82 %, not >90 %.
         let prob = WinProbTable::lookup_overtime(3, 4);
         assert!(prob >= 70 && prob <= 85, "got {prob}");
+    }
+
+    // ---- Fair value bridge functions ----
+
+    #[test]
+    fn test_fair_value_from_score() {
+        let (home, away) = WinProbTable::fair_value(5, 2160);
+        assert!(home > 50);
+        assert_eq!(home + away, 100);
+    }
+
+    #[test]
+    fn test_fair_value_from_score_overtime() {
+        let (home, away) = WinProbTable::fair_value_overtime(0, 120);
+        // At OT bucket 4 (120s/30), tied game with home-court advantage => ~62%
+        assert!(home >= 55 && home <= 65, "got {home}");
+        assert_eq!(home + away, 100);
+    }
+
+    #[test]
+    fn test_fair_value_pregame() {
+        let (home, away) = WinProbTable::fair_value(0, 0);
+        assert!(home >= 55 && home <= 60);
+        assert_eq!(home + away, 100);
     }
 }
