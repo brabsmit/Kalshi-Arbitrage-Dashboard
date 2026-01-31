@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
 use chrono::{DateTime, Utc};
@@ -58,6 +58,7 @@ pub struct AppState {
     pub diagnostic_snapshot: bool,
     pub diagnostic_focus: bool,
     pub diagnostic_scroll_offset: usize,
+    pub live_book: HashMap<String, (u32, u32, u32, u32)>,
 }
 
 #[derive(Debug, Clone)]
@@ -147,6 +148,7 @@ impl AppState {
             diagnostic_snapshot: false,
             diagnostic_focus: false,
             diagnostic_scroll_offset: 0,
+            live_book: HashMap::new(),
         }
     }
 
