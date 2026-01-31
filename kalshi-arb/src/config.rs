@@ -105,6 +105,8 @@ pub struct WinProbConfig {
     pub k_range: f64,
     pub ot_k_start: f64,
     pub ot_k_range: f64,
+    #[serde(default)]
+    pub regulation_secs: Option<u16>,
 }
 
 impl Default for WinProbConfig {
@@ -115,6 +117,7 @@ impl Default for WinProbConfig {
             k_range: 0.25,
             ot_k_start: 0.10,
             ot_k_range: 1.0,
+            regulation_secs: Some(2880),
         }
     }
 }

@@ -1,4 +1,4 @@
-//! NBA win-probability lookup using a logistic model.
+//! Win-probability lookup using a logistic model.
 //!
 //! Converts a live score differential + game-clock time-bucket into a home-team
 //! win probability (0-100).  Used by the main loop to derive fair value from
@@ -7,7 +7,10 @@
 //! Model: `P(home_win) = 1 / (1 + exp(-k * adjusted_diff))`
 //!   - `adjusted_diff = score_diff + home_advantage`
 //!   - `k` ramps cubically so late-game leads are near-certain while
-//!     mid-game probabilities stay realistic (calibrated to NBA data).
+//!     mid-game probabilities stay realistic.
+//!
+//! Supports both NBA (2880s regulation, 96 buckets) and college basketball
+//! (2400s regulation, 80 buckets) via the `regulation_secs` parameter.
 
 /// Parameterized win-probability model.
 #[derive(Debug, Clone)]
@@ -17,31 +20,34 @@ pub struct WinProbTable {
     k_range: f64,
     ot_k_start: f64,
     ot_k_range: f64,
+    regulation_secs: u16,
 }
 
 impl WinProbTable {
-    pub fn new(home_advantage: f64, k_start: f64, k_range: f64, ot_k_start: f64, ot_k_range: f64) -> Self {
-        Self { home_advantage, k_start, k_range, ot_k_start, ot_k_range }
+    pub fn new(home_advantage: f64, k_start: f64, k_range: f64, ot_k_start: f64, ot_k_range: f64, regulation_secs: u16) -> Self {
+        Self { home_advantage, k_start, k_range, ot_k_start, ot_k_range, regulation_secs }
     }
 
     /// Convenience constructor from config.
     pub fn from_config(config: &crate::config::WinProbConfig) -> Self {
-        Self::new(config.home_advantage, config.k_start, config.k_range, config.ot_k_start, config.ot_k_range)
+        Self::new(config.home_advantage, config.k_start, config.k_range, config.ot_k_start, config.ot_k_range, config.regulation_secs.unwrap_or(2880))
     }
 
     /// Regulation lookup.
     ///
     /// * `score_diff` -- home score minus away score (clamped to -40..=40).
-    /// * `time_bucket` -- 0 = game start, 96 = end of regulation (each bucket
-    ///   = 30 seconds of game clock elapsed).
+    /// * `time_bucket` -- 0 = game start, end of regulation varies by sport
+    ///   (96 for NBA, 80 for college basketball; each bucket = 30 seconds of
+    ///   game clock elapsed).
     ///
     /// Returns a probability 0-100 (u8).
     pub fn lookup(&self, score_diff: i32, time_bucket: u16) -> u8 {
         let clamped_diff = score_diff.clamp(-40, 40);
-        let bucket = (time_bucket as f64).min(96.0);
+        let regulation_buckets = self.regulation_secs as f64 / 30.0;
+        let bucket = (time_bucket as f64).min(regulation_buckets);
 
         // End of regulation -- deterministic.
-        if bucket >= 96.0 {
+        if bucket >= regulation_buckets {
             return if clamped_diff > 0 {
                 100
             } else if clamped_diff < 0 {
@@ -53,7 +59,7 @@ impl WinProbTable {
 
         let adjusted_diff = clamped_diff as f64 + self.home_advantage;
         // k ramps cubically from k_start (game start) to k_start+k_range (end of regulation).
-        let k = self.k_start + (bucket / 96.0).powi(3) * self.k_range;
+        let k = self.k_start + (bucket / regulation_buckets).powi(3) * self.k_range;
         let prob = 1.0 / (1.0 + (-k * adjusted_diff).exp());
         (prob * 100.0).round().clamp(0.0, 100.0) as u8
     }
@@ -108,7 +114,7 @@ mod tests {
     use super::*;
 
     fn default_table() -> WinProbTable {
-        WinProbTable::new(2.5, 0.065, 0.25, 0.10, 1.0)
+        WinProbTable::new(2.5, 0.065, 0.25, 0.10, 1.0, 2880)
     }
 
     #[test]
@@ -229,5 +235,25 @@ mod tests {
         let (home, away) = default_table().fair_value(0, 0);
         assert!(home >= 52 && home <= 57);
         assert_eq!(home + away, 100);
+    }
+
+    #[test]
+    fn test_college_regulation_buckets() {
+        let table = WinProbTable::new(3.5, 0.065, 0.25, 0.10, 1.0, 2400);
+        let prob = table.lookup(5, 80);
+        assert_eq!(prob, 100);
+        let prob = table.lookup(0, 80);
+        assert_eq!(prob, 57);
+    }
+
+    #[test]
+    fn test_nba_unchanged_with_regulation_secs() {
+        let nba = WinProbTable::new(2.5, 0.065, 0.25, 0.10, 1.0, 2880);
+        let prob = nba.lookup(0, 0);
+        assert!(prob >= 52 && prob <= 57, "got {prob}");
+        let prob = nba.lookup(10, 92);
+        assert!(prob >= 95, "got {prob}");
+        let prob = nba.lookup(5, 96);
+        assert_eq!(prob, 100);
     }
 }
