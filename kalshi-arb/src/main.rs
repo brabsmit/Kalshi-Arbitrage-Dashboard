@@ -400,6 +400,7 @@ fn evaluate_matched_market(
                 "SIM BUY {}x {} @ {}¢ (ask was {}¢, slip {:+}¢), sell target {}¢",
                 qty, ticker_owned, fill_price, signal_ask, slippage, sell_target
             ));
+            s.sim_total_slippage_cents += slippage as i64;
         });
     }
 
@@ -1387,6 +1388,10 @@ async fn main() -> Result<()> {
 
                                 s.sim_balance_cents += exit_revenue - exit_fee;
                                 s.sim_realized_pnl_cents += pnl;
+                                s.sim_total_trades += 1;
+                                if pnl > 0 {
+                                    s.sim_winning_trades += 1;
+                                }
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
                                     action: "SELL".to_string(),
@@ -1440,6 +1445,10 @@ async fn main() -> Result<()> {
 
                                 s.sim_balance_cents += exit_revenue - exit_fee;
                                 s.sim_realized_pnl_cents += pnl;
+                                s.sim_total_trades += 1;
+                                if pnl > 0 {
+                                    s.sim_winning_trades += 1;
+                                }
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
                                     action: "SELL".to_string(),
