@@ -753,7 +753,13 @@ async fn main() -> Result<()> {
                                     s.sim_winning_trades += 1;
                                 }
                                 let (sell_source, sell_basis) = pos.trace.as_ref()
-                                    .map(|t| (t.sport.clone(), pipeline::format_fair_value_basis(t)))
+                                    .map(|t| {
+                                        let src = match &t.fair_value_method {
+                                            pipeline::FairValueMethod::ScoreFeed { .. } => "score",
+                                            pipeline::FairValueMethod::OddsFeed { .. } => "odds",
+                                        };
+                                        (src.to_string(), pipeline::format_fair_value_basis(t))
+                                    })
                                     .unwrap_or_default();
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -813,7 +819,13 @@ async fn main() -> Result<()> {
                                     s.sim_winning_trades += 1;
                                 }
                                 let (sell_source, sell_basis) = pos.trace.as_ref()
-                                    .map(|t| (t.sport.clone(), pipeline::format_fair_value_basis(t)))
+                                    .map(|t| {
+                                        let src = match &t.fair_value_method {
+                                            pipeline::FairValueMethod::ScoreFeed { .. } => "score",
+                                            pipeline::FairValueMethod::OddsFeed { .. } => "odds",
+                                        };
+                                        (src.to_string(), pipeline::format_fair_value_basis(t))
+                                    })
                                     .unwrap_or_default();
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
