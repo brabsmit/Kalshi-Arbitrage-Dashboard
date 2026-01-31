@@ -44,6 +44,125 @@ pub struct MatchedMarket {
     pub best_ask: u32,
 }
 
+/// Look up a team's canonical Kalshi ticker code by sport and name.
+/// Returns None if the team/sport isn't in the lookup tables (falls back to suffix-stripping).
+fn team_code(sport: &str, name: &str) -> Option<&'static str> {
+    let upper = name.to_uppercase();
+    let upper = upper.trim();
+    let sport_norm: String = sport.to_uppercase().chars()
+        .filter(|c| c.is_ascii_alphabetic())
+        .collect();
+    match sport_norm.as_str() {
+        "BASKETBALL" => nba_team_code(upper),
+        "ICEHOCKEY" => nhl_team_code(upper),
+        "SOCCEREPL" => epl_team_code(upper),
+        _ => None,
+    }
+}
+
+fn nba_team_code(name: &str) -> Option<&'static str> {
+    match name {
+        "ATLANTA HAWKS" | "ATLANTA" => Some("ATL"),
+        "BOSTON CELTICS" | "BOSTON" => Some("BOS"),
+        "BROOKLYN NETS" | "BROOKLYN" => Some("BKN"),
+        "CHARLOTTE HORNETS" | "CHARLOTTE" => Some("CHA"),
+        "CHICAGO BULLS" | "CHICAGO" => Some("CHI"),
+        "CLEVELAND CAVALIERS" | "CLEVELAND" => Some("CLE"),
+        "DALLAS MAVERICKS" | "DALLAS" => Some("DAL"),
+        "DENVER NUGGETS" | "DENVER" => Some("DEN"),
+        "DETROIT PISTONS" | "DETROIT" => Some("DET"),
+        "GOLDEN STATE WARRIORS" | "GOLDEN STATE" => Some("GSW"),
+        "HOUSTON ROCKETS" | "HOUSTON" => Some("HOU"),
+        "INDIANA PACERS" | "INDIANA" => Some("IND"),
+        "LOS ANGELES CLIPPERS" | "LOS ANGELES C" | "LA CLIPPERS" => Some("LAC"),
+        "LOS ANGELES LAKERS" | "LOS ANGELES L" | "LA LAKERS" => Some("LAL"),
+        "MEMPHIS GRIZZLIES" | "MEMPHIS" => Some("MEM"),
+        "MIAMI HEAT" | "MIAMI" => Some("MIA"),
+        "MILWAUKEE BUCKS" | "MILWAUKEE" => Some("MIL"),
+        "MINNESOTA TIMBERWOLVES" | "MINNESOTA" => Some("MIN"),
+        "NEW ORLEANS PELICANS" | "NEW ORLEANS" => Some("NOP"),
+        "NEW YORK KNICKS" | "NEW YORK" => Some("NYK"),
+        "OKLAHOMA CITY THUNDER" | "OKLAHOMA CITY" => Some("OKC"),
+        "ORLANDO MAGIC" | "ORLANDO" => Some("ORL"),
+        "PHILADELPHIA 76ERS" | "PHILADELPHIA SIXERS" | "PHILADELPHIA" => Some("PHI"),
+        "PHOENIX SUNS" | "PHOENIX" => Some("PHX"),
+        "PORTLAND TRAIL BLAZERS" | "PORTLAND" => Some("POR"),
+        "SACRAMENTO KINGS" | "SACRAMENTO" => Some("SAC"),
+        "SAN ANTONIO SPURS" | "SAN ANTONIO" => Some("SAS"),
+        "TORONTO RAPTORS" | "TORONTO" => Some("TOR"),
+        "UTAH JAZZ" | "UTAH" => Some("UTA"),
+        "WASHINGTON WIZARDS" | "WASHINGTON" => Some("WAS"),
+        _ => None,
+    }
+}
+
+fn nhl_team_code(name: &str) -> Option<&'static str> {
+    match name {
+        "ANAHEIM DUCKS" | "ANAHEIM" => Some("ANA"),
+        "ARIZONA COYOTES" | "ARIZONA" => Some("ARI"),
+        "BOSTON BRUINS" => Some("BOS"),
+        "BUFFALO SABRES" | "BUFFALO" => Some("BUF"),
+        "CALGARY FLAMES" | "CALGARY" => Some("CGY"),
+        "CAROLINA HURRICANES" | "CAROLINA" => Some("CAR"),
+        "CHICAGO BLACKHAWKS" => Some("CHI"),
+        "COLORADO AVALANCHE" | "COLORADO" => Some("COL"),
+        "COLUMBUS BLUE JACKETS" | "COLUMBUS" => Some("CBJ"),
+        "DALLAS STARS" => Some("DAL"),
+        "DETROIT RED WINGS" => Some("DET"),
+        "EDMONTON OILERS" | "EDMONTON" => Some("EDM"),
+        "FLORIDA PANTHERS" | "FLORIDA" => Some("FLA"),
+        "LOS ANGELES KINGS" | "LOS ANGELES" | "LA KINGS" => Some("LA"),
+        "MINNESOTA WILD" => Some("MIN"),
+        "MONTREAL CANADIENS" | "MONTREAL" => Some("MTL"),
+        "NASHVILLE PREDATORS" | "NASHVILLE" => Some("NSH"),
+        "NEW JERSEY DEVILS" | "NEW JERSEY" => Some("NJ"),
+        "NEW YORK ISLANDERS" | "NEW YORK I" | "NY ISLANDERS" => Some("NYI"),
+        "NEW YORK RANGERS" | "NEW YORK R" | "NY RANGERS" => Some("NYR"),
+        "OTTAWA SENATORS" | "OTTAWA" => Some("OTT"),
+        "PHILADELPHIA FLYERS" => Some("PHI"),
+        "PITTSBURGH PENGUINS" | "PITTSBURGH" => Some("PIT"),
+        "SAN JOSE SHARKS" | "SAN JOSE" => Some("SJ"),
+        "SEATTLE KRAKEN" | "SEATTLE" => Some("SEA"),
+        "ST LOUIS BLUES" | "ST. LOUIS BLUES" | "ST LOUIS" | "ST. LOUIS" => Some("STL"),
+        "TAMPA BAY LIGHTNING" | "TAMPA BAY" => Some("TB"),
+        "TORONTO MAPLE LEAFS" => Some("TOR"),
+        "UTAH HOCKEY CLUB" => Some("UTA"),
+        "VANCOUVER CANUCKS" | "VANCOUVER" => Some("VAN"),
+        "VEGAS GOLDEN KNIGHTS" | "VEGAS" => Some("VGK"),
+        "WASHINGTON CAPITALS" | "WASHINGTON" => Some("WSH"),
+        "WINNIPEG JETS" | "WINNIPEG" => Some("WPG"),
+        _ => None,
+    }
+}
+
+fn epl_team_code(name: &str) -> Option<&'static str> {
+    match name {
+        "ARSENAL" => Some("ARS"),
+        "ASTON VILLA" => Some("AVL"),
+        "AFC BOURNEMOUTH" | "BOURNEMOUTH" => Some("BOU"),
+        "BRENTFORD" => Some("BRE"),
+        "BRIGHTON AND HOVE ALBION" | "BRIGHTON" => Some("BHA"),
+        "BURNLEY" => Some("BUR"),
+        "CHELSEA" => Some("CHE"),
+        "CRYSTAL PALACE" => Some("CRY"),
+        "EVERTON" => Some("EVE"),
+        "FULHAM" => Some("FUL"),
+        "IPSWICH TOWN" | "IPSWICH" => Some("IPS"),
+        "LEEDS UNITED" => Some("LEE"),
+        "LEICESTER CITY" | "LEICESTER" => Some("LEI"),
+        "LIVERPOOL" => Some("LIV"),
+        "MANCHESTER CITY" => Some("MCI"),
+        "MANCHESTER UNITED" => Some("MUN"),
+        "NEWCASTLE UNITED" | "NEWCASTLE" => Some("NEW"),
+        "NOTTINGHAM FOREST" | "NOTTINGHAM" => Some("NFO"),
+        "SUNDERLAND" => Some("SUN"),
+        "TOTTENHAM HOTSPUR" | "TOTTENHAM" => Some("TOT"),
+        "WEST HAM UNITED" | "WEST HAM" => Some("WHU"),
+        "WOLVERHAMPTON WANDERERS" | "WOLVERHAMPTON" | "WOLVES" => Some("WOL"),
+        _ => None,
+    }
+}
+
 /// Normalizes a team name by stripping mascots and keeping location.
 /// Matches the JS dashboard logic: suffix must be at end preceded by whitespace.
 pub fn normalize_team(name: &str) -> String {
@@ -368,5 +487,56 @@ mod tests {
         };
         assert_eq!(sm.status, "open");
         assert_eq!(sm.close_time.as_deref(), Some("2026-01-20T04:00:00Z"));
+    }
+
+    #[test]
+    fn test_team_code_nba_full_names() {
+        assert_eq!(team_code("basketball", "Los Angeles Lakers"), Some("LAL"));
+        assert_eq!(team_code("basketball", "Los Angeles Clippers"), Some("LAC"));
+        assert_eq!(team_code("basketball", "Portland Trail Blazers"), Some("POR"));
+        assert_eq!(team_code("basketball", "Golden State Warriors"), Some("GSW"));
+        assert_eq!(team_code("basketball", "New York Knicks"), Some("NYK"));
+        assert_eq!(team_code("basketball", "Brooklyn Nets"), Some("BKN"));
+        assert_eq!(team_code("basketball", "Oklahoma City Thunder"), Some("OKC"));
+        assert_eq!(team_code("basketball", "New Orleans Pelicans"), Some("NOP"));
+    }
+
+    #[test]
+    fn test_team_code_nba_kalshi_abbreviated() {
+        assert_eq!(team_code("basketball", "Los Angeles L"), Some("LAL"));
+        assert_eq!(team_code("basketball", "Los Angeles C"), Some("LAC"));
+        assert_eq!(team_code("basketball", "Portland"), Some("POR"));
+        assert_eq!(team_code("basketball", "Golden State"), Some("GSW"));
+        assert_eq!(team_code("basketball", "New York"), Some("NYK"));
+        assert_eq!(team_code("basketball", "New Orleans"), Some("NOP"));
+        assert_eq!(team_code("basketball", "Oklahoma City"), Some("OKC"));
+    }
+
+    #[test]
+    fn test_team_code_nhl_disambiguation() {
+        assert_eq!(team_code("ice-hockey", "New York Rangers"), Some("NYR"));
+        assert_eq!(team_code("ice-hockey", "New York Islanders"), Some("NYI"));
+        assert_eq!(team_code("ice-hockey", "New York R"), Some("NYR"));
+        assert_eq!(team_code("ice-hockey", "New York I"), Some("NYI"));
+        assert_eq!(team_code("ice-hockey", "Los Angeles Kings"), Some("LA"));
+        assert_eq!(team_code("ice-hockey", "Los Angeles"), Some("LA"));
+        assert_eq!(team_code("ice-hockey", "Washington Capitals"), Some("WSH"));
+    }
+
+    #[test]
+    fn test_team_code_epl() {
+        assert_eq!(team_code("soccer-epl", "Tottenham Hotspur"), Some("TOT"));
+        assert_eq!(team_code("soccer-epl", "Tottenham"), Some("TOT"));
+        assert_eq!(team_code("soccer-epl", "Manchester United"), Some("MUN"));
+        assert_eq!(team_code("soccer-epl", "Manchester City"), Some("MCI"));
+        assert_eq!(team_code("soccer-epl", "Nottingham Forest"), Some("NFO"));
+        assert_eq!(team_code("soccer-epl", "Nottingham"), Some("NFO"));
+    }
+
+    #[test]
+    fn test_team_code_fallback_unknown() {
+        assert_eq!(team_code("basketball", "Nonexistent Team"), None);
+        assert_eq!(team_code("unknown-sport", "Boston Celtics"), None);
+        assert_eq!(team_code("college-basketball", "Duke Blue Devils"), None);
     }
 }
