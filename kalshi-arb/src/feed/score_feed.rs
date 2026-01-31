@@ -270,6 +270,10 @@ impl ScorePoller {
         }
     }
 
+    pub fn primary_url(&self) -> &str {
+        &self.nba_url
+    }
+
     pub async fn fetch(&mut self) -> anyhow::Result<Vec<ScoreUpdate>> {
         // When ESPN is primary, periodically probe NBA API for recovery.
         // Every `failover_threshold` polls, try NBA first instead of ESPN.

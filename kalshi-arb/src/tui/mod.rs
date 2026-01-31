@@ -1,3 +1,4 @@
+pub mod config_view;
 pub mod render;
 pub mod state;
 
@@ -21,6 +22,9 @@ pub enum TuiCommand {
     Resume,
     FetchDiagnostic,
     ToggleSport(String),
+    OpenConfig,
+    CloseConfig,
+    UpdateConfig { sport_key: Option<String>, field_path: String, value: String },
 }
 
 /// Run the TUI. Reads state from `state_rx`, sends commands on `cmd_tx`.
@@ -59,11 +63,17 @@ async fn tui_loop(
     let mut trade_scroll_offset: usize = 0;
     let mut diagnostic_focus = false;
     let mut diagnostic_scroll_offset: usize = 0;
+    let mut config_focus = false;
+    let mut config_view: Option<config_view::ConfigViewState> = None;
 
     loop {
         // Render current state with UI-local overrides
         {
             let mut state = state_rx.borrow().clone();
+            // If engine provided a fresh config_view (from OpenConfig), take it
+            if config_focus && config_view.is_none() && state.config_view.is_some() {
+                config_view = state.config_view.take();
+            }
             state.log_focus = log_focus;
             state.log_scroll_offset = log_scroll_offset;
             state.market_focus = market_focus;
@@ -74,7 +84,11 @@ async fn tui_loop(
             state.trade_scroll_offset = trade_scroll_offset;
             state.diagnostic_focus = diagnostic_focus;
             state.diagnostic_scroll_offset = diagnostic_scroll_offset;
+            state.config_focus = config_focus;
+            // Move config_view into state for rendering, then take it back
+            state.config_view = config_view.take();
             terminal.draw(|f| render::draw(f, &state, spinner_frame))?;
+            config_view = state.config_view.take();
         }
 
         tokio::select! {
@@ -84,7 +98,105 @@ async fn tui_loop(
             event = event_stream.next() => {
                 if let Some(Ok(Event::Key(key))) = event {
                     if key.kind == KeyEventKind::Press {
-                        if log_focus {
+                        if config_focus {
+                            if let Some(ref mut cv) = config_view {
+                                if cv.editing {
+                                    match key.code {
+                                        KeyCode::Enter => {
+                                            // Confirm edit
+                                            let field = &cv.tabs[cv.active_tab].fields[cv.selected_field];
+                                            let sport_key = cv.tabs[cv.active_tab].sport_key.clone();
+                                            let field_path = field.config_path.clone();
+                                            let value = cv.edit_buffer.clone();
+                                            // Update the field value in the view
+                                            cv.tabs[cv.active_tab].fields[cv.selected_field].value = value.clone();
+                                            cv.editing = false;
+                                            let _ = cmd_tx.send(TuiCommand::UpdateConfig {
+                                                sport_key, field_path, value,
+                                            }).await;
+                                        }
+                                        KeyCode::Esc => {
+                                            cv.editing = false;
+                                            cv.edit_buffer.clear();
+                                        }
+                                        KeyCode::Backspace => {
+                                            cv.edit_buffer.pop();
+                                        }
+                                        KeyCode::Char(c) => {
+                                            cv.edit_buffer.push(c);
+                                        }
+                                        _ => {}
+                                    }
+                                } else {
+                                    match key.code {
+                                        KeyCode::Esc => {
+                                            config_focus = false;
+                                            config_view = None;
+                                            let _ = cmd_tx.send(TuiCommand::CloseConfig).await;
+                                        }
+                                        KeyCode::Left => {
+                                            if cv.active_tab > 0 {
+                                                cv.active_tab -= 1;
+                                            } else {
+                                                cv.active_tab = cv.tabs.len().saturating_sub(1);
+                                            }
+                                            cv.selected_field = 0;
+                                        }
+                                        KeyCode::Right => {
+                                            cv.active_tab = (cv.active_tab + 1) % cv.tabs.len();
+                                            cv.selected_field = 0;
+                                        }
+                                        KeyCode::Up | KeyCode::Char('k') => {
+                                            if cv.selected_field > 0 {
+                                                cv.selected_field -= 1;
+                                            }
+                                        }
+                                        KeyCode::Down | KeyCode::Char('j') => {
+                                            let max = cv.tabs[cv.active_tab].fields.len().saturating_sub(1);
+                                            if cv.selected_field < max {
+                                                cv.selected_field += 1;
+                                            }
+                                        }
+                                        KeyCode::Enter => {
+                                            let field = &cv.tabs[cv.active_tab].fields[cv.selected_field];
+                                            if !field.read_only {
+                                                cv.editing = true;
+                                                cv.edit_buffer = field.value.clone();
+                                            }
+                                        }
+                                        KeyCode::Char(' ') => {
+                                            let field = &cv.tabs[cv.active_tab].fields[cv.selected_field];
+                                            if !field.read_only {
+                                                if let config_view::FieldType::Bool = field.field_type {
+                                                    let new_val = if field.value == "true" { "false" } else { "true" };
+                                                    let sport_key = cv.tabs[cv.active_tab].sport_key.clone();
+                                                    let field_path = field.config_path.clone();
+                                                    cv.tabs[cv.active_tab].fields[cv.selected_field].value = new_val.to_string();
+                                                    let _ = cmd_tx.send(TuiCommand::UpdateConfig {
+                                                        sport_key, field_path, value: new_val.to_string(),
+                                                    }).await;
+                                                }
+                                            }
+                                        }
+                                        KeyCode::Char('d') => {
+                                            let field = &cv.tabs[cv.active_tab].fields[cv.selected_field];
+                                            if !field.read_only && field.is_override {
+                                                let sport_key = cv.tabs[cv.active_tab].sport_key.clone();
+                                                let field_path = field.config_path.clone();
+                                                let _ = cmd_tx.send(TuiCommand::UpdateConfig {
+                                                    sport_key, field_path, value: String::new(),
+                                                }).await;
+                                            }
+                                        }
+                                        KeyCode::Char('q') => {
+                                            let _ = cmd_tx.send(TuiCommand::Quit).await;
+                                            return Ok(());
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        } else if log_focus {
                             match key.code {
                                 KeyCode::Esc | KeyCode::Char('l') => {
                                     log_focus = false;
@@ -289,6 +401,10 @@ async fn tui_loop(
                                     if state_rx.borrow().markets.is_empty() {
                                         let _ = cmd_tx.send(TuiCommand::FetchDiagnostic).await;
                                     }
+                                }
+                                KeyCode::Char('c') => {
+                                    let _ = cmd_tx.send(TuiCommand::OpenConfig).await;
+                                    config_focus = true;
                                 }
                                 KeyCode::Char(c @ '1'..='8') => {
                                     let key = state_rx.borrow().sport_toggles.iter()

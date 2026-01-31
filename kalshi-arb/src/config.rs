@@ -234,6 +234,77 @@ impl MomentumConfig {
     }
 }
 
+// ── Runtime config persistence ──────────────────────────────────────────
+
+/// Update a single field in the TOML config file at the given dotted path.
+pub fn persist_field(config_path: &Path, dotted_key: &str, value: &str) -> Result<()> {
+    let content = std::fs::read_to_string(config_path)?;
+    let mut doc: toml::Value = toml::from_str(&content)?;
+
+    let parts: Vec<&str> = dotted_key.split('.').collect();
+    let mut current = &mut doc;
+    for (i, part) in parts.iter().enumerate() {
+        if i == parts.len() - 1 {
+            // Set the value
+            if let Some(table) = current.as_table_mut() {
+                // Try to preserve the original type
+                let old_val = table.get(*part);
+                let new_val = match old_val {
+                    Some(toml::Value::Integer(_)) => {
+                        toml::Value::Integer(value.parse().unwrap_or(0))
+                    }
+                    Some(toml::Value::Float(_)) => {
+                        toml::Value::Float(value.parse().unwrap_or(0.0))
+                    }
+                    Some(toml::Value::Boolean(_)) => {
+                        toml::Value::Boolean(value.parse().unwrap_or(false))
+                    }
+                    _ => toml::Value::String(value.to_string()),
+                };
+                table.insert(part.to_string(), new_val);
+            }
+        } else {
+            // Navigate into nested table, creating intermediate tables if needed
+            if current.as_table().is_some_and(|t| !t.contains_key(*part)) {
+                if let Some(table) = current.as_table_mut() {
+                    table.insert(part.to_string(), toml::Value::Table(toml::map::Map::new()));
+                }
+            }
+            current = current
+                .get_mut(*part)
+                .ok_or_else(|| anyhow::anyhow!("path not found: {}", dotted_key))?;
+        }
+    }
+
+    let output = toml::to_string_pretty(&doc)?;
+    std::fs::write(config_path, output)?;
+    Ok(())
+}
+
+/// Remove a field from the TOML config, reverting to the global default.
+pub fn remove_field(config_path: &Path, dotted_key: &str) -> Result<()> {
+    let content = std::fs::read_to_string(config_path)?;
+    let mut doc: toml::Value = toml::from_str(&content)?;
+
+    let parts: Vec<&str> = dotted_key.split('.').collect();
+    let mut current = &mut doc;
+    for (i, part) in parts.iter().enumerate() {
+        if i == parts.len() - 1 {
+            if let Some(table) = current.as_table_mut() {
+                table.remove(*part);
+            }
+        } else {
+            current = current
+                .get_mut(*part)
+                .ok_or_else(|| anyhow::anyhow!("path not found: {}", dotted_key))?;
+        }
+    }
+
+    let output = toml::to_string_pretty(&doc)?;
+    std::fs::write(config_path, output)?;
+    Ok(())
+}
+
 // ── Config loading & env helpers ────────────────────────────────────────
 
 impl Config {
@@ -533,5 +604,114 @@ odds_source = "the-odds-api"
         assert_eq!(config.sports["college-basketball"].fair_value, "score-feed");
         assert_eq!(config.sports["college-basketball-womens"].fair_value, "score-feed");
         assert_eq!(config.sports["mma"].fair_value, "odds-feed");
+    }
+
+    #[test]
+    fn test_persist_field_roundtrip() {
+        let dir = std::env::temp_dir().join("kalshi_test_persist");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[strategy]
+taker_edge_threshold = 5
+maker_edge_threshold = 2
+min_edge_after_fees = 1
+"#,
+        )
+        .unwrap();
+
+        persist_field(&path, "strategy.taker_edge_threshold", "8").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("taker_edge_threshold = 8"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_persist_field_float() {
+        let dir = std::env::temp_dir().join("kalshi_test_persist_float");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[risk]
+kelly_fraction = 0.25
+"#,
+        )
+        .unwrap();
+
+        persist_field(&path, "risk.kelly_fraction", "0.5").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("kelly_fraction = 0.5"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_persist_field_bool() {
+        let dir = std::env::temp_dir().join("kalshi_test_persist_bool");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[simulation]
+use_break_even_exit = true
+"#,
+        )
+        .unwrap();
+
+        persist_field(&path, "simulation.use_break_even_exit", "false").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("use_break_even_exit = false"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_persist_field_creates_intermediate_tables() {
+        let dir = std::env::temp_dir().join("kalshi_test_persist_nested");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[sports.basketball]
+enabled = true
+"#,
+        )
+        .unwrap();
+
+        persist_field(&path, "sports.basketball.strategy.taker_edge_threshold", "3").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(content.contains("taker_edge_threshold"));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_remove_field() {
+        let dir = std::env::temp_dir().join("kalshi_test_remove");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test_config.toml");
+        std::fs::write(
+            &path,
+            r#"
+[sports.basketball.strategy]
+taker_edge_threshold = 3
+maker_edge_threshold = 1
+"#,
+        )
+        .unwrap();
+
+        remove_field(&path, "sports.basketball.strategy.taker_edge_threshold").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        assert!(!content.contains("taker_edge_threshold"));
+        assert!(content.contains("maker_edge_threshold = 1"));
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

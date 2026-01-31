@@ -6,13 +6,18 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, Tabs},
     Frame,
 };
 
 const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
 pub fn draw(f: &mut Frame, state: &AppState, spinner_frame: u8) {
+    if state.config_focus {
+        render_config(f, state);
+        return;
+    }
+
     let width = f.area().width.saturating_sub(2) as usize;
 
     let bal = format!("${:.2}", state.balance_cents as f64 / 100.0);
@@ -893,6 +898,8 @@ fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
             Span::raw("rades  "),
             Span::styled("[d]", Style::default().fg(Color::Yellow)),
             Span::raw("iag  "),
+            Span::styled("[c]", Style::default().fg(Color::Yellow)),
+            Span::raw("onfig  "),
         ])
     };
     let para = Paragraph::new(line);
@@ -1115,6 +1122,99 @@ fn truncate_with_ellipsis(s: &str, max_width: usize) -> Cow<'_, str> {
             .unwrap_or(s.len());
         Cow::Owned(format!("{}...", &s[..end]))
     }
+}
+
+fn render_config(f: &mut Frame, state: &AppState) {
+    let Some(cv) = &state.config_view else { return };
+
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(3), // tab bar
+            Constraint::Min(0),   // body
+            Constraint::Length(1), // help line
+        ])
+        .split(f.area());
+
+    // Tab bar
+    let tab_titles: Vec<Line> = cv
+        .tabs
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            if i == cv.active_tab {
+                Line::from(Span::styled(
+                    t.label.as_str(),
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ))
+            } else {
+                Line::from(Span::raw(t.label.as_str()))
+            }
+        })
+        .collect();
+    let tabs = Tabs::new(tab_titles)
+        .block(Block::default().borders(Borders::ALL).title(" Config "))
+        .highlight_style(Style::default().fg(Color::Yellow))
+        .select(cv.active_tab);
+    f.render_widget(tabs, chunks[0]);
+
+    // Body: field list
+    let active_tab = &cv.tabs[cv.active_tab];
+    let rows: Vec<Row> = active_tab
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(i, field)| {
+            let label_style = if field.is_override {
+                Style::default().fg(Color::Yellow)
+            } else {
+                Style::default().fg(Color::White)
+            };
+            let value_str = if cv.editing && i == cv.selected_field {
+                format!("{}\u{258f}", cv.edit_buffer) // show cursor
+            } else {
+                field.value.clone()
+            };
+            let value_style = if field.read_only {
+                Style::default().fg(Color::DarkGray)
+            } else if i == cv.selected_field {
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            Row::new(vec![
+                Cell::from(field.label.clone()).style(label_style),
+                Cell::from(value_str).style(value_style),
+            ])
+        })
+        .collect();
+
+    let table = Table::new(
+        rows,
+        [Constraint::Percentage(50), Constraint::Percentage(50)],
+    )
+    .block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!(" {} ", active_tab.label)),
+    )
+    .row_highlight_style(Style::default().bg(Color::DarkGray));
+    let mut table_state = ratatui::widgets::TableState::default();
+    table_state.select(Some(cv.selected_field));
+    f.render_stateful_widget(table, chunks[1], &mut table_state);
+
+    // Help line
+    let help = if cv.editing {
+        " Enter: confirm | Esc: cancel | Type to edit "
+    } else {
+        " \u{2190}\u{2192}: tabs | \u{2191}\u{2193}: fields | Enter: edit | Space: toggle bool | d: delete override | Esc: close "
+    };
+    let help_line = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
+    f.render_widget(help_line, chunks[2]);
 }
 
 #[cfg(test)]

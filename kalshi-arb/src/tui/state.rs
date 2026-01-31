@@ -65,6 +65,8 @@ pub struct AppState {
     /// Per-sport toggle state: (key, label, hotkey, enabled)
     pub sport_toggles: Vec<(String, String, char, bool)>,
     pub odds_source: String,
+    pub config_focus: bool,
+    pub config_view: Option<crate::tui::config_view::ConfigViewState>,
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +168,8 @@ impl AppState {
             live_book: HashMap::new(),
             sport_toggles: Vec::new(),
             odds_source: "ODDS-API".to_string(),
+            config_focus: false,
+            config_view: None,
         }
     }
 

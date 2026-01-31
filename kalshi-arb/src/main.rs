@@ -511,6 +511,35 @@ async fn main() -> Result<()> {
                             &mut api_request_times, &state_tx_engine, &market_index,
                         ).await;
                     }
+                    tui::TuiCommand::OpenConfig => {
+                        let tabs = tui::config_view::build_config_tabs(
+                            &sport_pipelines,
+                            &config.strategy,
+                            &config.momentum,
+                            &risk_config,
+                            &sim_config,
+                        );
+                        let cv = tui::config_view::ConfigViewState::new(tabs);
+                        state_tx_engine.send_modify(|s| {
+                            s.config_view = Some(cv);
+                            s.config_focus = true;
+                        });
+                    }
+                    tui::TuiCommand::CloseConfig => {
+                        state_tx_engine.send_modify(|s| {
+                            s.config_focus = false;
+                            s.config_view = None;
+                        });
+                    }
+                    tui::TuiCommand::UpdateConfig { sport_key: _, field_path, value } => {
+                        if value.is_empty() {
+                            if let Err(e) = config::remove_field(&config_path, &field_path) {
+                                tracing::warn!(path = %field_path, error = %e, "failed to remove config field");
+                            }
+                        } else if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
+                            tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
+                        }
+                    }
                 }
             }
 
@@ -626,6 +655,35 @@ async fn main() -> Result<()> {
                                             &mut sport_pipelines, &mut odds_sources,
                                             &mut api_request_times, &state_tx_engine, &market_index,
                                         ).await;
+                                    }
+                                    tui::TuiCommand::OpenConfig => {
+                                        let tabs = tui::config_view::build_config_tabs(
+                                            &sport_pipelines,
+                                            &config.strategy,
+                                            &config.momentum,
+                                            &risk_config,
+                                            &sim_config,
+                                        );
+                                        let cv = tui::config_view::ConfigViewState::new(tabs);
+                                        state_tx_engine.send_modify(|s| {
+                                            s.config_view = Some(cv);
+                                            s.config_focus = true;
+                                        });
+                                    }
+                                    tui::TuiCommand::CloseConfig => {
+                                        state_tx_engine.send_modify(|s| {
+                                            s.config_focus = false;
+                                            s.config_view = None;
+                                        });
+                                    }
+                                    tui::TuiCommand::UpdateConfig { sport_key: _, field_path, value } => {
+                                        if value.is_empty() {
+                                            if let Err(e) = config::remove_field(&config_path, &field_path) {
+                                                tracing::warn!(path = %field_path, error = %e, "failed to remove config field");
+                                            }
+                                        } else if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
+                                            tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
+                                        }
                                     }
                                 }
                             }
