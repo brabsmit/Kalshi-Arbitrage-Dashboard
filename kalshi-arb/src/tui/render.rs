@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
-use super::state::{AppState, PositionRow};
+use super::state::AppState;
+use crate::engine::fees::calculate_fee;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -409,43 +410,150 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
     f.render_widget(table, area);
 }
 
+fn format_age(elapsed: std::time::Duration) -> String {
+    let secs = elapsed.as_secs();
+    if secs < 60 {
+        format!("{}s", secs)
+    } else if secs < 3600 {
+        format!("{}m", secs / 60)
+    } else {
+        format!("{}h{:02}m", secs / 3600, (secs % 3600) / 60)
+    }
+}
+
 fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     let inner_width = area.width.saturating_sub(2) as usize;
-    let fixed_cols: usize = 5 + 8 + 8 + 8; // qty+entry+sell+pnl = 29
-    let ticker_w = inner_width.saturating_sub(fixed_cols).max(4);
 
-    let header = Row::new(vec!["Ticker", "Qty", "Entry", "Sell @", "P&L"])
+    // Responsive column dropping.
+    // Fixed column widths: Side=4 Qty=5 Entry=6 Bid=5 Sell=6 Edge=6 Tgt=7 Mkt=7 Age=6 = 52
+    // Drop order: Edge(6), Side(4), Age(6), Mkt(7)
+    let show_edge = inner_width >= 56;
+    let show_side = inner_width >= 48;
+    let show_age = inner_width >= 44;
+    let show_mkt = inner_width >= 38;
+
+    let fixed: usize = 5 + 6 + 5 + 6 + 7  // Qty + Entry + Bid + Sell@ + Tgt (always shown)
+        + if show_mkt { 7 } else { 0 }
+        + if show_age { 6 } else { 0 }
+        + if show_side { 4 } else { 0 }
+        + if show_edge { 6 } else { 0 };
+    let ticker_w = inner_width.saturating_sub(fixed).max(4);
+
+    // Build header
+    let mut headers: Vec<&str> = vec!["Ticker"];
+    if show_side { headers.push("Side"); }
+    headers.extend_from_slice(&["Qty", "Entry", "Bid", "Sell @"]);
+    if show_edge { headers.push("Edge"); }
+    headers.push("Tgt");
+    if show_mkt { headers.push("Mkt"); }
+    if show_age { headers.push("Age"); }
+
+    let header = Row::new(headers)
         .style(Style::default().add_modifier(Modifier::BOLD));
 
-    let positions_source: Vec<PositionRow> = if state.sim_mode {
-        state.sim_positions.iter().map(|sp| {
-            let unrealized = (sp.sell_price as i32 - sp.entry_price as i32) * sp.quantity as i32
-                - sp.entry_fee as i32;
-            PositionRow {
-                ticker: sp.ticker.clone(),
-                quantity: sp.quantity,
-                entry_price: sp.entry_price,
-                sell_price: sp.sell_price,
-                unrealized_pnl: unrealized,
-            }
-        }).collect()
+    // Build constraints
+    let mut constraints: Vec<Constraint> = vec![Constraint::Length(ticker_w as u16)];
+    if show_side { constraints.push(Constraint::Length(4)); }
+    constraints.extend_from_slice(&[
+        Constraint::Length(5),
+        Constraint::Length(6),
+        Constraint::Length(5),
+        Constraint::Length(6),
+    ]);
+    if show_edge { constraints.push(Constraint::Length(6)); }
+    constraints.push(Constraint::Length(7));
+    if show_mkt { constraints.push(Constraint::Length(7)); }
+    if show_age { constraints.push(Constraint::Length(6)); }
+
+    let now = std::time::Instant::now();
+
+    // Build rows from sim_positions (or real positions)
+    let positions = if state.sim_mode {
+        &state.sim_positions
     } else {
-        state.positions.clone()
+        &state.sim_positions // TODO: use state.positions when real mode implemented
     };
 
-    let rows: Vec<Row> = positions_source
+    let rows: Vec<Row> = positions
         .iter()
-        .map(|p| {
-            let pnl_color = if p.unrealized_pnl >= 0 { Color::Green } else { Color::Red };
-            let ticker = truncate_with_ellipsis(&p.ticker, ticker_w);
-            Row::new(vec![
-                Cell::from(ticker.into_owned()),
-                Cell::from(p.quantity.to_string()),
-                Cell::from(format!("{}c", p.entry_price)),
-                Cell::from(format!("{}c", p.sell_price)),
-                Cell::from(format!("{:+}c", p.unrealized_pnl))
-                    .style(Style::default().fg(pnl_color)),
-            ])
+        .map(|sp| {
+            let ticker = truncate_with_ellipsis(&sp.ticker, ticker_w);
+
+            // Look up live prices
+            let (yes_bid, yes_ask) = state.live_book
+                .get(&sp.ticker)
+                .map(|&(yb, ya, _, _)| (yb, ya))
+                .unwrap_or((0, 0));
+
+            // Look up fair value from markets
+            let fair_value = state.markets
+                .iter()
+                .find(|m| m.ticker == sp.ticker)
+                .map(|m| m.fair_value)
+                .unwrap_or(0);
+
+            // Target P&L: (sell@ - entry) * qty - entry_fee
+            let tgt_pnl = (sp.sell_price as i32 - sp.entry_price as i32) * sp.quantity as i32
+                - sp.entry_fee as i32;
+            let tgt_color = if tgt_pnl >= 0 { Color::Green } else { Color::Red };
+
+            // Mkt P&L: (bid * qty - exit_fee) - (entry * qty + entry_fee)
+            let mkt_pnl = if yes_bid > 0 {
+                let exit_revenue = (yes_bid as i64) * (sp.quantity as i64);
+                let exit_fee = calculate_fee(yes_bid, sp.quantity, true) as i64;
+                let entry_cost = (sp.entry_price as i64) * (sp.quantity as i64) + sp.entry_fee as i64;
+                (exit_revenue - exit_fee - entry_cost) as i32
+            } else {
+                -((sp.entry_price as i32) * (sp.quantity as i32) + sp.entry_fee as i32)
+            };
+            let mkt_color = if mkt_pnl >= 0 { Color::Green } else { Color::Red };
+
+            // Edge: fair - ask
+            let edge = if yes_ask > 0 { fair_value as i32 - yes_ask as i32 } else { 0 };
+            let edge_color = if edge > 0 { Color::Green } else { Color::Red };
+
+            // Age
+            let age = format_age(now.duration_since(sp.filled_at));
+
+            // Build cells
+            let mut cells: Vec<Cell> = vec![Cell::from(ticker.into_owned())];
+
+            if show_side {
+                cells.push(Cell::from("YES").style(Style::default().fg(Color::Cyan)));
+            }
+
+            cells.extend_from_slice(&[
+                Cell::from(sp.quantity.to_string()),
+                Cell::from(format!("{}c", sp.entry_price)),
+                Cell::from(if yes_bid > 0 { format!("{}c", yes_bid) } else { "--".to_string() })
+                    .style(Style::default().fg(Color::Yellow)),
+                Cell::from(format!("{}c", sp.sell_price)),
+            ]);
+
+            if show_edge {
+                cells.push(
+                    Cell::from(format!("{:+}", edge))
+                        .style(Style::default().fg(edge_color)),
+                );
+            }
+
+            cells.push(
+                Cell::from(format!("{:+}c", tgt_pnl))
+                    .style(Style::default().fg(tgt_color)),
+            );
+
+            if show_mkt {
+                cells.push(
+                    Cell::from(format!("{:+}c", mkt_pnl))
+                        .style(Style::default().fg(mkt_color)),
+                );
+            }
+
+            if show_age {
+                cells.push(Cell::from(age));
+            }
+
+            Row::new(cells)
         })
         .collect();
 
@@ -469,22 +577,13 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
         " Open Positions ".to_string()
     };
 
-    let table = Table::new(
-        rows,
-        [
-            Constraint::Length(ticker_w as u16),
-            Constraint::Length(5),
-            Constraint::Length(8),
-            Constraint::Length(8),
-            Constraint::Length(8),
-        ],
-    )
-    .header(header)
-    .block(
-        Block::default()
-            .title(title)
-            .borders(Borders::ALL),
-    );
+    let table = Table::new(rows, constraints)
+        .header(header)
+        .block(
+            Block::default()
+                .title(title)
+                .borders(Borders::ALL),
+        );
 
     f.render_widget(table, area);
 }
