@@ -8,6 +8,7 @@ pub struct StrategySignal {
     pub price: u32,
     pub edge: i32,
     pub net_profit_estimate: i32,
+    pub quantity: u32,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -29,6 +30,9 @@ pub fn evaluate(
     taker_threshold: u8,
     maker_threshold: u8,
     min_edge_after_fees: u8,
+    bankroll_cents: u64,
+    kelly_fraction: f64,
+    max_contracts: u32,
 ) -> StrategySignal {
     if best_ask == 0 || fair_value == 0 {
         return StrategySignal {
@@ -36,6 +40,7 @@ pub fn evaluate(
             price: 0,
             edge: 0,
             net_profit_estimate: 0,
+            quantity: 0,
         };
     }
 
@@ -47,18 +52,30 @@ pub fn evaluate(
             price: 0,
             edge,
             net_profit_estimate: 0,
+            quantity: 0,
         };
     }
 
-    // Calculate net profit for taker buy + maker sell at fair value
-    let entry_fee_taker = calculate_fee(best_ask, 1, true) as i32;
-    let exit_fee_maker = calculate_fee(fair_value, 1, false) as i32;
-    let taker_profit = fair_value as i32 - best_ask as i32 - entry_fee_taker - exit_fee_maker;
+    // Kelly-size for taker path
+    let taker_qty = {
+        let raw = super::kelly::kelly_size(fair_value, best_ask, bankroll_cents, kelly_fraction);
+        raw.min(max_contracts)
+    };
+    let entry_fee_taker = calculate_fee(best_ask, taker_qty, true) as i32;
+    let exit_fee_maker_t = calculate_fee(fair_value, taker_qty, false) as i32;
+    let taker_profit = (fair_value as i32 - best_ask as i32) * taker_qty as i32
+        - entry_fee_taker - exit_fee_maker_t;
 
-    // Calculate net profit for maker buy at bid+1 + maker sell at fair value
+    // Kelly-size for maker path
     let maker_buy_price = best_bid.saturating_add(1).min(99);
-    let entry_fee_maker = calculate_fee(maker_buy_price, 1, false) as i32;
-    let maker_profit = fair_value as i32 - maker_buy_price as i32 - entry_fee_maker - exit_fee_maker;
+    let maker_qty = {
+        let raw = super::kelly::kelly_size(fair_value, maker_buy_price, bankroll_cents, kelly_fraction);
+        raw.min(max_contracts)
+    };
+    let entry_fee_maker = calculate_fee(maker_buy_price, maker_qty, false) as i32;
+    let exit_fee_maker_m = calculate_fee(fair_value, maker_qty, false) as i32;
+    let maker_profit = (fair_value as i32 - maker_buy_price as i32) * maker_qty as i32
+        - entry_fee_maker - exit_fee_maker_m;
 
     if edge >= taker_threshold as i32 && taker_profit >= min_edge_after_fees as i32 {
         StrategySignal {
@@ -66,6 +83,7 @@ pub fn evaluate(
             price: best_ask,
             edge,
             net_profit_estimate: taker_profit,
+            quantity: taker_qty,
         }
     } else if edge >= maker_threshold as i32 && maker_profit >= min_edge_after_fees as i32 {
         StrategySignal {
@@ -73,6 +91,7 @@ pub fn evaluate(
             price: maker_buy_price,
             edge,
             net_profit_estimate: maker_profit,
+            quantity: maker_qty,
         }
     } else {
         StrategySignal {
@@ -80,6 +99,7 @@ pub fn evaluate(
             price: 0,
             edge,
             net_profit_estimate: 0,
+            quantity: 0,
         }
     }
 }
@@ -104,6 +124,7 @@ pub fn momentum_gate(
             if momentum_score < maker_momentum_threshold as f64 {
                 StrategySignal {
                     action: TradeAction::Skip,
+                    quantity: 0,
                     ..signal
                 }
             } else if momentum_score < taker_momentum_threshold as f64 {
@@ -123,6 +144,7 @@ pub fn momentum_gate(
             if momentum_score < maker_momentum_threshold as f64 {
                 StrategySignal {
                     action: TradeAction::Skip,
+                    quantity: 0,
                     ..signal
                 }
             } else {
@@ -203,21 +225,22 @@ mod tests {
 
     #[test]
     fn test_evaluate_taker_buy() {
-        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        let signal = evaluate(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal.action, TradeAction::TakerBuy);
         assert_eq!(signal.price, 60);
         assert_eq!(signal.edge, 5);
+        assert!(signal.quantity > 0);
     }
 
     #[test]
     fn test_evaluate_maker_buy() {
-        let signal = evaluate(63, 58, 60, 5, 2, 1);
+        let signal = evaluate(63, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
     }
 
     #[test]
     fn test_evaluate_skip() {
-        let signal = evaluate(61, 58, 60, 5, 2, 1);
+        let signal = evaluate(61, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal.action, TradeAction::Skip);
     }
 
@@ -242,7 +265,7 @@ mod tests {
     #[test]
     fn test_momentum_gate_skip_below_maker_threshold() {
         // Edge qualifies for taker, but momentum is too low → SKIP
-        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        let signal = evaluate(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal.action, TradeAction::TakerBuy);
         let gated = momentum_gate(signal, 30.0, 40, 75);
         assert_eq!(gated.action, TradeAction::Skip);
@@ -251,7 +274,7 @@ mod tests {
     #[test]
     fn test_momentum_gate_maker_in_middle_range() {
         // Edge qualifies for taker, momentum is moderate → MAKER
-        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        let signal = evaluate(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal.action, TradeAction::TakerBuy);
         let gated = momentum_gate(signal, 55.0, 40, 75);
         assert!(matches!(gated.action, TradeAction::MakerBuy { .. }));
@@ -260,7 +283,7 @@ mod tests {
     #[test]
     fn test_momentum_gate_taker_above_threshold() {
         // Edge qualifies for taker, momentum is high → TAKER preserved
-        let signal = evaluate(65, 58, 60, 5, 2, 1);
+        let signal = evaluate(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal.action, TradeAction::TakerBuy);
         let gated = momentum_gate(signal, 80.0, 40, 75);
         assert_eq!(gated.action, TradeAction::TakerBuy);
@@ -269,7 +292,7 @@ mod tests {
     #[test]
     fn test_momentum_gate_skip_stays_skip() {
         // Edge too low → SKIP regardless of momentum
-        let signal = evaluate(61, 58, 60, 5, 2, 1);
+        let signal = evaluate(61, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal.action, TradeAction::Skip);
         let gated = momentum_gate(signal, 90.0, 40, 75);
         assert_eq!(gated.action, TradeAction::Skip);
@@ -278,7 +301,7 @@ mod tests {
     #[test]
     fn test_momentum_gate_maker_downgraded_to_skip() {
         // Edge qualifies for maker only, momentum too low → SKIP
-        let signal = evaluate(63, 58, 60, 5, 2, 1);
+        let signal = evaluate(63, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
         let gated = momentum_gate(signal, 20.0, 40, 75);
         assert_eq!(gated.action, TradeAction::Skip);
@@ -287,7 +310,7 @@ mod tests {
     #[test]
     fn test_momentum_gate_maker_preserved() {
         // Edge qualifies for maker, momentum moderate → MAKER preserved
-        let signal = evaluate(63, 58, 60, 5, 2, 1);
+        let signal = evaluate(63, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
         let gated = momentum_gate(signal, 50.0, 40, 75);
         assert!(matches!(gated.action, TradeAction::MakerBuy { .. }));

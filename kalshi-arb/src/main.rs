@@ -365,6 +365,9 @@ fn evaluate_matched_market(
         strategy_config.taker_edge_threshold,
         strategy_config.maker_edge_threshold,
         strategy_config.min_edge_after_fees,
+        100_000,  // TODO(task5): wire from config/balance
+        0.25,     // TODO(task5): wire from config.risk.kelly_fraction
+        100,      // TODO(task5): wire from config.risk.max_contracts_per_market
     );
 
     // Bypass momentum gating for score-feed signals when configured.
@@ -388,6 +391,7 @@ fn evaluate_matched_market(
             price: 0,
             edge: signal.edge,
             net_profit_estimate: 0,
+            quantity: 0,
         };
     }
 
