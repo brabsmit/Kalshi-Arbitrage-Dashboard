@@ -522,4 +522,16 @@ odds_source = "the-odds-api"
         assert_eq!(resolved.cancel_threshold, 30);
         assert!(!resolved.bypass_for_score_signals);
     }
+
+    #[test]
+    fn test_config_file_parses() {
+        let config = Config::load(std::path::Path::new("config.toml")).unwrap();
+        assert_eq!(config.sports.len(), 8);
+        assert!(config.odds_sources.contains_key("the-odds-api"));
+        assert_eq!(config.sports["basketball"].fair_value, "score-feed");
+        assert_eq!(config.sports["ice-hockey"].fair_value, "odds-feed");
+        assert_eq!(config.sports["college-basketball"].fair_value, "score-feed");
+        assert_eq!(config.sports["college-basketball-womens"].fair_value, "score-feed");
+        assert_eq!(config.sports["mma"].fair_value, "odds-feed");
+    }
 }
