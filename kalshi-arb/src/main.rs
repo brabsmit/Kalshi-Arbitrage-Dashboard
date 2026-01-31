@@ -1383,6 +1383,7 @@ async fn main() -> Result<()> {
                 continue;
             }
             state_tx_display.send_modify(|state| {
+                state.live_book = snapshot.clone();
                 for row in &mut state.markets {
                     if let Some(&(yb, ya, _, _)) = snapshot.get(&row.ticker) {
                         if ya > 0 {
