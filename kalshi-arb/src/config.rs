@@ -36,6 +36,7 @@ pub struct RiskConfig {
     pub max_contracts_per_market: u32,
     pub max_total_exposure_cents: u64,
     pub max_concurrent_markets: u32,
+    pub kelly_fraction: f64,
 }
 
 #[derive(Debug, Deserialize, Clone)]

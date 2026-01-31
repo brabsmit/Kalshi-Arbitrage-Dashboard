@@ -40,6 +40,7 @@ provider = "the-odds-api"
 quota_warning_threshold = 100
 
 [risk]
+kelly_fraction = 0.25
 max_concurrent_markets = 5
 max_contracts_per_market = 10
 max_total_exposure_cents = 50000
