@@ -107,7 +107,7 @@ pub struct WinProbConfig {
 impl Default for WinProbConfig {
     fn default() -> Self {
         Self {
-            home_advantage: 3.0,
+            home_advantage: 2.5,
             k_start: 0.065,
             k_range: 0.25,
             ot_k_start: 0.10,

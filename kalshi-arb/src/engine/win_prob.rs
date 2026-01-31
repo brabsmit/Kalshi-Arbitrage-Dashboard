@@ -108,13 +108,13 @@ mod tests {
     use super::*;
 
     fn default_table() -> WinProbTable {
-        WinProbTable::new(3.0, 0.065, 0.25, 0.10, 1.0)
+        WinProbTable::new(2.5, 0.065, 0.25, 0.10, 1.0)
     }
 
     #[test]
     fn test_lookup_tied_game_start() {
         let prob = default_table().lookup(0, 0);
-        assert!(prob >= 55 && prob <= 60, "got {prob}");
+        assert!(prob >= 52 && prob <= 57, "got {prob}");
     }
 
     #[test]
@@ -133,12 +133,12 @@ mod tests {
 
     #[test]
     fn test_lookup_symmetry() {
-        // With home-court advantage of 3 pts the logistic is centred at
-        // adjusted_diff = 0, i.e. score_diff = -3.  True symmetry is:
+        // With home-court advantage of 2.5 pts the logistic is centred at
+        // adjusted_diff = 0, i.e. score_diff = -2.5.  True symmetry is:
         //   lookup(d, t) + lookup(-(d + 2*HA), t) ≈ 100
-        // Using d = 2, HA = 3 => check lookup(2, 48) + lookup(-8, 48) ≈ 100
+        // Using d = 2, HA = 2.5 => check lookup(2, 48) + lookup(-7, 48) ≈ 100
         let pos = default_table().lookup(2, 48);
-        let neg = default_table().lookup(-8, 48);
+        let neg = default_table().lookup(-7, 48);
         assert!(
             (pos + neg).abs_diff(100) <= 1,
             "pos={pos}, neg={neg}, sum={}",
@@ -185,26 +185,26 @@ mod tests {
     #[test]
     fn test_lookup_home_up_5_halftime() {
         let prob = default_table().lookup(5, 48);
-        assert!(prob >= 65 && prob <= 75, "got {prob}");
+        assert!(prob >= 64 && prob <= 72, "got {prob}");
     }
 
     #[test]
     fn test_lookup_home_up_10_halftime() {
         let prob = default_table().lookup(10, 48);
-        assert!(prob >= 78 && prob <= 88, "got {prob}");
+        assert!(prob >= 74 && prob <= 82, "got {prob}");
     }
 
     #[test]
     fn test_lookup_home_up_5_end_q3() {
         let prob = default_table().lookup(5, 72);
-        assert!(prob >= 76 && prob <= 86, "got {prob}");
+        assert!(prob >= 75 && prob <= 83, "got {prob}");
     }
 
     #[test]
     fn test_overtime_bucket4_up3() {
         // 3 min into OT with a 3-point lead should be ~73-82 %, not >90 %.
         let prob = default_table().lookup_overtime(3, 4);
-        assert!(prob >= 70 && prob <= 85, "got {prob}");
+        assert!(prob >= 68 && prob <= 78, "got {prob}");
     }
 
     // ---- Fair value bridge functions ----
@@ -220,14 +220,14 @@ mod tests {
     fn test_fair_value_from_score_overtime() {
         let (home, away) = default_table().fair_value_overtime(0, 120);
         // At OT bucket 4 (120s/30), tied game with home-court advantage => ~62%
-        assert!(home >= 55 && home <= 65, "got {home}");
+        assert!(home >= 55 && home <= 63, "got {home}");
         assert_eq!(home + away, 100);
     }
 
     #[test]
     fn test_fair_value_pregame() {
         let (home, away) = default_table().fair_value(0, 0);
-        assert!(home >= 55 && home <= 60);
+        assert!(home >= 52 && home <= 57);
         assert_eq!(home + away, 100);
     }
 }

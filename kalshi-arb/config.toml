@@ -47,7 +47,7 @@ latency_ms = 500
 use_break_even_exit = true
 
 [win_prob]
-home_advantage = 3.0
+home_advantage = 2.5
 k_start = 0.065
 k_range = 0.25
 ot_k_start = 0.10
