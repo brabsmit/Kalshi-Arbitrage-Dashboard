@@ -15,6 +15,7 @@ pub struct Config {
     pub odds_feed: OddsFeedConfig,
     pub momentum: MomentumConfig,
     pub score_feed: Option<ScoreFeedConfig>,
+    pub simulation: Option<SimulationConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -76,6 +77,21 @@ pub struct MomentumConfig {
     pub book_pressure_weight: f64,
     pub cancel_check_interval_ms: u64,
     pub velocity_window_size: usize,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SimulationConfig {
+    pub latency_ms: u64,
+    pub use_break_even_exit: bool,
+}
+
+impl Default for SimulationConfig {
+    fn default() -> Self {
+        Self {
+            latency_ms: 500,
+            use_break_even_exit: true,
+        }
+    }
 }
 
 impl Config {

@@ -367,6 +367,7 @@ fn evaluate_matched_market(
                 sell_price: fair,
                 entry_fee: entry_fee as u32,
                 filled_at: std::time::Instant::now(),
+                signal_ask: entry_price,
             });
             s.push_trade(tui::state::TradeRow {
                 time: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -376,6 +377,7 @@ fn evaluate_matched_market(
                 quantity: qty,
                 order_type: "SIM".to_string(),
                 pnl: None,
+                slippage: None,
             });
             s.push_log("TRADE", format!(
                 "SIM BUY {}x {} @ {}¢, sell target {}¢",
@@ -1371,6 +1373,7 @@ async fn main() -> Result<()> {
                                     quantity: pos.quantity,
                                     order_type: "SIM".to_string(),
                                     pnl: Some(pnl as i32),
+                                    slippage: None,
                                 });
                                 s.push_log("TRADE", format!(
                                     "SIM SELL {}x {} @ {}¢, P&L: {:+}¢",
@@ -1423,6 +1426,7 @@ async fn main() -> Result<()> {
                                     quantity: pos.quantity,
                                     order_type: "SIM".to_string(),
                                     pnl: Some(pnl as i32),
+                                    slippage: None,
                                 });
                                 s.push_log("TRADE", format!(
                                     "SIM SELL {}x {} @ {}¢, P&L: {:+}¢",

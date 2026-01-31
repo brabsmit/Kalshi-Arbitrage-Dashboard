@@ -41,3 +41,7 @@ live_poll_interval_s = 3
 pre_game_poll_interval_s = 60
 failover_threshold = 5
 request_timeout_ms = 1000
+
+[simulation]
+latency_ms = 500
+use_break_even_exit = true

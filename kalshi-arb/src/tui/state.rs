@@ -93,6 +93,7 @@ pub struct TradeRow {
     pub quantity: u32,
     pub order_type: String,
     pub pnl: Option<i32>,
+    pub slippage: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -103,6 +104,7 @@ pub struct SimPosition {
     pub sell_price: u32,
     pub entry_fee: u32,
     pub filled_at: Instant,
+    pub signal_ask: u32,
 }
 
 #[derive(Debug, Clone)]
