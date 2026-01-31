@@ -1,4 +1,6 @@
+use reqwest::Client;
 use serde::Deserialize;
+use std::time::Duration;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ScoreSource {
@@ -205,6 +207,93 @@ pub fn parse_espn_scoreboard(json: &str) -> anyhow::Result<Vec<ScoreUpdate>> {
     Ok(updates)
 }
 
+// ── ScorePoller — HTTP Fetching With Failover ──────────────────────
+
+pub struct ScorePoller {
+    client: Client,
+    nba_url: String,
+    espn_url: String,
+    timeout: Duration,
+    failover_threshold: u32,
+    nba_consecutive_failures: u32,
+    espn_is_primary: bool,
+}
+
+impl ScorePoller {
+    pub fn new(
+        nba_url: &str,
+        espn_url: &str,
+        timeout_ms: u64,
+        failover_threshold: u32,
+    ) -> Self {
+        Self {
+            client: Client::new(),
+            nba_url: nba_url.to_string(),
+            espn_url: espn_url.to_string(),
+            timeout: Duration::from_millis(timeout_ms),
+            failover_threshold,
+            nba_consecutive_failures: 0,
+            espn_is_primary: false,
+        }
+    }
+
+    pub async fn fetch(&mut self) -> anyhow::Result<Vec<ScoreUpdate>> {
+        let (primary_url, secondary_url, primary_parser, secondary_parser) =
+            if self.espn_is_primary {
+                (
+                    &self.espn_url,
+                    &self.nba_url,
+                    parse_espn_scoreboard as fn(&str) -> _,
+                    parse_nba_scoreboard as fn(&str) -> _,
+                )
+            } else {
+                (
+                    &self.nba_url,
+                    &self.espn_url,
+                    parse_nba_scoreboard as fn(&str) -> _,
+                    parse_espn_scoreboard as fn(&str) -> _,
+                )
+            };
+
+        match self.fetch_and_parse(primary_url, primary_parser).await {
+            Ok(updates) => {
+                if !self.espn_is_primary {
+                    self.nba_consecutive_failures = 0;
+                }
+                return Ok(updates);
+            }
+            Err(e) => {
+                tracing::warn!(
+                    source = if self.espn_is_primary { "espn" } else { "nba" },
+                    error = %e,
+                    "primary score fetch failed, trying fallback"
+                );
+                if !self.espn_is_primary {
+                    self.nba_consecutive_failures += 1;
+                    if self.nba_consecutive_failures >= self.failover_threshold {
+                        tracing::warn!(
+                            "NBA API hit failover threshold, swapping ESPN to primary"
+                        );
+                        self.espn_is_primary = true;
+                    }
+                }
+            }
+        }
+
+        self.fetch_and_parse(secondary_url, secondary_parser).await
+    }
+
+    async fn fetch_and_parse(
+        &self,
+        url: &str,
+        parser: fn(&str) -> anyhow::Result<Vec<ScoreUpdate>>,
+    ) -> anyhow::Result<Vec<ScoreUpdate>> {
+        let resp = self.client.get(url).timeout(self.timeout).send().await?;
+        let text = resp.text().await?;
+        parser(&text)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,5 +446,15 @@ mod tests {
         assert_eq!(parse_espn_clock("12:00"), Some(720));
         assert_eq!(parse_espn_clock("0:00"), Some(0));
         assert_eq!(parse_espn_clock("0:05.3"), Some(5));
+    }
+
+    #[test]
+    fn test_failover_threshold_tracking() {
+        let mut poller = ScorePoller::new("http://fake-nba", "http://fake-espn", 1000, 3);
+        assert!(!poller.espn_is_primary);
+        poller.nba_consecutive_failures = 2;
+        assert!(!poller.espn_is_primary);
+        poller.nba_consecutive_failures = 3;
+        assert!(poller.nba_consecutive_failures >= poller.failover_threshold);
     }
 }
