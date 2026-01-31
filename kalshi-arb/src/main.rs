@@ -1215,6 +1215,38 @@ async fn main() -> Result<()> {
         }
     });
 
+    // --- Phase 4b: WS display refresh tick (200ms) ---
+    // Patches Bid/Ask/Edge on existing MarketRows from live orderbook
+    // so the TUI updates at near-WebSocket speed between odds poll cycles.
+    let live_book_display = live_book.clone();
+    let state_tx_display = state_tx.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(200));
+        loop {
+            interval.tick().await;
+            // Clone the book snapshot and release the lock immediately
+            let snapshot = if let Ok(book) = live_book_display.lock() {
+                book.clone()
+            } else {
+                continue;
+            };
+            if snapshot.is_empty() {
+                continue;
+            }
+            state_tx_display.send_modify(|state| {
+                for row in &mut state.markets {
+                    if let Some(&(yb, ya, _, _)) = snapshot.get(&row.ticker) {
+                        if ya > 0 {
+                            row.bid = yb;
+                            row.ask = ya;
+                            row.edge = row.fair_value as i32 - ya as i32;
+                        }
+                    }
+                }
+            });
+        }
+    });
+
     // --- Phase 5: Run TUI (blocks until quit) ---
     tui::run_tui(state_rx, cmd_tx).await?;
 
