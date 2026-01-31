@@ -70,6 +70,7 @@ pub struct MarketRow {
     pub action: String,
     pub latency_ms: Option<u64>,
     pub momentum_score: f64,
+    pub staleness_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone)]

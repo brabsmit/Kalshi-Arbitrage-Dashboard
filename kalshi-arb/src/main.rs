@@ -278,6 +278,13 @@ fn process_sport_updates(
                             strategy::TradeAction::Skip => "SKIP",
                         };
 
+                        let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
+                            .ok()
+                            .map(|dt| {
+                                let age = now_utc - dt.with_timezone(&chrono::Utc);
+                                age.num_seconds().max(0) as u64
+                            });
+
                         rows.insert(side.ticker.clone(), MarketRow {
                             ticker: side.ticker.clone(),
                             fair_value: fair,
@@ -287,6 +294,7 @@ fn process_sport_updates(
                             action: action_str.to_string(),
                             latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
                             momentum_score: momentum,
+                            staleness_secs,
                         });
 
                         if signal.action != strategy::TradeAction::Skip {
@@ -423,6 +431,13 @@ fn process_sport_updates(
                         strategy::TradeAction::Skip => "SKIP",
                     };
 
+                    let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
+                        .ok()
+                        .map(|dt| {
+                            let age = now_utc - dt.with_timezone(&chrono::Utc);
+                            age.num_seconds().max(0) as u64
+                        });
+
                     rows.insert(mkt.ticker.clone(), MarketRow {
                         ticker: mkt.ticker.clone(),
                         fair_value: fair,
@@ -432,6 +447,7 @@ fn process_sport_updates(
                         action: action_str.to_string(),
                         latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
                         momentum_score: momentum,
+                        staleness_secs,
                     });
 
                     if signal.action != strategy::TradeAction::Skip {
