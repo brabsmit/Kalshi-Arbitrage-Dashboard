@@ -16,6 +16,7 @@ pub struct Config {
     pub momentum: MomentumConfig,
     pub score_feed: Option<ScoreFeedConfig>,
     pub simulation: Option<SimulationConfig>,
+    pub win_prob: Option<WinProbConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -90,6 +91,27 @@ impl Default for SimulationConfig {
         Self {
             latency_ms: 500,
             use_break_even_exit: true,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct WinProbConfig {
+    pub home_advantage: f64,
+    pub k_start: f64,
+    pub k_range: f64,
+    pub ot_k_start: f64,
+    pub ot_k_range: f64,
+}
+
+impl Default for WinProbConfig {
+    fn default() -> Self {
+        Self {
+            home_advantage: 3.0,
+            k_start: 0.065,
+            k_range: 0.25,
+            ot_k_start: 0.10,
+            ot_k_range: 1.0,
         }
     }
 }

@@ -425,6 +425,7 @@ fn process_score_updates(
     cycle_start: Instant,
     last_score_fetch: &HashMap<String, Instant>,
     sim_config: &config::SimulationConfig,
+    win_prob_table: &engine::win_prob::WinProbTable,
 ) -> SportProcessResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -457,9 +458,9 @@ fn process_score_updates(
         let (home_fair, _away_fair) = if update.period > 4 {
             // Overtime: compute elapsed within the OT period
             let ot_elapsed = update.total_elapsed_seconds.saturating_sub(2880);
-            engine::win_prob::WinProbTable::fair_value_overtime(score_diff, ot_elapsed)
+            win_prob_table.fair_value_overtime(score_diff, ot_elapsed)
         } else {
-            engine::win_prob::WinProbTable::fair_value(score_diff, update.total_elapsed_seconds)
+            win_prob_table.fair_value(score_diff, update.total_elapsed_seconds)
         };
 
         // Velocity tracking (use fair value as implied prob for compatibility)
@@ -875,6 +876,8 @@ async fn main() -> Result<()> {
         .collect();
     let strategy_config = config.strategy.clone();
     let sim_config = config.simulation.clone().unwrap_or_default();
+    let win_prob_config = config.win_prob.clone().unwrap_or_default();
+    let win_prob_table = engine::win_prob::WinProbTable::from_config(&win_prob_config);
     let momentum_config = config.momentum.clone();
     let live_poll_interval = Duration::from_secs(
         config.odds_feed.live_poll_interval_s.unwrap_or(20),
@@ -1054,6 +1057,7 @@ async fn main() -> Result<()> {
                         cycle_start,
                         &last_score_fetch,
                         &sim_config,
+                        &win_prob_table,
                     );
 
                     filter_live += result.filter_live;
