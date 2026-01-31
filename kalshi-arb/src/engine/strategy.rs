@@ -23,6 +23,7 @@ pub enum TradeAction {
 /// `fair_value`: vig-free probability * 100 (cents)
 /// `best_bid`: best bid on Kalshi orderbook (cents)
 /// `best_ask`: best ask on Kalshi orderbook (cents)
+#[allow(clippy::too_many_arguments)]
 pub fn evaluate(
     fair_value: u32,
     best_bid: u32,

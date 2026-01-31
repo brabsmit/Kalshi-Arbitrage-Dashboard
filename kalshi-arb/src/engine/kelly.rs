@@ -1,4 +1,4 @@
-/// Kelly criterion position sizing for Kalshi binary options.
+//! Kelly criterion position sizing for Kalshi binary options.
 
 /// Compute Kelly-optimal contract quantity.
 ///
