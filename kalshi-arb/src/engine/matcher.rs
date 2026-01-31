@@ -163,9 +163,16 @@ fn epl_team_code(name: &str) -> Option<&'static str> {
     }
 }
 
-/// Normalizes a team name by stripping mascots and keeping location.
-/// Matches the JS dashboard logic: suffix must be at end preceded by whitespace.
-pub fn normalize_team(name: &str) -> String {
+/// Normalizes a team name to a canonical key for market matching.
+/// First checks per-sport lookup tables (NBA, NHL, EPL) for exact team codes.
+/// Falls back to suffix-stripping for sports without lookup tables (college, MMA).
+pub fn normalize_team(sport: &str, name: &str) -> String {
+    // Try per-sport lookup first
+    if let Some(code) = team_code(sport, name) {
+        return code.to_string();
+    }
+
+    // Fallback: suffix-stripping normalization (college, MMA, unknown teams)
     let mut s = name.to_uppercase();
     s = s.replace("SAINT", "ST");
     s = s.replace('&', "AND");
@@ -229,8 +236,8 @@ pub fn normalize_team(name: &str) -> String {
 
 /// Generate a deterministic market key.
 pub fn generate_key(sport: &str, team1: &str, team2: &str, date: NaiveDate) -> Option<MarketKey> {
-    let n1 = normalize_team(team1);
-    let n2 = normalize_team(team2);
+    let n1 = normalize_team(sport, team1);
+    let n2 = normalize_team(sport, team2);
     if n1.is_empty() || n2.is_empty() {
         return None;
     }
@@ -391,17 +398,18 @@ mod tests {
 
     #[test]
     fn test_normalize_team() {
-        assert_eq!(normalize_team("Dallas Mavericks"), "DALLAS");
-        assert_eq!(normalize_team("Los Angeles Lakers"), "LOSANGELES");
-        assert_eq!(normalize_team("New York Knicks"), "NEWYORK");
-        assert_eq!(normalize_team("Oklahoma City Thunder"), "OKLAHOMACITY");
+        // With lookup tables, NBA teams return ticker codes
+        assert_eq!(normalize_team("basketball", "Dallas Mavericks"), "DAL");
+        assert_eq!(normalize_team("basketball", "Los Angeles Lakers"), "LAL");
+        assert_eq!(normalize_team("basketball", "New York Knicks"), "NYK");
+        assert_eq!(normalize_team("basketball", "Oklahoma City Thunder"), "OKC");
     }
 
     #[test]
     fn test_generate_key_sorted() {
         let d = NaiveDate::from_ymd_opt(2026, 1, 19).unwrap();
-        let k1 = generate_key("NBA", "Lakers", "Celtics", d).unwrap();
-        let k2 = generate_key("NBA", "Celtics", "Lakers", d).unwrap();
+        let k1 = generate_key("basketball", "Los Angeles Lakers", "Boston Celtics", d).unwrap();
+        let k2 = generate_key("basketball", "Boston Celtics", "Los Angeles Lakers", d).unwrap();
         assert_eq!(k1, k2); // same regardless of order
     }
 
@@ -538,5 +546,35 @@ mod tests {
         assert_eq!(team_code("basketball", "Nonexistent Team"), None);
         assert_eq!(team_code("unknown-sport", "Boston Celtics"), None);
         assert_eq!(team_code("college-basketball", "Duke Blue Devils"), None);
+    }
+
+    #[test]
+    fn test_normalize_team_cross_source_matching() {
+        // Odds API full name and Kalshi abbreviated name must produce same output
+        let sport = "basketball";
+        assert_eq!(normalize_team(sport, "Los Angeles Lakers"), normalize_team(sport, "Los Angeles L"));
+        assert_eq!(normalize_team(sport, "Los Angeles Clippers"), normalize_team(sport, "Los Angeles C"));
+        assert_eq!(normalize_team(sport, "Portland Trail Blazers"), normalize_team(sport, "Portland"));
+
+        // NHL disambiguation
+        let sport = "ice-hockey";
+        assert_eq!(normalize_team(sport, "New York Rangers"), normalize_team(sport, "New York R"));
+        assert_eq!(normalize_team(sport, "New York Islanders"), normalize_team(sport, "New York I"));
+        // NHL Rangers != Islanders
+        assert_ne!(normalize_team(sport, "New York Rangers"), normalize_team(sport, "New York Islanders"));
+    }
+
+    #[test]
+    fn test_generate_key_cross_source() {
+        let d = NaiveDate::from_ymd_opt(2026, 1, 30).unwrap();
+        // Odds API: "Los Angeles Lakers" vs Kalshi title: "Los Angeles L" — must produce same key
+        let k_odds = generate_key("basketball", "Los Angeles Lakers", "Washington Wizards", d).unwrap();
+        let k_kalshi = generate_key("basketball", "Los Angeles L", "Washington", d).unwrap();
+        assert_eq!(k_odds, k_kalshi);
+
+        // Lakers and Clippers must NOT collide
+        let k_lakers = generate_key("basketball", "Los Angeles Lakers", "Washington Wizards", d).unwrap();
+        let k_clippers = generate_key("basketball", "Los Angeles Clippers", "Denver Nuggets", d).unwrap();
+        assert_ne!(k_lakers, k_clippers);
     }
 }
