@@ -838,11 +838,32 @@ pub fn evaluate_matched_market(
         let entry_fee = calculate_fee(fill_price, qty, is_taker) as i64;
         let total_cost = entry_cost + entry_fee;
 
+        // Validate break-even is achievable before entering
+        let entry_cost_total = entry_cost + entry_fee;
+        if let Some(be_price) = crate::engine::fees::break_even_sell_price(entry_cost_total as u32, qty, true) {
+            if be_price > 95 {
+                tracing::warn!(
+                    ticker = %ticker,
+                    break_even = be_price,
+                    "skipping trade: break-even too high (>95c)"
+                );
+                return EvalOutcome::Evaluated(row);
+            }
+        } else {
+            tracing::warn!(
+                ticker = %ticker,
+                entry_cost = entry_cost_total,
+                quantity = qty,
+                "skipping trade: impossible to break even"
+            );
+            return EvalOutcome::Evaluated(row);
+        }
+
         let sell_target = if sim_config.use_break_even_exit {
             let total_entry = (qty * fill_price) + calculate_fee(fill_price, qty, is_taker);
             match crate::engine::fees::break_even_sell_price(total_entry, qty, false) {
                 Some(price) => price,
-                None => return, // Skip trade if break-even is impossible
+                None => return EvalOutcome::Evaluated(row), // Skip trade if break-even is impossible
             }
         } else {
             fair

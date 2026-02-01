@@ -17,6 +17,8 @@ pub struct Config {
     pub execution: ExecutionConfig,
     #[serde(default)]
     pub simulation: SimulationConfig,
+    #[serde(default)]
+    pub kill_switch: KillSwitchConfig,
     pub sports: HashMap<String, SportConfig>,
 }
 
@@ -177,6 +179,18 @@ impl Default for SimulationConfig {
             latency_ms: 500,
             use_break_even_exit: true,
         }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(default)]
+pub struct KillSwitchConfig {
+    pub enabled: bool,
+}
+
+impl Default for KillSwitchConfig {
+    fn default() -> Self {
+        Self { enabled: false }
     }
 }
 

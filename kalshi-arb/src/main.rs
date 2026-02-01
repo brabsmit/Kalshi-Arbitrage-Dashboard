@@ -1,5 +1,6 @@
 mod config;
 mod engine;
+mod execution;
 mod feed;
 mod kalshi;
 mod pipeline;
@@ -596,6 +597,40 @@ async fn main() -> Result<()> {
         };
         let _ = &risk_manager; // Suppress unused warning until Task 10
 
+        // Reconcile positions on startup (live mode only)
+        if !sim_mode_engine {
+            match rest_for_engine.get_positions().await {
+                Ok(positions) => {
+                    if !positions.is_empty() {
+                        tracing::warn!(
+                            count = positions.len(),
+                            "found existing positions on startup"
+                        );
+                        for pos in &positions {
+                            tracing::info!(
+                                ticker = %pos.ticker,
+                                position = pos.position,
+                                "existing position"
+                            );
+                        }
+                        // TODO: Load into RiskManager and PositionTracker
+                        tracing::warn!("position reconciliation not yet implemented - manual review required");
+                    } else {
+                        tracing::info!("no existing positions found");
+                    }
+                }
+                Err(e) => {
+                    tracing::error!(
+                        error = %e,
+                        "failed to fetch positions on startup"
+                    );
+                    anyhow::bail!("Cannot start without position reconciliation: {}", e);
+                }
+            }
+        } else {
+            tracing::info!("simulation mode: skipping position reconciliation");
+        }
+
         let mut api_request_times: VecDeque<Instant> = VecDeque::with_capacity(100);
         let mut accumulated_rows: HashMap<String, MarketRow> = HashMap::new();
 
@@ -618,6 +653,14 @@ async fn main() -> Result<()> {
                         state_tx_engine.send_modify(|s| s.is_paused = false);
                     }
                     tui::TuiCommand::Quit => return,
+                    tui::TuiCommand::KillSwitch => {
+                        tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
+                        state_tx_engine.send_modify(|s| {
+                            s.is_paused = true;
+                        });
+                        // TODO: Cancel all pending orders
+                        return; // Exit engine loop
+                    }
                     tui::TuiCommand::ToggleSport(sport_key) => {
                         handle_toggle_sport(&mut sport_pipelines, &config_path, &sport_key);
                     }
