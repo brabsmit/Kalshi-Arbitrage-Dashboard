@@ -325,7 +325,8 @@ async fn main() -> Result<()> {
     println!();
 
     let auth = Arc::new(KalshiAuth::new(kalshi_api_key, &pk_pem)?);
-    let rest = Arc::new(KalshiRest::new(auth.clone(), &config.kalshi.api_base));
+    let rest = Arc::new(KalshiRest::new(auth.clone(), &config.kalshi.api_base)
+        .context("failed to create Kalshi REST client")?);
 
     // Pre-flight: verify authentication works before proceeding
     print!("  Verifying Kalshi authentication... ");

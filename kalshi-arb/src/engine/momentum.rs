@@ -54,8 +54,14 @@ impl VelocityTracker {
         if self.snapshots.len() < 2 {
             return 0.0;
         }
-        let oldest = self.snapshots.front().unwrap();
-        let newest = self.snapshots.back().unwrap();
+        let oldest = match self.snapshots.front() {
+            Some(s) => s,
+            None => return 0.0, // Empty queue = no velocity
+        };
+        let newest = match self.snapshots.back() {
+            Some(s) => s,
+            None => return 0.0,
+        };
         let dt_secs = newest.timestamp.duration_since(oldest.timestamp).as_secs_f64();
         if dt_secs < 0.001 {
             return 0.0;

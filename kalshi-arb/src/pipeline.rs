@@ -572,7 +572,8 @@ pub fn build_diagnostic_rows(
     sport: &str,
     market_index: &matcher::MarketIndex,
 ) -> Vec<DiagnosticRow> {
-    let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+    let eastern = chrono::FixedOffset::west_opt(5 * 3600)
+        .unwrap_or_else(|| chrono::FixedOffset::west_opt(0).unwrap());
     let now_utc = chrono::Utc::now();
 
     updates

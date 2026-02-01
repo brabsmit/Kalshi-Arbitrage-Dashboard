@@ -11,16 +11,16 @@ pub struct KalshiRest {
 }
 
 impl KalshiRest {
-    pub fn new(auth: Arc<KalshiAuth>, base_url: &str) -> Self {
+    pub fn new(auth: Arc<KalshiAuth>, base_url: &str) -> Result<Self> {
         let client = Client::builder()
             .pool_max_idle_per_host(4)
             .build()
-            .expect("failed to build HTTP client");
-        Self {
+            .context("failed to build HTTP client")?;
+        Ok(Self {
             client,
             auth,
             base_url: base_url.trim_end_matches('/').to_string(),
-        }
+        })
     }
 
     /// Fetch all markets for a given series ticker. Paginates automatically.
