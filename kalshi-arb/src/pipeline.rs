@@ -834,7 +834,10 @@ pub fn evaluate_matched_market(
 
         let sell_target = if sim_config.use_break_even_exit {
             let total_entry = (qty * fill_price) + calculate_fee(fill_price, qty, is_taker);
-            crate::engine::fees::break_even_sell_price(total_entry, qty, false)
+            match crate::engine::fees::break_even_sell_price(total_entry, qty, false) {
+                Some(price) => price,
+                None => return, // Skip trade if break-even is impossible
+            }
         } else {
             fair
         };
