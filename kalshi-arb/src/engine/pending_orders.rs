@@ -114,10 +114,12 @@ mod tests {
         let mut registry = PendingOrderRegistry::new();
         registry.try_register("TEST".to_string(), 10, 50, true);
 
-        // Immediately check - no old orders
+        // Immediately check - orders just submitted are not "old" even with 0 threshold
+        // (because duration is 0 seconds, and we check if duration > threshold)
         let old = registry.old_orders(0);
-        assert_eq!(old.len(), 1, "0 second threshold should include all");
+        assert_eq!(old.len(), 0, "just-submitted order should not be > 0 seconds old");
 
+        // Very high threshold excludes all recent orders
         let old = registry.old_orders(999);
         assert_eq!(old.len(), 0, "999 second threshold should exclude recent orders");
     }

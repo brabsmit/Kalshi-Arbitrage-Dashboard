@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check:*)",
+      "Bash(cargo.exe check:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git restore:*)",
+      "Bash(git push:*)",
+      "Bash(cargo build:*)",
+      "Bash(command -v:*)",
+      "Bash(~/.cargo/bin/cargo.exe build:*)",
+      "Bash(tee:*)",
+      "Bash(~/.cargo/bin/rustup.exe target add:*)",
+      "Bash(cargo test:*)",
+      "Bash(where cargo)",
+      "Bash(powershell -Command \"Get-Command cargo -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(if [ -f \"$HOME/.cargo/bin/cargo\" ])",
+      "Bash(then echo \"Found at $HOME/.cargo/bin/cargo\")",
+      "Bash(else echo \"Not found in standard location\")",
+      "Bash(fi)",
+      "Bash(/c/Users/Bryan/.cargo/bin/cargo test test_impossible_break_even_returns_none -- --nocapture)",
+      "Bash(/c/Users/Bryan/.cargo/bin/cargo test:*)",
+      "Bash(/c/Users/Bryan/.cargo/bin/cargo build --lib)",
+      "Bash(ls \"C:\\\\Users\\\\Bryan\\\\Documents\\\\GitHub\\\\Kalshi-Arbitrage-Dashboard\\\\kalshi-arb\\\\target\\\\x86_64-pc-windows-gnu\\\\release\"\" 2>/dev/null || echo \"No release directory found \")",
+      "Bash(cmd /c \"cargo test --lib engine::pending_orders\")",
+      "Bash(bash -c \"cargo build --release --target x86_64-pc-windows-gnu 2>&1 | head -50\")",
+      "Bash(\"C:/Users/Bryan/.cargo/bin/cargo.exe\" test)",
+      "Bash(\"C:/Users/Bryan/.cargo/bin/cargo.exe\" test --lib)",
+      "Bash(\"C:/Users/Bryan/.cargo/bin/cargo.exe\" test --test integration_safety)"
+    ]
+  }
+}

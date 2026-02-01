@@ -1,185 +1,179 @@
-# --- Shared resources ---
+[execution]
+maker_timeout_ms = 500
+stale_odds_threshold_ms = 5000
 
 [kalshi]
 api_base = "https://api.elections.kalshi.com"
 ws_url = "wss://api.elections.kalshi.com/trade-api/ws/v2"
 
+[momentum]
+book_pressure_weight = 0.4
+cancel_check_interval_ms = 100
+cancel_threshold = 30
+maker_momentum_threshold = 40
+taker_momentum_threshold = 75
+velocity_weight = 0.6
+velocity_window_size = 10
+
+[odds_sources.scraped-bovada]
+base_url = "https://www.bovada.lv/services/sports/event/coupon/events/A/description/basketball/college-basketball"
+live_poll_s = 5
+max_retries = 2
+pre_game_poll_s = 60
+request_timeout_ms = 10000
+type = "scraped"
+
 [odds_sources.the-odds-api]
-type = "the-odds-api"
 base_url = "https://api.the-odds-api.com"
 bookmakers = "draftkings,fanduel,betmgm,caesars"
 live_poll_s = 20
 pre_game_poll_s = 120
 quota_warning_threshold = 100
-
-[odds_sources.scraped-bovada]
-type = "scraped"
-base_url = "https://www.bovada.lv/services/sports/event/coupon/events/A/description/basketball/college-basketball"
-live_poll_s = 5
-pre_game_poll_s = 60
-request_timeout_ms = 10000
-max_retries = 2
-
-# --- Global defaults ---
-
-[strategy]
-taker_edge_threshold = 5
-maker_edge_threshold = 2
-min_edge_after_fees = 1
+type = "the-odds-api"
 
 [risk]
 kelly_fraction = 0.25
+max_concurrent_markets = 5
 max_contracts_per_market = 10
 max_total_exposure_cents = 50000
-max_concurrent_markets = 5
-
-[momentum]
-taker_momentum_threshold = 75
-maker_momentum_threshold = 40
-cancel_threshold = 30
-velocity_weight = 0.6
-book_pressure_weight = 0.4
-velocity_window_size = 10
-cancel_check_interval_ms = 100
-
-[execution]
-maker_timeout_ms = 500
-stale_odds_threshold_ms = 5000
 
 [simulation]
 latency_ms = 500
 use_break_even_exit = true
 
-# --- Per-sport pipelines ---
-
-[sports.basketball]
-enabled = true
-kalshi_series = "KXNBAGAME"
-label = "NBA"
-hotkey = "1"
-fair_value = "score-feed"
-odds_source = "the-odds-api"
-
-[sports.basketball.score_feed]
-primary_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
-fallback_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
-live_poll_s = 1
-pre_game_poll_s = 60
-failover_threshold = 5
-request_timeout_ms = 1000
-
-[sports.basketball.win_prob]
-home_advantage = 2.5
-k_start = 0.065
-k_range = 0.25
-ot_k_start = 0.1
-ot_k_range = 1.0
-regulation_secs = 2880
-
-[sports.basketball.strategy]
-taker_edge_threshold = 3
-maker_edge_threshold = 1
-
-[sports.basketball.momentum]
-taker_momentum_threshold = 0
-maker_momentum_threshold = 0
-
-[sports.college-basketball]
-enabled = true
-kalshi_series = "KXNCAAMBGAME"
-label = "NCAAM"
-hotkey = "5"
-fair_value = "score-feed"
-odds_source = "the-odds-api"
-
-[sports.college-basketball.score_feed]
-primary_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50&limit=400"
-live_poll_s = 1
-pre_game_poll_s = 60
-request_timeout_ms = 1000
-
-[sports.college-basketball.win_prob]
-home_advantage = 3.5
-k_start = 0.065
-k_range = 0.25
-ot_k_start = 0.1
-ot_k_range = 1.0
-regulation_secs = 2400
-
-[sports.college-basketball.strategy]
-taker_edge_threshold = 3
-maker_edge_threshold = 1
-
-[sports.college-basketball.momentum]
-taker_momentum_threshold = 0
-maker_momentum_threshold = 0
-
-[sports.college-basketball-womens]
-enabled = true
-kalshi_series = "KXNCAAWBGAME"
-label = "NCAAW"
-hotkey = "6"
-fair_value = "score-feed"
-odds_source = "the-odds-api"
-
-[sports.college-basketball-womens.score_feed]
-primary_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50&limit=400"
-live_poll_s = 1
-pre_game_poll_s = 60
-request_timeout_ms = 1000
-
-[sports.college-basketball-womens.win_prob]
-home_advantage = 3.5
-k_start = 0.065
-k_range = 0.25
-ot_k_start = 0.1
-ot_k_range = 1.0
-regulation_secs = 2400
-
-[sports.college-basketball-womens.strategy]
-taker_edge_threshold = 3
-maker_edge_threshold = 1
-
-[sports.college-basketball-womens.momentum]
-taker_momentum_threshold = 0
-maker_momentum_threshold = 0
-
 [sports.american-football]
 enabled = false
+fair_value = "odds-feed"
+hotkey = "2"
 kalshi_series = "KXNFLGAME"
 label = "NFL"
-hotkey = "2"
-fair_value = "odds-feed"
 odds_source = "the-odds-api"
 
 [sports.baseball]
 enabled = false
+fair_value = "odds-feed"
+hotkey = "3"
 kalshi_series = "KXMLBGAME"
 label = "MLB"
-hotkey = "3"
-fair_value = "odds-feed"
 odds_source = "the-odds-api"
+
+[sports.basketball]
+enabled = true
+fair_value = "scraped-bovada"
+hotkey = "1"
+kalshi_series = "KXNBAGAME"
+label = "NBA"
+odds_source = "scraped-bovada"
+
+[sports.basketball.momentum]
+maker_momentum_threshold = 0
+taker_momentum_threshold = 0
+
+[sports.basketball.score_feed]
+failover_threshold = 5
+fallback_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard"
+live_poll_s = 1
+pre_game_poll_s = 60
+primary_url = "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+request_timeout_ms = 1000
+
+[sports.basketball.strategy]
+maker_edge_threshold = 1
+taker_edge_threshold = 3
+
+[sports.basketball.win_prob]
+home_advantage = 2.5
+k_range = 0.25
+k_start = 0.065
+ot_k_range = 1.0
+ot_k_start = 0.1
+regulation_secs = 2880
+
+[sports.college-basketball]
+enabled = true
+fair_value = "score-feed"
+hotkey = "5"
+kalshi_series = "KXNCAAMBGAME"
+label = "NCAAM"
+odds_source = "scraped-bovada"
+
+[sports.college-basketball.momentum]
+maker_momentum_threshold = 0
+taker_momentum_threshold = 0
+
+[sports.college-basketball.score_feed]
+live_poll_s = 1
+pre_game_poll_s = 60
+primary_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50&limit=400"
+request_timeout_ms = 1000
+
+[sports.college-basketball.strategy]
+maker_edge_threshold = 1
+taker_edge_threshold = 3
+
+[sports.college-basketball.win_prob]
+home_advantage = 3.5
+k_range = 0.25
+k_start = 0.065
+ot_k_range = 1.0
+ot_k_start = 0.1
+regulation_secs = 2400
+
+[sports.college-basketball-womens]
+enabled = true
+fair_value = "scraped-bovada"
+hotkey = "6"
+kalshi_series = "KXNCAAWBGAME"
+label = "NCAAW"
+odds_source = "scraped-bovada"
+
+[sports.college-basketball-womens.momentum]
+maker_momentum_threshold = 0
+taker_momentum_threshold = 0
+
+[sports.college-basketball-womens.score_feed]
+live_poll_s = 1
+pre_game_poll_s = 60
+primary_url = "https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50&limit=400"
+request_timeout_ms = 1000
+
+[sports.college-basketball-womens.strategy]
+maker_edge_threshold = 1
+taker_edge_threshold = 3
+
+[sports.college-basketball-womens.win_prob]
+home_advantage = 3.5
+k_range = 0.25
+k_start = 0.065
+ot_k_range = 1.0
+ot_k_start = 0.1
+regulation_secs = 2400
 
 [sports.ice-hockey]
 enabled = false
+fair_value = "odds-feed"
+hotkey = "4"
 kalshi_series = "KXNHLGAME"
 label = "NHL"
-hotkey = "4"
-fair_value = "odds-feed"
-odds_source = "the-odds-api"
-
-[sports.soccer-epl]
-enabled = false
-kalshi_series = "KXEPLGAME"
-label = "EPL"
-hotkey = "7"
-fair_value = "odds-feed"
 odds_source = "the-odds-api"
 
 [sports.mma]
 enabled = false
+fair_value = "odds-feed"
+hotkey = "8"
 kalshi_series = "KXUFCFIGHT"
 label = "UFC"
-hotkey = "8"
-fair_value = "odds-feed"
 odds_source = "the-odds-api"
+
+[sports.soccer-epl]
+enabled = false
+fair_value = "odds-feed"
+hotkey = "7"
+kalshi_series = "KXEPLGAME"
+label = "EPL"
+odds_source = "the-odds-api"
+
+[strategy]
+maker_edge_threshold = 2
+min_edge_after_fees = 1
+taker_edge_threshold = 5

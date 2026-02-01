@@ -2,7 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use kalshi_arb::engine::{RiskManager, PositionTracker, PendingOrderRegistry};
+    use kalshi_arb::engine::risk::RiskManager;
+    use kalshi_arb::engine::positions::PositionTracker;
+    use kalshi_arb::engine::pending_orders::PendingOrderRegistry;
     use kalshi_arb::config::RiskConfig;
 
     #[test]

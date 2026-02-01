@@ -46,15 +46,13 @@ impl OrderExecutor {
         let order_type = if is_taker { "market" } else { "limit" };
         let order = CreateOrderRequest {
             ticker: ticker.to_string(),
-            action: if is_buy { "buy" } else { "sell" },
+            action: if is_buy { "buy".to_string() } else { "sell".to_string() },
             side: "yes".to_string(), // We only trade YES side
             count: quantity,
-            r#type: order_type.to_string(),
+            order_type: order_type.to_string(),
             yes_price: Some(price),
             no_price: None,
-            expiration_ts: None,
-            sell_position_floor: None,
-            buy_max_cost: None,
+            client_order_id: None,
         };
 
         // Submit to Kalshi API

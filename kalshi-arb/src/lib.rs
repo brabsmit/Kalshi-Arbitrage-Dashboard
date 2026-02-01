@@ -4,5 +4,6 @@ pub mod config;
 pub mod engine;
 pub mod execution;
 pub mod feed;
+pub mod kalshi;
 // Note: pipeline and tui modules excluded — they have cross-references to types
 // that will be refactored. Re-add once main.rs is cleaned up.
