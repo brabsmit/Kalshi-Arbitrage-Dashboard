@@ -332,8 +332,44 @@ Bovada Path (best case ~5s):
 
 The fee asymmetry (7% taker vs 1.75% maker) means the system strongly prefers maker orders when edge is moderate. A 3¢ edge that passes the maker threshold often fails the taker threshold after fees.
 
+## Fair Value Source Selection (Runtime-Configurable)
+
+NCAAB (and NBA) supports **three runtime-switchable fair value sources**:
+
+1. **score-feed**: ESPN live scores → win probability model → fair value
+2. **the-odds-api**: Aggregated odds from 4 bookmakers (DraftKings, FanDuel, BetMGM, Caesars) → average → devig → fair value
+3. **scraped-bovada**: Bovada odds → devig → fair value
+
+### Switching Sources at Runtime
+
+- Press config hotkey (`c`) to open config view
+- Navigate to sport tab (e.g., NCAAM)
+- Select `fair_value` field and choose from dropdown
+- Changes take effect immediately and persist to `config.toml`
+
+### Bookmaker Averaging
+
+When using `the-odds-api` source, the system now **averages odds across all available bookmakers** instead of using only the first one:
+
+```rust
+// pipeline.rs:average_bookmaker_odds()
+avg_home = (DK_home + FD_home + BetMGM_home + Caesars_home) / 4
+avg_away = (DK_away + FD_away + BetMGM_away + Caesars_away) / 4
+fair_value = devig(avg_home, avg_away)
+```
+
+This provides more robust fair value estimates by combining multiple market views, reducing sensitivity to any single bookmaker's pricing anomalies.
+
 ## Configuration Reference (NCAAB)
 
+**New Format** (directly specify source):
+```toml
+[sports.college-basketball]
+fair_value = "scraped-bovada"  # or "score-feed" or "the-odds-api"
+# odds_source is auto-set to match fair_value when it's an odds source
+```
+
+**Legacy Format** (still supported):
 ```toml
 [sports.college-basketball]
 enabled = true

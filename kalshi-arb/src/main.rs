@@ -264,6 +264,14 @@ fn apply_config_update(
         ["sports", sport_key, "fair_value"] => {
             if let Some(pipe) = sport_pipelines.iter_mut().find(|p| p.key == *sport_key) {
                 pipe.rebuild_fair_value_source(value);
+
+                // If switching to an odds source (not "score-feed"), also persist odds_source field
+                if value != "score-feed" {
+                    let odds_source_path = format!("sports.{}.odds_source", sport_key);
+                    if let Err(e) = config::persist_field(&config_path, &odds_source_path, value) {
+                        tracing::warn!(path = %odds_source_path, error = %e, "failed to persist odds_source");
+                    }
+                }
             }
         },
         // Global simulation
@@ -616,12 +624,14 @@ async fn main() -> Result<()> {
                         ).await;
                     }
                     tui::TuiCommand::OpenConfig => {
+                        let available_odds_sources: Vec<String> = odds_sources.keys().cloned().collect();
                         let tabs = tui::config_view::build_config_tabs(
                             &sport_pipelines,
                             &global_strategy,
                             &global_momentum,
                             &risk_config,
                             &sim_config,
+                            &available_odds_sources,
                         );
                         let cv = tui::config_view::ConfigViewState::new(tabs);
                         state_tx_engine.send_modify(|s| {
@@ -811,12 +821,14 @@ async fn main() -> Result<()> {
                                         ).await;
                                     }
                                     tui::TuiCommand::OpenConfig => {
+                                        let available_odds_sources: Vec<String> = odds_sources.keys().cloned().collect();
                                         let tabs = tui::config_view::build_config_tabs(
                                             &sport_pipelines,
                                             &global_strategy,
                                             &global_momentum,
                                             &risk_config,
                                             &sim_config,
+                                            &available_odds_sources,
                                         );
                                         let cv = tui::config_view::ConfigViewState::new(tabs);
                                         state_tx_engine.send_modify(|s| {

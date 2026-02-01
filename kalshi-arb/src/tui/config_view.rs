@@ -58,6 +58,7 @@ pub fn build_config_tabs(
     global_momentum: &MomentumConfig,
     risk: &RiskConfig,
     sim: &SimulationConfig,
+    available_odds_sources: &[String],
 ) -> Vec<ConfigTab> {
     let mut tabs = Vec::new();
 
@@ -73,7 +74,7 @@ pub fn build_config_tabs(
         tabs.push(ConfigTab {
             label: pipe.label.clone(),
             sport_key: Some(pipe.key.clone()),
-            fields: build_sport_fields(pipe, global_strategy, global_momentum),
+            fields: build_sport_fields(pipe, global_strategy, global_momentum, available_odds_sources),
         });
     }
 
@@ -226,19 +227,26 @@ fn build_sport_fields(
     pipe: &SportPipeline,
     global_strategy: &StrategyConfig,
     global_momentum: &MomentumConfig,
+    available_odds_sources: &[String],
 ) -> Vec<ConfigField> {
     let key = &pipe.key;
     let mut fields = Vec::new();
 
-    // Header: fair_value as editable Enum
+    // Header: fair_value as editable Enum with all available sources
     let fv_str = match &pipe.fair_value_source {
         FairValueSource::ScoreFeed { .. } => "score-feed",
-        FairValueSource::OddsFeed => "odds-feed",
+        FairValueSource::OddsFeed => &pipe.odds_source,
     };
-    let mut valid_sources = vec!["odds-feed".to_string()];
+
+    // Build list of valid sources: score-feed (if available) + all odds sources
+    let mut valid_sources = Vec::new();
     if pipe.score_feed_config.is_some() && pipe.win_prob_config.is_some() {
-        valid_sources.insert(0, "score-feed".to_string());
+        valid_sources.push("score-feed".to_string());
     }
+    for source in available_odds_sources {
+        valid_sources.push(source.clone());
+    }
+
     fields.push(ConfigField {
         label: "fair_value".to_string(),
         value: fv_str.to_string(),

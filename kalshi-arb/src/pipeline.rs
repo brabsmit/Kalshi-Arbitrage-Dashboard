@@ -136,6 +136,7 @@ fn build_fair_value_source(
                 pre_game_poll_s: sf.pre_game_poll_s,
             }
         }
+        // Everything else is treated as an odds source (the-odds-api, scraped-bovada, etc.)
         _ => FairValueSource::OddsFeed,
     }
 }
@@ -158,6 +159,13 @@ impl SportPipeline {
 
         let hotkey = sport.hotkey.chars().next().unwrap_or('0');
 
+        // If fair_value is an odds source name (not "score-feed"), use it as odds_source
+        let odds_source = if sport.fair_value != "score-feed" && sport.fair_value != "odds-feed" {
+            sport.fair_value.clone()
+        } else {
+            sport.odds_source.clone()
+        };
+
         SportPipeline {
             key: key.to_string(),
             series: sport.kalshi_series.clone(),
@@ -165,7 +173,7 @@ impl SportPipeline {
             hotkey,
             enabled: sport.enabled,
             fair_value_source,
-            odds_source: sport.odds_source.clone(),
+            odds_source,
             score_feed_config,
             win_prob_config,
             strategy_config: global_strategy.with_override(sport.strategy.as_ref()),
@@ -183,7 +191,8 @@ impl SportPipeline {
         }
     }
 
-    /// Rebuild the fair value source at runtime (e.g. switching between score-feed and odds-feed).
+    /// Rebuild the fair value source at runtime (e.g. switching between score-feed and odds sources).
+    /// If new_source is an odds source name (not "score-feed"), also updates odds_source field.
     pub fn rebuild_fair_value_source(&mut self, new_source: &str) {
         self.fair_value_source = build_fair_value_source(
             &self.key,
@@ -191,6 +200,11 @@ impl SportPipeline {
             self.score_feed_config.as_ref(),
             self.win_prob_config.as_ref(),
         );
+
+        // If the new source is not "score-feed", it's an odds source name - update odds_source field
+        if new_source != "score-feed" {
+            self.odds_source = new_source.to_string();
+        }
     }
 
     /// Run one processing cycle for this sport.
@@ -1010,6 +1024,36 @@ fn process_score_updates(
     TickResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows, has_live_games, closed_tickers }
 }
 
+/// Average odds across all bookmakers for better fair value estimation.
+/// Returns (avg_home_odds, avg_away_odds, avg_draw_odds_if_any, last_update, bookmaker_names).
+fn average_bookmaker_odds(bookmakers: &[crate::feed::types::BookmakerOdds]) -> Option<(f64, f64, Option<f64>, String, Vec<String>)> {
+    if bookmakers.is_empty() {
+        return None;
+    }
+
+    let count = bookmakers.len() as f64;
+    let avg_home = bookmakers.iter().map(|b| b.home_odds).sum::<f64>() / count;
+    let avg_away = bookmakers.iter().map(|b| b.away_odds).sum::<f64>() / count;
+
+    // Average draw odds if all bookmakers have them
+    let avg_draw = if bookmakers.iter().all(|b| b.draw_odds.is_some()) {
+        Some(bookmakers.iter().filter_map(|b| b.draw_odds).sum::<f64>() / count)
+    } else {
+        None
+    };
+
+    // Use the most recent last_update timestamp
+    let last_update = bookmakers.iter()
+        .map(|b| &b.last_update)
+        .max()
+        .cloned()
+        .unwrap_or_default();
+
+    let bookmaker_names = bookmakers.iter().map(|b| b.name.clone()).collect();
+
+    Some((avg_home, avg_away, avg_draw, last_update, bookmaker_names))
+}
+
 /// Process odds updates for a single sport through the filter/matching/evaluation pipeline.
 #[allow(clippy::too_many_arguments)]
 fn process_sport_updates(
@@ -1039,91 +1083,94 @@ fn process_sport_updates(
     let mut closed_tickers: Vec<(String, u32)> = Vec::new();
 
     for update in updates {
-        if let Some(bm) = update.bookmakers.first() {
-            let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
-            let date = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
-                .ok()
-                .map(|dt| dt.with_timezone(&eastern).date_naive());
+        // Average odds across all bookmakers for better fair value estimation
+        let Some((home_odds, away_odds, draw_odds, last_update, bookmaker_names)) =
+            average_bookmaker_odds(&update.bookmakers) else {
+            continue;
+        };
 
-            let Some(date) = date else { continue };
+        let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+        let date = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
+            .ok()
+            .map(|dt| dt.with_timezone(&eastern).date_naive());
 
-            let now_utc = chrono::Utc::now();
-            let commence_dt = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
-                .ok()
-                .map(|dt| dt.with_timezone(&chrono::Utc));
+        let Some(date) = date else { continue };
 
-            let game_started = commence_dt.is_some_and(|ct| ct <= now_utc);
+        let now_utc = chrono::Utc::now();
+        let commence_dt = chrono::DateTime::parse_from_rfc3339(&update.commence_time)
+            .ok()
+            .map(|dt| dt.with_timezone(&chrono::Utc));
 
-            if !game_started {
-                filter_pre_game += 1;
-                if let Some(ct) = commence_dt {
-                    earliest_commence = Some(match earliest_commence {
-                        Some(existing) => existing.min(ct),
-                        None => ct,
-                    });
-                }
-                continue;
+        let game_started = commence_dt.is_some_and(|ct| ct <= now_utc);
+
+        if !game_started {
+            filter_pre_game += 1;
+            if let Some(ct) = commence_dt {
+                earliest_commence = Some(match earliest_commence {
+                    Some(existing) => existing.min(ct),
+                    None => ct,
+                });
             }
+            continue;
+        }
 
-            has_live_games = true;
+        has_live_games = true;
 
-            let (lookup_home, lookup_away) = if sport == "mma" {
-                (crate::last_name(&update.home_team).to_string(),
-                 crate::last_name(&update.away_team).to_string())
-            } else {
-                (update.home_team.clone(), update.away_team.clone())
+        let (lookup_home, lookup_away) = if sport == "mma" {
+            (crate::last_name(&update.home_team).to_string(),
+             crate::last_name(&update.away_team).to_string())
+        } else {
+            (update.home_team.clone(), update.away_team.clone())
+        };
+
+        let is_3way = sport.starts_with("soccer");
+
+        let vt = velocity_trackers
+            .entry(update.event_id.clone())
+            .or_insert_with(|| VelocityTracker::new(momentum_config.velocity_window_size));
+
+        if is_3way {
+            let Some(draw_odds_val) = draw_odds else {
+                tracing::warn!(sport, home = %update.home_team, "skipping soccer event: missing draw odds");
+                continue;
             };
+            let (home_fv, away_fv, draw_fv) =
+                strategy::devig_3way(home_odds, away_odds, draw_odds_val);
 
-            let is_3way = sport.starts_with("soccer");
+            if !is_replay {
+                vt.push(home_fv, Instant::now());
+            }
+            let velocity_score = vt.score();
 
-            let vt = velocity_trackers
-                .entry(update.event_id.clone())
-                .or_insert_with(|| VelocityTracker::new(momentum_config.velocity_window_size));
+            let key = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
+            let game = key.and_then(|k| market_index.get(&k));
 
-            if is_3way {
-                let Some(draw_odds) = bm.draw_odds else {
-                    tracing::warn!(sport, home = %update.home_team, "skipping soccer event: missing draw odds");
-                    continue;
-                };
-                let (home_fv, away_fv, draw_fv) =
-                    strategy::devig_3way(bm.home_odds, bm.away_odds, draw_odds);
+            if let Some(game) = game {
+                let sides: Vec<(Option<&matcher::SideMarket>, u32, &str, f64)> = vec![
+                    (game.home.as_ref(), strategy::fair_value_cents(home_fv), "HOME", home_fv),
+                    (game.away.as_ref(), strategy::fair_value_cents(away_fv), "AWAY", away_fv),
+                    (game.draw.as_ref(), strategy::fair_value_cents(draw_fv), "DRAW", draw_fv),
+                ];
 
-                if !is_replay {
-                    vt.push(home_fv, Instant::now());
-                }
-                let velocity_score = vt.score();
+                for (side_opt, fair, label, devigged_prob) in sides {
+                    let Some(side) = side_opt else { continue };
 
-                let key = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
-                let game = key.and_then(|k| market_index.get(&k));
+                    let staleness_secs = chrono::DateTime::parse_from_rfc3339(&last_update)
+                        .ok()
+                        .map(|dt| {
+                            let age = now_utc - dt.with_timezone(&chrono::Utc);
+                            age.num_seconds().max(0) as u64
+                        });
 
-                if let Some(game) = game {
-                    let bookmaker_names: Vec<String> = update.bookmakers
-                        .iter().map(|b| b.name.clone()).collect();
-                    let sides: Vec<(Option<&matcher::SideMarket>, u32, &str, f64)> = vec![
-                        (game.home.as_ref(), strategy::fair_value_cents(home_fv), "HOME", home_fv),
-                        (game.away.as_ref(), strategy::fair_value_cents(away_fv), "AWAY", away_fv),
-                        (game.draw.as_ref(), strategy::fair_value_cents(draw_fv), "DRAW", draw_fv),
-                    ];
-
-                    for (side_opt, fair, label, devigged_prob) in sides {
-                        let Some(side) = side_opt else { continue };
-
-                        let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
-                            .ok()
-                            .map(|dt| {
-                                let age = now_utc - dt.with_timezone(&chrono::Utc);
-                                age.num_seconds().max(0) as u64
-                            });
-
-                        let fv_method = FairValueMethod::OddsFeed {
-                            source: "odds-api".to_string(),
-                        };
-                        let fv_inputs = FairValueInputs::Odds {
-                            home_odds: bm.home_odds,
-                            away_odds: bm.away_odds,
-                            bookmakers: bookmaker_names.clone(),
-                            devigged_prob,
-                        };
+                    let fv_method = FairValueMethod::OddsFeed {
+                        source: "odds-api".to_string(),
+                    };
+                    let fv_inputs = FairValueInputs::Odds {
+                        home_odds,
+                        away_odds,
+                        bookmakers: bookmaker_names.clone(),
+                        devigged_prob,
+                    };
 
                         match evaluate_matched_market(
                             &side.ticker, fair, side.yes_bid, side.yes_ask, false,
@@ -1143,46 +1190,44 @@ fn process_sport_updates(
                                 filter_live += 1;
                                 rows.insert(side.ticker.clone(), row);
                             }
-                        }
                     }
                 }
-            } else {
-                let (home_fv, _away_fv) =
-                    strategy::devig(bm.home_odds, bm.away_odds);
-                let home_cents = strategy::fair_value_cents(home_fv);
+            }
+        } else {
+            let (home_fv, _away_fv) =
+                strategy::devig(home_odds, away_odds);
+            let home_cents = strategy::fair_value_cents(home_fv);
 
-                if !is_replay {
-                    vt.push(home_fv, Instant::now());
-                }
-                let velocity_score = vt.score();
+            if !is_replay {
+                vt.push(home_fv, Instant::now());
+            }
+            let velocity_score = vt.score();
 
-                if let Some(mkt) = matcher::find_match(market_index, sport, &lookup_home, &lookup_away, date) {
-                    let fair = home_cents;
+            if let Some(mkt) = matcher::find_match(market_index, sport, &lookup_home, &lookup_away, date) {
+                let fair = home_cents;
 
-                    let key_check = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
-                    let game_check = key_check.and_then(|k| market_index.get(&k));
-                    let side_market = game_check.and_then(|g| {
-                        if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
+                let key_check = matcher::generate_key(sport, &lookup_home, &lookup_away, date);
+                let game_check = key_check.and_then(|k| market_index.get(&k));
+                let side_market = game_check.and_then(|g| {
+                    if mkt.is_inverse { g.away.as_ref() } else { g.home.as_ref() }
+                });
+
+                let staleness_secs = chrono::DateTime::parse_from_rfc3339(&last_update)
+                    .ok()
+                    .map(|dt| {
+                        let age = now_utc - dt.with_timezone(&chrono::Utc);
+                        age.num_seconds().max(0) as u64
                     });
 
-                    let staleness_secs = chrono::DateTime::parse_from_rfc3339(&bm.last_update)
-                        .ok()
-                        .map(|dt| {
-                            let age = now_utc - dt.with_timezone(&chrono::Utc);
-                            age.num_seconds().max(0) as u64
-                        });
-
-                    let bookmaker_names: Vec<String> = update.bookmakers
-                        .iter().map(|b| b.name.clone()).collect();
-                    let fv_method = FairValueMethod::OddsFeed {
-                        source: "odds-api".to_string(),
-                    };
-                    let fv_inputs = FairValueInputs::Odds {
-                        home_odds: bm.home_odds,
-                        away_odds: bm.away_odds,
-                        bookmakers: bookmaker_names,
-                        devigged_prob: home_fv,
-                    };
+                let fv_method = FairValueMethod::OddsFeed {
+                    source: "odds-api".to_string(),
+                };
+                let fv_inputs = FairValueInputs::Odds {
+                    home_odds,
+                    away_odds,
+                    bookmakers: bookmaker_names.clone(),
+                    devigged_prob: home_fv,
+                };
 
                     match evaluate_matched_market(
                         &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
