@@ -10,7 +10,7 @@ use config::Config;
 use engine::fees::calculate_fee;
 use engine::momentum::MomentumScorer;
 use engine::matcher;
-use feed::{draftkings::DraftKingsFeed, the_odds_api::TheOddsApi, OddsFeed};
+use feed::{draftkings::DraftKingsFeed, scraped::ScrapedOddsFeed, the_odds_api::TheOddsApi, OddsFeed};
 use kalshi::{auth::KalshiAuth, rest::KalshiRest, ws::KalshiWs};
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
@@ -498,6 +498,18 @@ async fn main() -> Result<()> {
                     Box::new(DraftKingsFeed::new(&dk_config)),
                 );
             }
+            "scraped" => {
+                let target_url = source_config.base_url.as_deref()
+                    .unwrap_or("https://www.bovada.lv/services/sports/event/coupon/events/A/description/basketball/college-basketball");
+                odds_sources.insert(
+                    name.clone(),
+                    Box::new(ScrapedOddsFeed::new(
+                        target_url,
+                        source_config.request_timeout_ms,
+                        source_config.max_retries,
+                    )),
+                );
+            }
             other => {
                 eprintln!("  Unknown odds source type: {}", other);
                 std::process::exit(1);
@@ -543,6 +555,7 @@ async fn main() -> Result<()> {
         match src_type {
             "the-odds-api" => "ODDS-API",
             "draftkings" => "DK",
+            "scraped" => "BOVADA",
             _ => "UNKNOWN",
         }
     } else {

@@ -12,6 +12,14 @@ live_poll_s = 20
 pre_game_poll_s = 120
 quota_warning_threshold = 100
 
+[odds_sources.scraped-bovada]
+type = "scraped"
+base_url = "https://www.bovada.lv/services/sports/event/coupon/events/A/description/basketball/college-basketball"
+live_poll_s = 5
+pre_game_poll_s = 60
+request_timeout_ms = 10000
+max_retries = 2
+
 # --- Global defaults ---
 
 [strategy]

@@ -65,11 +65,14 @@ pub struct OddsSourceConfig {
     pub quota_warning_threshold: Option<u64>,
     #[serde(default = "default_request_timeout")]
     pub request_timeout_ms: u64,
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
 }
 
 fn default_live_poll() -> u64 { 20 }
 fn default_pre_game_poll() -> u64 { 120 }
 fn default_request_timeout() -> u64 { 5000 }
+fn default_max_retries() -> u32 { 2 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SportConfig {
