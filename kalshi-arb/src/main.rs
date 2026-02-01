@@ -652,14 +652,14 @@ async fn main() -> Result<()> {
                         is_paused = false;
                         state_tx_engine.send_modify(|s| s.is_paused = false);
                     }
-                    tui::TuiCommand::Quit => return,
+                    tui::TuiCommand::Quit => return Ok(()),
                     tui::TuiCommand::KillSwitch => {
                         tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
                         state_tx_engine.send_modify(|s| {
                             s.is_paused = true;
                         });
                         // TODO: Cancel all pending orders
-                        return; // Exit engine loop
+                        return Ok(()); // Exit engine loop
                     }
                     tui::TuiCommand::ToggleSport(sport_key) => {
                         handle_toggle_sport(&mut sport_pipelines, &config_path, &sport_key);
@@ -874,7 +874,12 @@ async fn main() -> Result<()> {
                                         is_paused = false;
                                         state_tx_engine.send_modify(|s| s.is_paused = false);
                                     }
-                                    tui::TuiCommand::Quit => return,
+                                    tui::TuiCommand::Quit => return Ok(()),
+                                    tui::TuiCommand::KillSwitch => {
+                                        tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
+                                        state_tx_engine.send_modify(|s| s.is_paused = true);
+                                        return Ok(());
+                                    }
                                     tui::TuiCommand::ToggleSport(sport_key) => {
                                         handle_toggle_sport(&mut sport_pipelines, &config_path, &sport_key);
                                     }
