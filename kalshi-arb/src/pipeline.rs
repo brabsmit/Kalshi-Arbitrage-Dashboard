@@ -659,6 +659,103 @@ pub fn build_diagnostic_rows(
         .collect()
 }
 
+/// Build diagnostic rows from score updates for a given sport.
+pub fn build_diagnostic_rows_from_scores(
+    updates: &[crate::feed::score_feed::ScoreUpdate],
+    sport: &str,
+    market_index: &matcher::MarketIndex,
+    source_name: &str,
+) -> Vec<DiagnosticRow> {
+    let eastern = chrono::FixedOffset::west_opt(5 * 3600)
+        .unwrap_or_else(|| chrono::FixedOffset::west_opt(0).unwrap());
+
+    updates
+        .iter()
+        .map(|update| {
+            let matchup = format!("{} vs {}", update.away_team, update.home_team);
+
+            // Format commence time: for score feeds we don't have it, use "—"
+            // Game status from ScoreUpdate
+            let game_status = match &update.game_status {
+                crate::feed::score_feed::GameStatus::PreGame => "Pre-Game".to_string(),
+                crate::feed::score_feed::GameStatus::Live => {
+                    let clock_mins = update.clock_seconds / 60;
+                    let clock_secs = update.clock_seconds % 60;
+                    format!(
+                        "Live (P{} {}:{:02} {}-{})",
+                        update.period,
+                        clock_mins,
+                        clock_secs,
+                        update.home_score,
+                        update.away_score
+                    )
+                },
+                crate::feed::score_feed::GameStatus::Halftime => "Halftime".to_string(),
+                crate::feed::score_feed::GameStatus::Finished => "Final".to_string(),
+            };
+
+            // Score feeds don't have a scheduled commence time in the struct,
+            // so we use a placeholder
+            let commence_time = "—".to_string();
+
+            // Try to match against Kalshi markets
+            // We don't have a date from ScoreUpdate, so we'll use today's date
+            let today = chrono::Utc::now().with_timezone(&eastern).date_naive();
+
+            let (lookup_home, lookup_away) = if sport == "mma" {
+                (crate::last_name(&update.home_team).to_string(),
+                 crate::last_name(&update.away_team).to_string())
+            } else {
+                (update.home_team.clone(), update.away_team.clone())
+            };
+
+            let matched_game = matcher::generate_key(sport, &lookup_home, &lookup_away, today)
+                .and_then(|k| market_index.get(&k));
+
+            let (kalshi_ticker, market_status, reason) = match matched_game {
+                Some(game) => {
+                    let side = game.home.as_ref()
+                        .or(game.away.as_ref())
+                        .or(game.draw.as_ref());
+
+                    match side {
+                        Some(sm) => {
+                            let market_st = if sm.status == "open" || sm.status == "active" {
+                                "Open"
+                            } else {
+                                "Closed"
+                            };
+                            let reason = match &update.game_status {
+                                crate::feed::score_feed::GameStatus::Live => {
+                                    "Live & tradeable".to_string()
+                                }
+                                crate::feed::score_feed::GameStatus::PreGame => {
+                                    "Not started yet".to_string()
+                                }
+                                _ => "Game ended".to_string(),
+                            };
+                            (Some(sm.ticker.clone()), Some(market_st.to_string()), reason)
+                        }
+                        None => (None, None, "No match found".to_string()),
+                    }
+                }
+                None => (None, None, "No match found".to_string()),
+            };
+
+            DiagnosticRow {
+                sport: sport.to_string(),
+                matchup,
+                commence_time,
+                game_status,
+                kalshi_ticker,
+                market_status,
+                reason,
+                source: source_name.to_string(),
+            }
+        })
+        .collect()
+}
+
 /// Format fair value basis from SignalTrace inputs for display.
 pub fn format_fair_value_basis(trace: &SignalTrace) -> String {
     match &trace.inputs {
