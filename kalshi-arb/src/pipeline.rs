@@ -295,6 +295,7 @@ impl SportPipeline {
             return TickResult {
                 filter_live: 0, filter_pre_game: 0, filter_closed: 0,
                 earliest_commence: None, rows: HashMap::new(), has_live_games: false,
+                closed_tickers: Vec::new(),
             };
         }
 
@@ -360,10 +361,29 @@ impl SportPipeline {
             let sport_game_count = market_index.keys()
                 .filter(|k| k.sport == sport_key_normalized)
                 .count();
-            return TickResult {
-                filter_live: 0, filter_pre_game: 0, filter_closed: sport_game_count,
-                earliest_commence: None, rows: HashMap::new(), has_live_games: false,
+
+            // In sim mode, check for open positions on this sport's tickers
+            // so process_sport_updates can detect closure and settle them.
+            let has_unsettled_positions = sim_mode && {
+                let positions = &state_tx.borrow().sim_positions;
+                !positions.is_empty() && market_index.iter()
+                    .filter(|(k, _)| k.sport == sport_key_normalized)
+                    .any(|(_, game)| {
+                        [game.home.as_ref(), game.away.as_ref(), game.draw.as_ref()]
+                            .into_iter().flatten()
+                            .any(|side| positions.iter().any(|p| p.ticker == side.ticker))
+                    })
             };
+
+            if !has_unsettled_positions {
+                return TickResult {
+                    filter_live: 0, filter_pre_game: 0, filter_closed: sport_game_count,
+                    earliest_commence: None, rows: HashMap::new(), has_live_games: false,
+                    closed_tickers: Vec::new(),
+                };
+            }
+            // Fall through to process_sport_updates so closed markets produce
+            // closed_tickers entries for sim settlement.
         }
 
         // Determine if any event is live (from commence times)
@@ -436,6 +456,7 @@ impl SportPipeline {
             return TickResult {
                 filter_live: 0, filter_pre_game: 0, filter_closed: 0,
                 earliest_commence: None, rows: HashMap::new(), has_live_games: false,
+                closed_tickers: Vec::new(),
             };
         }
 
@@ -469,6 +490,8 @@ pub struct TickResult {
     pub rows: HashMap<String, MarketRow>,
     #[allow(dead_code)]
     pub has_live_games: bool,
+    /// Tickers detected as closed this cycle, with their last fair value (for sim settlement).
+    pub closed_tickers: Vec<(String, u32)>,
 }
 
 // ── Moved helper functions ─────────────────────────────────────────────
@@ -827,6 +850,7 @@ fn process_score_updates(
     let earliest_commence: Option<chrono::DateTime<chrono::Utc>> = None;
     let mut rows: HashMap<String, MarketRow> = HashMap::new();
     let mut has_live_games = false;
+    let mut closed_tickers: Vec<(String, u32)> = Vec::new();
     let now_utc = chrono::Utc::now();
 
     // Get win_prob_table from fair_value_source
@@ -835,6 +859,7 @@ fn process_score_updates(
         _ => return TickResult {
             filter_live: 0, filter_pre_game: 0, filter_closed: 0,
             earliest_commence: None, rows: HashMap::new(), has_live_games: false,
+            closed_tickers: Vec::new(),
         },
     };
 
@@ -850,6 +875,21 @@ fn process_score_updates(
             }
             crate::feed::score_feed::GameStatus::Finished => {
                 filter_closed += 1;
+                // Record closed ticker with fair value for sim settlement
+                if sim_mode {
+                    let score_diff = update.home_score as i32 - update.away_score as i32;
+                    let (home_fair, _) = if update.period > ot_period_threshold {
+                        let ot_elapsed = update.total_elapsed_seconds.saturating_sub(regulation_secs);
+                        win_prob_table.fair_value_overtime(score_diff, ot_elapsed)
+                    } else {
+                        win_prob_table.fair_value(score_diff, update.total_elapsed_seconds)
+                    };
+                    let eastern = chrono::FixedOffset::west_opt(5 * 3600).unwrap();
+                    let today = chrono::Utc::now().with_timezone(&eastern).date_naive();
+                    if let Some(mkt) = matcher::find_match(market_index, sport, &update.home_team, &update.away_team, today) {
+                        closed_tickers.push((mkt.ticker.clone(), home_fair));
+                    }
+                }
                 continue;
             }
             _ => {} // Live or Halftime
@@ -905,7 +945,12 @@ fn process_score_updates(
                 "score_feed", sim_config, risk_config, bankroll_cents,
                 sport, fv_method, fv_inputs,
             ) {
-                EvalOutcome::Closed => { filter_closed += 1; }
+                EvalOutcome::Closed => {
+                    filter_closed += 1;
+                    if sim_mode {
+                        closed_tickers.push((mkt.ticker.clone(), fair));
+                    }
+                }
                 EvalOutcome::Evaluated(row) => {
                     filter_live += 1;
                     rows.insert(mkt.ticker.clone(), row);
@@ -914,7 +959,7 @@ fn process_score_updates(
         }
     }
 
-    TickResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows, has_live_games }
+    TickResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows, has_live_games, closed_tickers }
 }
 
 /// Process odds updates for a single sport through the filter/matching/evaluation pipeline.
@@ -943,6 +988,7 @@ fn process_sport_updates(
     let mut earliest_commence: Option<chrono::DateTime<chrono::Utc>> = None;
     let mut rows: HashMap<String, MarketRow> = HashMap::new();
     let mut has_live_games = false;
+    let mut closed_tickers: Vec<(String, u32)> = Vec::new();
 
     for update in updates {
         if let Some(bm) = update.bookmakers.first() {
@@ -1039,7 +1085,12 @@ fn process_sport_updates(
                             label, sim_config, risk_config, bankroll_cents,
                             sport, fv_method, fv_inputs,
                         ) {
-                            EvalOutcome::Closed => { filter_closed += 1; }
+                            EvalOutcome::Closed => {
+                                filter_closed += 1;
+                                if sim_mode {
+                                    closed_tickers.push((side.ticker.clone(), fair));
+                                }
+                            }
                             EvalOutcome::Evaluated(row) => {
                                 filter_live += 1;
                                 rows.insert(side.ticker.clone(), row);
@@ -1093,7 +1144,12 @@ fn process_sport_updates(
                         "odds_api", sim_config, risk_config, bankroll_cents,
                         sport, fv_method, fv_inputs,
                     ) {
-                        EvalOutcome::Closed => { filter_closed += 1; }
+                        EvalOutcome::Closed => {
+                            filter_closed += 1;
+                            if sim_mode {
+                                closed_tickers.push((mkt.ticker.clone(), fair));
+                            }
+                        }
                         EvalOutcome::Evaluated(row) => {
                             filter_live += 1;
                             rows.insert(mkt.ticker.clone(), row);
@@ -1104,7 +1160,7 @@ fn process_sport_updates(
         }
     }
 
-    TickResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows, has_live_games }
+    TickResult { filter_live, filter_pre_game, filter_closed, earliest_commence, rows, has_live_games, closed_tickers }
 }
 
 #[cfg(test)]

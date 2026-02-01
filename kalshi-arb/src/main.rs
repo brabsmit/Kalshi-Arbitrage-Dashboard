@@ -659,6 +659,8 @@ async fn main() -> Result<()> {
                 if sim_mode_engine { s.sim_balance_cents.max(0) as u64 } else { s.balance_cents.max(0) as u64 }
             };
 
+            let mut all_closed_tickers: Vec<(String, u32)> = Vec::new();
+
             for pipeline in &mut sport_pipelines {
                 if !pipeline.enabled { continue; }
 
@@ -684,6 +686,47 @@ async fn main() -> Result<()> {
                     earliest_commence = Some(earliest_commence.map_or(ec, |e| e.min(ec)));
                 }
                 accumulated_rows.extend(result.rows);
+                all_closed_tickers.extend(result.closed_tickers);
+            }
+
+            // Settle sim positions on closed markets at last known fair value
+            if sim_mode_engine && !all_closed_tickers.is_empty() {
+                state_tx_engine.send_modify(|s| {
+                    for (closed_ticker, fair) in &all_closed_tickers {
+                        let idx = s.sim_positions.iter()
+                            .position(|p| &p.ticker == closed_ticker);
+                        let Some(idx) = idx else { continue };
+                        let pos = s.sim_positions.remove(idx);
+                        let settle_price = *fair;
+                        let exit_revenue = (pos.quantity * settle_price) as i64;
+                        let exit_fee = calculate_fee(settle_price, pos.quantity, false) as i64;
+                        let entry_cost = (pos.quantity * pos.entry_price) as i64 + pos.entry_fee as i64;
+                        let pnl = (exit_revenue - exit_fee) - entry_cost;
+
+                        s.sim_balance_cents += exit_revenue - exit_fee;
+                        s.sim_realized_pnl_cents += pnl;
+                        s.sim_total_trades += 1;
+                        if pnl > 0 {
+                            s.sim_winning_trades += 1;
+                        }
+                        s.push_trade(tui::state::TradeRow {
+                            time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            action: "SETTLE".to_string(),
+                            ticker: pos.ticker.clone(),
+                            price: settle_price,
+                            quantity: pos.quantity,
+                            order_type: "SIM".to_string(),
+                            pnl: Some(pnl as i32),
+                            slippage: None,
+                            source: String::new(),
+                            fair_value_basis: String::new(),
+                        });
+                        s.push_log("TRADE", format!(
+                            "SIM SETTLE {}x {} @ {}c (fair value), P&L: {:+}c",
+                            pos.quantity, pos.ticker, settle_price, pnl
+                        ));
+                    }
+                });
             }
 
             // Check if any pipeline has live games (odds-feed via filter_live,
