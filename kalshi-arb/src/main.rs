@@ -264,14 +264,8 @@ fn apply_config_update(
         ["sports", sport_key, "fair_value"] => {
             if let Some(pipe) = sport_pipelines.iter_mut().find(|p| p.key == *sport_key) {
                 pipe.rebuild_fair_value_source(value);
-
-                // If switching to an odds source (not "score-feed"), also persist odds_source field
-                if value != "score-feed" {
-                    let odds_source_path = format!("sports.{}.odds_source", sport_key);
-                    if let Err(e) = config::persist_field(&config_path, &odds_source_path, value) {
-                        tracing::warn!(path = %odds_source_path, error = %e, "failed to persist odds_source");
-                    }
-                }
+                // Note: odds_source is automatically set in rebuild_fair_value_source
+                // The caller handles persisting the fair_value change to config
             }
         },
         // Global simulation
@@ -654,6 +648,15 @@ async fn main() -> Result<()> {
                             if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
                                 tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
                             }
+
+                            // If changing fair_value to an odds source, also persist odds_source
+                            if field_path.ends_with(".fair_value") && value != "score-feed" && value != "odds-feed" {
+                                let odds_source_path = field_path.replace(".fair_value", ".odds_source");
+                                if let Err(e) = config::persist_field(&config_path, &odds_source_path, &value) {
+                                    tracing::warn!(path = %odds_source_path, error = %e, "failed to persist odds_source");
+                                }
+                            }
+
                             apply_config_update(
                                 &mut sport_pipelines, &mut global_strategy,
                                 &mut global_momentum, &mut risk_config,
@@ -851,6 +854,15 @@ async fn main() -> Result<()> {
                                             if let Err(e) = config::persist_field(&config_path, &field_path, &value) {
                                                 tracing::warn!(path = %field_path, error = %e, "failed to persist config field");
                                             }
+
+                                            // If changing fair_value to an odds source, also persist odds_source
+                                            if field_path.ends_with(".fair_value") && value != "score-feed" && value != "odds-feed" {
+                                                let odds_source_path = field_path.replace(".fair_value", ".odds_source");
+                                                if let Err(e) = config::persist_field(&config_path, &odds_source_path, &value) {
+                                                    tracing::warn!(path = %odds_source_path, error = %e, "failed to persist odds_source");
+                                                }
+                                            }
+
                                             apply_config_update(
                                                 &mut sport_pipelines, &mut global_strategy,
                                                 &mut global_momentum, &mut risk_config,

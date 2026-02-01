@@ -1172,24 +1172,24 @@ fn process_sport_updates(
                         devigged_prob,
                     };
 
-                        match evaluate_matched_market(
-                            &side.ticker, fair, side.yes_bid, side.yes_ask, false,
-                            velocity_score, staleness_secs, false, Some(side), now_utc,
-                            live_book_engine, strategy_config, momentum_config,
-                            book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                            label, sim_config, risk_config, bankroll_cents,
-                            sport, fv_method, fv_inputs,
-                        ) {
-                            EvalOutcome::Closed => {
-                                filter_closed += 1;
-                                if sim_mode {
-                                    closed_tickers.push((side.ticker.clone(), fair));
-                                }
+                    match evaluate_matched_market(
+                        &side.ticker, fair, side.yes_bid, side.yes_ask, false,
+                        velocity_score, staleness_secs, false, Some(side), now_utc,
+                        live_book_engine, strategy_config, momentum_config,
+                        book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
+                        label, sim_config, risk_config, bankroll_cents,
+                        sport, fv_method, fv_inputs,
+                    ) {
+                        EvalOutcome::Closed => {
+                            filter_closed += 1;
+                            if sim_mode {
+                                closed_tickers.push((side.ticker.clone(), fair));
                             }
-                            EvalOutcome::Evaluated(row) => {
-                                filter_live += 1;
-                                rows.insert(side.ticker.clone(), row);
-                            }
+                        }
+                        EvalOutcome::Evaluated(row) => {
+                            filter_live += 1;
+                            rows.insert(side.ticker.clone(), row);
+                        }
                     }
                 }
             }
@@ -1229,24 +1229,23 @@ fn process_sport_updates(
                     devigged_prob: home_fv,
                 };
 
-                    match evaluate_matched_market(
-                        &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
-                        velocity_score, staleness_secs, false, side_market, now_utc,
-                        live_book_engine, strategy_config, momentum_config,
-                        book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
-                        "odds_api", sim_config, risk_config, bankroll_cents,
-                        sport, fv_method, fv_inputs,
-                    ) {
-                        EvalOutcome::Closed => {
-                            filter_closed += 1;
-                            if sim_mode {
-                                closed_tickers.push((mkt.ticker.clone(), fair));
-                            }
+                match evaluate_matched_market(
+                    &mkt.ticker, fair, mkt.best_bid, mkt.best_ask, mkt.is_inverse,
+                    velocity_score, staleness_secs, false, side_market, now_utc,
+                    live_book_engine, strategy_config, momentum_config,
+                    book_pressure_trackers, scorer, sim_mode, state_tx, cycle_start,
+                    "odds_api", sim_config, risk_config, bankroll_cents,
+                    sport, fv_method, fv_inputs,
+                ) {
+                    EvalOutcome::Closed => {
+                        filter_closed += 1;
+                        if sim_mode {
+                            closed_tickers.push((mkt.ticker.clone(), fair));
                         }
-                        EvalOutcome::Evaluated(row) => {
-                            filter_live += 1;
-                            rows.insert(mkt.ticker.clone(), row);
-                        }
+                    }
+                    EvalOutcome::Evaluated(row) => {
+                        filter_live += 1;
+                        rows.insert(mkt.ticker.clone(), row);
                     }
                 }
             }
