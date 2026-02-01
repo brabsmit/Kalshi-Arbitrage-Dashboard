@@ -734,6 +734,22 @@ pub fn evaluate_matched_market(
     let pressure_score = bpt.score();
     let momentum = scorer.composite(velocity_score, pressure_score);
 
+    // CRITICAL: Skip stale data before strategy evaluation
+    if is_stale {
+        let row = MarketRow {
+            ticker: ticker.to_string(),
+            fair_value: fair,
+            bid,
+            ask,
+            edge: 0,
+            action: "STALE".to_string(),
+            latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+            momentum_score: momentum,
+            staleness_secs,
+        };
+        return EvalOutcome::Evaluated(row);
+    }
+
     // Evaluate strategy
     let mut signal = strategy::evaluate(
         fair, bid, ask,
@@ -756,17 +772,6 @@ pub fn evaluate_matched_market(
         );
     }
     let momentum_gated = pre_gate_action != signal.action && !bypass_momentum;
-
-    // Force skip if stale
-    if is_stale {
-        signal = strategy::StrategySignal {
-            action: strategy::TradeAction::Skip,
-            price: 0,
-            edge: signal.edge,
-            net_profit_estimate: 0,
-            quantity: 0,
-        };
-    }
 
     let action_str = match &signal.action {
         strategy::TradeAction::TakerBuy => "TAKER",

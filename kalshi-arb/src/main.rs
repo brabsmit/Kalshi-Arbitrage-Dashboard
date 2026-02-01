@@ -587,6 +587,15 @@ async fn main() -> Result<()> {
             global_momentum.book_pressure_weight,
         );
 
+        // Initialize risk manager for live mode
+        // TODO: Wire into live trading loop (Task 10: OrderExecutor integration)
+        let mut risk_manager = if !sim_mode_engine {
+            Some(crate::engine::risk::RiskManager::new(risk_config.clone()))
+        } else {
+            None
+        };
+        let _ = &risk_manager; // Suppress unused warning until Task 10
+
         let mut api_request_times: VecDeque<Instant> = VecDeque::with_capacity(100);
         let mut accumulated_rows: HashMap<String, MarketRow> = HashMap::new();
 
@@ -681,10 +690,18 @@ async fn main() -> Result<()> {
             earliest_commence = None;
             accumulated_rows.clear();
 
-            let bankroll_cents = {
+            // Track available balance (pessimistic: reduce by pending orders)
+            // TODO: Wire into live trading loop to deduct order costs within cycle (Task 10)
+            let (bankroll_cents, mut available_balance_cents) = {
                 let s = state_tx_engine.borrow();
-                if sim_mode_engine { s.sim_balance_cents.max(0) as u64 } else { s.balance_cents.max(0) as u64 }
+                let total = if sim_mode_engine {
+                    s.sim_balance_cents.max(0) as u64
+                } else {
+                    s.balance_cents.max(0) as u64
+                };
+                (total, total)
             };
+            let _ = &available_balance_cents; // Suppress unused warning until Task 10
 
             let mut all_closed_tickers: Vec<(String, u32)> = Vec::new();
 
