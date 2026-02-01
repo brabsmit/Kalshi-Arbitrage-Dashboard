@@ -216,9 +216,10 @@ impl SportPipeline {
                 let live_poll_s = *live_poll_s;
                 let pre_game_poll_s = *pre_game_poll_s;
                 self.tick_score_feed(
-                    cycle_start, market_index, live_book, scorer,
+                    cycle_start, market_index, live_book, odds_sources, scorer,
                     risk_config, sim_config, sim_mode, state_tx,
                     bankroll_cents, regulation_secs, live_poll_s, pre_game_poll_s,
+                    api_request_times, odds_source_configs,
                 ).await
             }
             FairValueSource::OddsFeed => {
@@ -238,6 +239,7 @@ impl SportPipeline {
         cycle_start: Instant,
         market_index: &matcher::MarketIndex,
         live_book: &LiveBook,
+        odds_sources: &mut HashMap<String, Box<dyn OddsFeed>>,
         scorer: &MomentumScorer,
         risk_config: &crate::config::RiskConfig,
         sim_config: &crate::config::SimulationConfig,
@@ -247,7 +249,51 @@ impl SportPipeline {
         regulation_secs: u16,
         live_poll_s: u64,
         pre_game_poll_s: u64,
+        api_request_times: &mut VecDeque<Instant>,
+        odds_source_configs: &HashMap<String, OddsSourceConfig>,
     ) -> TickResult {
+        // Poll odds feed for diagnostic rows (pre-game interval to avoid
+        // burning API quota — the score feed drives actual fair value).
+        let diag_poll_s = odds_source_configs.get(&self.odds_source)
+            .map(|c| c.pre_game_poll_s).unwrap_or(120);
+        let should_fetch_odds = match self.last_odds_poll {
+            Some(last) => cycle_start.duration_since(last) >= Duration::from_secs(diag_poll_s),
+            None => true,
+        };
+        if should_fetch_odds {
+            if let Some(source) = odds_sources.get_mut(&self.odds_source) {
+                match source.fetch_odds(&self.key).await {
+                    Ok(updates) => {
+                        self.last_odds_poll = Some(Instant::now());
+                        self.commence_times = updates.iter()
+                            .map(|u| u.commence_time.clone()).collect();
+                        if let Some(quota) = source.last_quota() {
+                            api_request_times.push_back(Instant::now());
+                            let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+                            while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
+                                api_request_times.pop_front();
+                            }
+                            let burn_rate = api_request_times.len() as f64;
+                            state_tx.send_modify(|s| {
+                                s.api_requests_used = quota.requests_used;
+                                s.api_requests_remaining = quota.requests_remaining;
+                                s.api_burn_rate = burn_rate;
+                                s.api_hours_remaining = if burn_rate > 0.0 {
+                                    quota.requests_remaining as f64 / burn_rate
+                                } else {
+                                    f64::INFINITY
+                                };
+                            });
+                        }
+                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index);
+                    }
+                    Err(e) => {
+                        tracing::warn!(sport = %self.key, error = %e, "diagnostic odds fetch failed");
+                    }
+                }
+            }
+        }
+
         // Determine poll interval from cached state
         let has_live = self.cached_scores.iter()
             .any(|u| u.game_status == crate::feed::score_feed::GameStatus::Live);
@@ -338,6 +384,73 @@ impl SportPipeline {
         api_request_times: &mut VecDeque<Instant>,
         odds_source_configs: &HashMap<String, OddsSourceConfig>,
     ) -> TickResult {
+        // Determine if any event is live (from commence times)
+        let is_live = self.commence_times.iter().any(|ct| {
+            chrono::DateTime::parse_from_rfc3339(ct)
+                .ok()
+                .is_some_and(|dt| dt < chrono::Utc::now())
+        });
+
+        // Determine polling intervals from the odds source config
+        let source_config = odds_source_configs.get(&self.odds_source);
+        let live_poll_s = source_config.map(|c| c.live_poll_s).unwrap_or(20);
+        let pre_game_poll_s = source_config.map(|c| c.pre_game_poll_s).unwrap_or(120);
+        let quota_warning = source_config.and_then(|c| c.quota_warning_threshold).unwrap_or(100);
+
+        let quota_low = !api_request_times.is_empty()
+            && state_tx.borrow().api_requests_remaining < quota_warning;
+        let interval = if quota_low || !is_live {
+            Duration::from_secs(pre_game_poll_s)
+        } else {
+            Duration::from_secs(live_poll_s)
+        };
+
+        let should_fetch = match self.last_odds_poll {
+            Some(last) => cycle_start.duration_since(last) >= interval,
+            None => true,
+        };
+
+        // Always fetch odds + build diagnostic rows on schedule, even when no
+        // Kalshi markets are open.  The diagnostic view needs all games.
+        if should_fetch {
+            if let Some(source) = odds_sources.get_mut(&self.odds_source) {
+                match source.fetch_odds(&self.key).await {
+                    Ok(updates) => {
+                        self.last_odds_poll = Some(Instant::now());
+                        let ctimes: Vec<String> = updates.iter()
+                            .map(|u| u.commence_time.clone()).collect();
+                        self.commence_times = ctimes;
+
+                        // Update API quota
+                        if let Some(quota) = source.last_quota() {
+                            api_request_times.push_back(Instant::now());
+                            let one_hour_ago = Instant::now() - Duration::from_secs(3600);
+                            while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
+                                api_request_times.pop_front();
+                            }
+                            let burn_rate = api_request_times.len() as f64;
+                            state_tx.send_modify(|s| {
+                                s.api_requests_used = quota.requests_used;
+                                s.api_requests_remaining = quota.requests_remaining;
+                                s.api_burn_rate = burn_rate;
+                                s.api_hours_remaining = if burn_rate > 0.0 {
+                                    quota.requests_remaining as f64 / burn_rate
+                                } else {
+                                    f64::INFINITY
+                                };
+                            });
+                        }
+
+                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index);
+                        self.cached_odds = updates;
+                    }
+                    Err(e) => {
+                        tracing::warn!(sport = %self.key, error = %e, "odds fetch failed");
+                    }
+                }
+            }
+        }
+
         // Pre-check: does this sport have any game that COULD be live?
         let now_utc_precheck = chrono::Utc::now();
         let sport_key_normalized: String = self.key.to_uppercase().chars()
@@ -384,71 +497,6 @@ impl SportPipeline {
             }
             // Fall through to process_sport_updates so closed markets produce
             // closed_tickers entries for sim settlement.
-        }
-
-        // Determine if any event is live (from commence times)
-        let is_live = self.commence_times.iter().any(|ct| {
-            chrono::DateTime::parse_from_rfc3339(ct)
-                .ok()
-                .is_some_and(|dt| dt < chrono::Utc::now())
-        });
-
-        // Determine polling intervals from the odds source config
-        let source_config = odds_source_configs.get(&self.odds_source);
-        let live_poll_s = source_config.map(|c| c.live_poll_s).unwrap_or(20);
-        let pre_game_poll_s = source_config.map(|c| c.pre_game_poll_s).unwrap_or(120);
-        let quota_warning = source_config.and_then(|c| c.quota_warning_threshold).unwrap_or(100);
-
-        let quota_low = !api_request_times.is_empty()
-            && state_tx.borrow().api_requests_remaining < quota_warning;
-        let interval = if quota_low || !is_live {
-            Duration::from_secs(pre_game_poll_s)
-        } else {
-            Duration::from_secs(live_poll_s)
-        };
-
-        let should_fetch = match self.last_odds_poll {
-            Some(last) => cycle_start.duration_since(last) >= interval,
-            None => true,
-        };
-
-        if should_fetch {
-            if let Some(source) = odds_sources.get_mut(&self.odds_source) {
-                match source.fetch_odds(&self.key).await {
-                    Ok(updates) => {
-                        self.last_odds_poll = Some(Instant::now());
-                        let ctimes: Vec<String> = updates.iter()
-                            .map(|u| u.commence_time.clone()).collect();
-                        self.commence_times = ctimes;
-
-                        // Update API quota
-                        if let Some(quota) = source.last_quota() {
-                            api_request_times.push_back(Instant::now());
-                            let one_hour_ago = Instant::now() - Duration::from_secs(3600);
-                            while api_request_times.front().is_some_and(|&t| t < one_hour_ago) {
-                                api_request_times.pop_front();
-                            }
-                            let burn_rate = api_request_times.len() as f64;
-                            state_tx.send_modify(|s| {
-                                s.api_requests_used = quota.requests_used;
-                                s.api_requests_remaining = quota.requests_remaining;
-                                s.api_burn_rate = burn_rate;
-                                s.api_hours_remaining = if burn_rate > 0.0 {
-                                    quota.requests_remaining as f64 / burn_rate
-                                } else {
-                                    f64::INFINITY
-                                };
-                            });
-                        }
-
-                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index);
-                        self.cached_odds = updates;
-                    }
-                    Err(e) => {
-                        tracing::warn!(sport = %self.key, error = %e, "odds fetch failed");
-                    }
-                }
-            }
         }
 
         // Process (fresh or cached)
