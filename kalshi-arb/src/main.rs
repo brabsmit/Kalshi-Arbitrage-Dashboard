@@ -6,7 +6,7 @@ mod kalshi;
 mod pipeline;
 mod tui;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use config::Config;
 use engine::fees::calculate_fee;
 use engine::momentum::MomentumScorer;
