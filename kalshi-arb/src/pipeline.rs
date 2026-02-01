@@ -571,6 +571,7 @@ pub fn build_diagnostic_rows(
     updates: &[OddsUpdate],
     sport: &str,
     market_index: &matcher::MarketIndex,
+    source_name: &str,
 ) -> Vec<DiagnosticRow> {
     let eastern = chrono::FixedOffset::west_opt(5 * 3600)
         .unwrap_or_else(|| chrono::FixedOffset::west_opt(0).unwrap());
@@ -652,6 +653,7 @@ pub fn build_diagnostic_rows(
                 kalshi_ticker,
                 market_status,
                 reason,
+                source: source_name.to_string(),
             }
         })
         .collect()
