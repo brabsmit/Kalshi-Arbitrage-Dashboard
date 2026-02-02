@@ -989,27 +989,32 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     // Responsive column widths
-    let matchup_w = inner_width.saturating_sub(14 + 10 + 16 + 8 + 18).max(10);
+    // Full columns: Matchup + Commence(14) + Status(10) + Ticker(16) + Market(8) + Reason(18) + Source(10)
+    let show_source = inner_width >= 96; // Need enough width for source column
+    let fixed_cols = 14 + 10 + 16 + 8 + 18 + if show_source { 10 } else { 0 };
+    let matchup_w = inner_width.saturating_sub(fixed_cols).max(10);
 
     // Build display lines: sport headers + data rows
     let mut display_rows: Vec<Row> = Vec::new();
     for (sport, rows) in &by_sport {
         // Sport header row
         let header_text = format!("── {} ({}) ──", sport.to_uppercase(), rows.len());
-        display_rows.push(
-            Row::new(vec![
-                Cell::from(header_text).style(
-                    Style::default()
-                        .fg(Color::Cyan)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-                Cell::from(""),
-            ])
-        );
+        let mut header_cells = vec![
+            Cell::from(header_text).style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Cell::from(""),
+            Cell::from(""),
+            Cell::from(""),
+            Cell::from(""),
+            Cell::from(""),
+        ];
+        if show_source {
+            header_cells.push(Cell::from(""));
+        }
+        display_rows.push(Row::new(header_cells));
 
         for row in rows {
             let status_style = match row.game_status.as_str() {
@@ -1032,7 +1037,7 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
                 Style::default().fg(Color::White)
             };
 
-            display_rows.push(Row::new(vec![
+            let mut cells = vec![
                 Cell::from(truncate_with_ellipsis(&row.matchup, matchup_w).into_owned()),
                 Cell::from(row.commence_time.clone()),
                 Cell::from(row.game_status.clone()).style(status_style),
@@ -1047,7 +1052,16 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
                 )
                 .style(market_style),
                 Cell::from(row.reason.clone()).style(reason_style),
-            ]));
+            ];
+
+            if show_source {
+                cells.push(
+                    Cell::from(row.source.clone())
+                        .style(Style::default().fg(Color::Cyan)),
+                );
+            }
+
+            display_rows.push(Row::new(cells));
         }
     }
 
@@ -1065,20 +1079,27 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
 
     let matchup_w = matchup_w as u16;
 
-    let table_header = Row::new(vec!["Matchup", "Commence(ET)", "Status", "Kalshi Ticker", "Market", "Reason"])
+    let mut header_labels = vec!["Matchup", "Commence(ET)", "Status", "Kalshi Ticker", "Market", "Reason"];
+    if show_source {
+        header_labels.push("Source");
+    }
+
+    let table_header = Row::new(header_labels)
         .style(Style::default().add_modifier(Modifier::BOLD));
 
-    let table = Table::new(
-        visible_rows,
-        [
-            Constraint::Length(matchup_w),
-            Constraint::Length(14),
-            Constraint::Length(10),
-            Constraint::Length(16),
-            Constraint::Length(8),
-            Constraint::Length(18),
-        ],
-    )
+    let mut constraints = vec![
+        Constraint::Length(matchup_w),
+        Constraint::Length(14),
+        Constraint::Length(10),
+        Constraint::Length(16),
+        Constraint::Length(8),
+        Constraint::Length(18),
+    ];
+    if show_source {
+        constraints.push(Constraint::Length(10));
+    }
+
+    let table = Table::new(visible_rows, constraints)
     .header(table_header)
     .block(
         Block::default()
