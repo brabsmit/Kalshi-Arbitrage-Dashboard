@@ -939,7 +939,7 @@ fn draw_diagnostic_header(f: &mut Frame, state: &AppState, area: Rect) {
 
     let title_line = Line::from(vec![
         Span::styled(
-            " All Games from The Odds API",
+            " All Games from All Sources",
             Style::default().add_modifier(Modifier::BOLD),
         ),
         mode_tag,
