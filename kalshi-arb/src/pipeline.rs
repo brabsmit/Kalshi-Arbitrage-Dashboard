@@ -299,7 +299,8 @@ impl SportPipeline {
                                 };
                             });
                         }
-                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index);
+                        let source_name = format_source_name(&self.odds_source);
+                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index, &source_name);
                     }
                     Err(e) => {
                         tracing::warn!(sport = %self.key, error = %e, "diagnostic odds fetch failed");
@@ -455,7 +456,8 @@ impl SportPipeline {
                             });
                         }
 
-                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index);
+                        let source_name = format_source_name(&self.odds_source);
+                        self.diagnostic_rows = build_diagnostic_rows(&updates, &self.key, market_index, &source_name);
                         self.cached_odds = updates;
                     }
                     Err(e) => {
@@ -765,6 +767,16 @@ pub fn format_fair_value_basis(trace: &SignalTrace) -> String {
         FairValueInputs::Odds { devigged_prob, .. } => {
             format!("devig p={:.2}", devigged_prob)
         }
+    }
+}
+
+/// Helper function to format source names for display.
+fn format_source_name(source_key: &str) -> String {
+    match source_key {
+        "the-odds-api" => "TheOddsAPI".to_string(),
+        "draftkings" => "DraftKings".to_string(),
+        "scraped-bovada" => "Bovada".to_string(),
+        other => other.to_string(),
     }
 }
 

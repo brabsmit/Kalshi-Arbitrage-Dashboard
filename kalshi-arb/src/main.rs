@@ -158,8 +158,11 @@ async fn handle_fetch_diagnostic(
                     }
                     pipe.commence_times = updates.iter()
                         .map(|u| u.commence_time.clone()).collect();
+
+                    // Format source name nicely (e.g., "the-odds-api" -> "TheOddsAPI")
+                    let source_name = format_source_name(&pipe.odds_source);
                     diag_rows.extend(
-                        pipeline::build_diagnostic_rows(&updates, &pipe.key, market_index)
+                        pipeline::build_diagnostic_rows(&updates, &pipe.key, market_index, &source_name)
                     );
                 }
                 Err(e) => {
@@ -172,6 +175,16 @@ async fn handle_fetch_diagnostic(
         s.diagnostic_rows = diag_rows;
         s.diagnostic_snapshot = true;
     });
+}
+
+// Helper function to format source names
+fn format_source_name(source_key: &str) -> String {
+    match source_key {
+        "the-odds-api" => "TheOddsAPI".to_string(),
+        "draftkings" => "DraftKings".to_string(),
+        "scraped-bovada" => "Bovada".to_string(),
+        other => other.to_string(),
+    }
 }
 
 /// Persist a sport's enabled state to the config file.
