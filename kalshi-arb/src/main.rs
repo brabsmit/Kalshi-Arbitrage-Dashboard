@@ -166,11 +166,43 @@ async fn handle_fetch_diagnostic(
                     );
                 }
                 Err(e) => {
-                    tracing::warn!(sport = pipe.key.as_str(), error = %e, "diagnostic fetch failed");
+                    tracing::warn!(sport = pipe.key.as_str(), source = "odds", error = %e, "diagnostic fetch failed");
                 }
             }
         }
     }
+
+    // NEW: Fetch from score feeds
+    for pipe in sport_pipelines.iter_mut() {
+        if !pipe.enabled { continue; }
+        if let pipeline::FairValueSource::ScoreFeed { ref mut poller, .. } = pipe.fair_value_source {
+            match poller.fetch().await {
+                Ok(updates) => {
+                    // Determine source name based on which URL was used
+                    let source_name = if poller.primary_url().contains("nba.com") {
+                        "NBA"
+                    } else if poller.primary_url().contains("espn.com") {
+                        "ESPN"
+                    } else {
+                        "ScoreFeed"
+                    };
+
+                    diag_rows.extend(
+                        pipeline::build_diagnostic_rows_from_scores(
+                            &updates,
+                            &pipe.key,
+                            market_index,
+                            source_name,
+                        )
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!(sport = pipe.key.as_str(), source = "score", error = %e, "diagnostic fetch failed");
+                }
+            }
+        }
+    }
+
     state_tx.send_modify(|s| {
         s.diagnostic_rows = diag_rows;
         s.diagnostic_snapshot = true;
