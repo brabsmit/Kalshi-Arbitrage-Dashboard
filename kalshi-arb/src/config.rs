@@ -30,7 +30,6 @@ pub struct StrategyConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[allow(dead_code)]
 pub struct RiskConfig {
     pub max_contracts_per_market: u32,
     pub max_total_exposure_cents: u64,
@@ -39,10 +38,17 @@ pub struct RiskConfig {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-#[allow(dead_code)]
 pub struct ExecutionConfig {
+    #[allow(dead_code)]
     pub maker_timeout_ms: u64,
+    #[allow(dead_code)]
     pub stale_odds_threshold_ms: u64,
+    #[serde(default = "default_dry_run")]
+    pub dry_run: bool,
+}
+
+fn default_dry_run() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize, Clone)]

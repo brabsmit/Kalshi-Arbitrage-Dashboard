@@ -777,6 +777,7 @@ async fn main() -> Result<()> {
     let mut global_strategy = config.strategy.clone();
     let mut global_momentum = config.momentum.clone();
     let odds_source_configs = config.odds_sources.clone();
+    let execution_config = config.execution.clone();
 
     let rest_for_engine = rest.clone();
 
@@ -792,13 +793,31 @@ async fn main() -> Result<()> {
         );
 
         // Initialize risk manager for live mode
-        // TODO: Wire into live trading loop (Task 10: OrderExecutor integration)
         let mut risk_manager = if !sim_mode_engine {
             Some(crate::engine::risk::RiskManager::new(risk_config.clone()))
         } else {
             None
         };
-        let _ = &risk_manager; // Suppress unused warning until Task 10
+
+        // Initialize position tracker, pending order registry, and executor for live mode
+        let mut position_tracker = if !sim_mode_engine {
+            Some(crate::engine::PositionTracker::new())
+        } else {
+            None
+        };
+
+        let mut pending_orders = if !sim_mode_engine {
+            Some(crate::engine::PendingOrderRegistry::new())
+        } else {
+            None
+        };
+
+        let executor = if !sim_mode_engine {
+            let dry_run = execution_config.dry_run;
+            Some(crate::execution::OrderExecutor::new(rest_for_engine.clone(), dry_run))
+        } else {
+            None
+        };
 
         // Reconcile positions on startup (live mode only)
         if !sim_mode_engine {
@@ -815,11 +834,16 @@ async fn main() -> Result<()> {
                                 position = pos.position,
                                 "existing position"
                             );
+                            if pos.position > 0 {
+                                if let Some(ref mut rm) = risk_manager {
+                                    rm.record_buy(&pos.ticker, pos.position as u32);
+                                }
+                                if let Some(ref mut pt) = position_tracker {
+                                    pt.record_entry(pos.ticker.clone(), pos.position as u32, 0, 0);
+                                }
+                            }
                         }
-                        // TODO: Load into RiskManager and PositionTracker
-                        tracing::warn!(
-                            "position reconciliation not yet implemented - manual review required"
-                        );
+                        tracing::info!("position reconciliation complete");
                     } else {
                         tracing::info!("no existing positions found");
                     }
@@ -860,10 +884,18 @@ async fn main() -> Result<()> {
                     tui::TuiCommand::Quit => return Ok(()),
                     tui::TuiCommand::KillSwitch => {
                         tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
+                        if let Some(ref mut po) = pending_orders {
+                            let count = po.count();
+                            if count > 0 {
+                                tracing::error!(count, "clearing pending orders");
+                            }
+                            // Note: PendingOrderRegistry doesn't have drain, so we log the count
+                            // Actual order cancellation would require order IDs (future work)
+                        }
                         state_tx_engine.send_modify(|s| {
                             s.is_paused = true;
+                            s.push_log("KILL", "KILL SWITCH ACTIVATED - all trading halted".to_string());
                         });
-                        // TODO: Cancel all pending orders
                         return Ok(()); // Exit engine loop
                     }
                     tui::TuiCommand::ToggleSport(sport_key) => {
@@ -957,7 +989,6 @@ async fn main() -> Result<()> {
             accumulated_rows.clear();
 
             // Track available balance (pessimistic: reduce by pending orders)
-            // TODO: Wire into live trading loop to deduct order costs within cycle (Task 10)
             let (bankroll_cents, mut available_balance_cents) = {
                 let s = state_tx_engine.borrow();
                 let total = if sim_mode_engine {
@@ -967,9 +998,9 @@ async fn main() -> Result<()> {
                 };
                 (total, total)
             };
-            let _ = &available_balance_cents; // Suppress unused warning until Task 10
 
             let mut all_closed_tickers: Vec<(String, u32)> = Vec::new();
+            let mut all_order_intents: Vec<pipeline::OrderIntent> = Vec::new();
 
             for pipeline in &mut sport_pipelines {
                 if !pipeline.enabled {
@@ -1001,6 +1032,7 @@ async fn main() -> Result<()> {
                 }
                 accumulated_rows.extend(result.rows);
                 all_closed_tickers.extend(result.closed_tickers);
+                all_order_intents.extend(result.order_intents);
             }
 
             // Settle sim positions on closed markets at last known fair value
@@ -1047,6 +1079,214 @@ async fn main() -> Result<()> {
                         );
                     }
                 });
+            }
+
+            // Execute order intents (live mode only)
+            if !sim_mode_engine && !all_order_intents.is_empty() {
+                if let Some(ref exec) = executor {
+                    for intent in &all_order_intents {
+                        // Gate 1: PositionTracker - skip if already holding
+                        if let Some(ref pt) = position_tracker {
+                            if pt.has_position(&intent.ticker) {
+                                tracing::warn!(
+                                    ticker = %intent.ticker,
+                                    "BLOCKED: already holding position"
+                                );
+                                let t = intent.ticker.clone();
+                                state_tx_engine.send_modify(|s| {
+                                    s.push_log("SKIP", format!("{}: already holding position", t));
+                                });
+                                continue;
+                            }
+                        }
+
+                        // Gate 2: PendingOrderRegistry - skip if already pending
+                        if let Some(ref po) = pending_orders {
+                            if po.is_pending(&intent.ticker) {
+                                tracing::warn!(
+                                    ticker = %intent.ticker,
+                                    "BLOCKED: order already pending"
+                                );
+                                let t = intent.ticker.clone();
+                                state_tx_engine.send_modify(|s| {
+                                    s.push_log("SKIP", format!("{}: order already pending", t));
+                                });
+                                continue;
+                            }
+                        }
+
+                        // Gate 3: RiskManager - skip if risk limits exceeded
+                        if let Some(ref rm) = risk_manager {
+                            if !rm.can_trade(&intent.ticker, intent.quantity, intent.entry_cost_cents) {
+                                tracing::warn!(
+                                    ticker = %intent.ticker,
+                                    quantity = intent.quantity,
+                                    cost = intent.entry_cost_cents,
+                                    "BLOCKED: risk limits exceeded"
+                                );
+                                let t = intent.ticker.clone();
+                                let cost = intent.entry_cost_cents;
+                                state_tx_engine.send_modify(|s| {
+                                    s.push_log(
+                                        "SKIP",
+                                        format!("{}: risk limits exceeded (cost {}c)", t, cost),
+                                    );
+                                });
+                                continue;
+                            }
+                        }
+
+                        // Gate 4: Available balance
+                        if (intent.entry_cost_cents as u64) > available_balance_cents {
+                            tracing::warn!(
+                                ticker = %intent.ticker,
+                                cost = intent.entry_cost_cents,
+                                available = available_balance_cents,
+                                "BLOCKED: insufficient balance"
+                            );
+                            let t = intent.ticker.clone();
+                            let cost = intent.entry_cost_cents;
+                            state_tx_engine.send_modify(|s| {
+                                s.push_log(
+                                    "SKIP",
+                                    format!(
+                                        "{}: insufficient balance (need {}c, have {}c)",
+                                        t, cost, s.balance_cents
+                                    ),
+                                );
+                            });
+                            continue;
+                        }
+
+                        // Register pending order
+                        if let Some(ref mut po) = pending_orders {
+                            if !po.try_register(
+                                intent.ticker.clone(),
+                                intent.quantity,
+                                intent.price,
+                                intent.is_taker,
+                            ) {
+                                continue; // Race condition: another intent registered first
+                            }
+                        }
+
+                        // Deduct from available balance (pessimistic)
+                        available_balance_cents -= intent.entry_cost_cents as u64;
+
+                        // Log prominently
+                        tracing::error!(
+                            ticker = %intent.ticker,
+                            quantity = intent.quantity,
+                            price = intent.price,
+                            edge = intent.edge,
+                            net = intent.net_profit_estimate,
+                            fair_value = intent.fair_value,
+                            source = %intent.source,
+                            sell_target = intent.sell_target,
+                            is_taker = intent.is_taker,
+                            "SUBMITTING ORDER"
+                        );
+                        state_tx_engine.send_modify(|s| {
+                            s.push_log(
+                                "ORDER",
+                                format!(
+                                    "SUBMIT {}x {} @ {}c (edge {}c, FV {}c, {})",
+                                    intent.quantity,
+                                    intent.ticker,
+                                    intent.price,
+                                    intent.edge,
+                                    intent.fair_value,
+                                    if intent.is_taker { "TAKER" } else { "MAKER" },
+                                ),
+                            );
+                        });
+
+                        // Submit order
+                        match exec
+                            .submit_order(
+                                &intent.ticker,
+                                intent.quantity,
+                                intent.price,
+                                intent.is_buy,
+                                intent.is_taker,
+                            )
+                            .await
+                        {
+                            Ok(_order_id) => {
+                                // Update RiskManager
+                                if let Some(ref mut rm) = risk_manager {
+                                    rm.record_buy(&intent.ticker, intent.quantity);
+                                }
+                                // Update PositionTracker
+                                if let Some(ref mut pt) = position_tracker {
+                                    pt.record_entry(
+                                        intent.ticker.clone(),
+                                        intent.quantity,
+                                        intent.price,
+                                        intent.entry_cost_cents,
+                                    );
+                                }
+                                // Complete pending order
+                                if let Some(ref mut po) = pending_orders {
+                                    po.complete(&intent.ticker);
+                                }
+                                // Push trade to TUI
+                                state_tx_engine.send_modify(|s| {
+                                    s.push_trade(tui::state::TradeRow {
+                                        time: chrono::Local::now()
+                                            .format("%H:%M:%S")
+                                            .to_string(),
+                                        action: "BUY".to_string(),
+                                        ticker: intent.ticker.clone(),
+                                        price: intent.price,
+                                        quantity: intent.quantity,
+                                        order_type: if intent.is_taker {
+                                            "TAKER"
+                                        } else {
+                                            "MAKER"
+                                        }
+                                        .to_string(),
+                                        pnl: None,
+                                        slippage: None,
+                                        source: intent.source.clone(),
+                                        fair_value_basis: pipeline::format_fair_value_basis(
+                                            &intent.trace,
+                                        ),
+                                    });
+                                    s.push_log(
+                                        "ORDER",
+                                        format!(
+                                            "FILLED {}x {} @ {}c",
+                                            intent.quantity, intent.ticker, intent.price
+                                        ),
+                                    );
+                                });
+                            }
+                            Err(e) => {
+                                tracing::error!(
+                                    ticker = %intent.ticker,
+                                    error = %e,
+                                    "order submission failed"
+                                );
+                                // Release pending order
+                                if let Some(ref mut po) = pending_orders {
+                                    po.complete(&intent.ticker);
+                                }
+                                // Restore available balance
+                                available_balance_cents += intent.entry_cost_cents as u64;
+                                state_tx_engine.send_modify(|s| {
+                                    s.push_log(
+                                        "ERROR",
+                                        format!(
+                                            "ORDER FAILED {}: {}",
+                                            intent.ticker, e
+                                        ),
+                                    );
+                                });
+                            }
+                        }
+                    }
+                }
             }
 
             // Check if any pipeline has live games (odds-feed via filter_live,
@@ -1118,7 +1358,10 @@ async fn main() -> Result<()> {
                                     tui::TuiCommand::Quit => return Ok(()),
                                     tui::TuiCommand::KillSwitch => {
                                         tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
-                                        state_tx_engine.send_modify(|s| s.is_paused = true);
+                                        state_tx_engine.send_modify(|s| {
+                                            s.is_paused = true;
+                                            s.push_log("KILL", "KILL SWITCH ACTIVATED - all trading halted".to_string());
+                                        });
                                         return Ok(());
                                     }
                                     tui::TuiCommand::ToggleSport(sport_key) => {

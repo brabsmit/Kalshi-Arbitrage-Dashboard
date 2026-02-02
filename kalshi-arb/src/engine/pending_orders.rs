@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::time::Instant;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PendingOrder {
     pub ticker: String,
     pub quantity: u32,
@@ -56,6 +57,7 @@ impl PendingOrderRegistry {
     }
 
     /// Get all pending orders older than threshold (for timeout detection)
+    #[allow(dead_code)]
     pub fn old_orders(&self, threshold_secs: u64) -> Vec<&PendingOrder> {
         let now = Instant::now();
         self.orders

@@ -82,6 +82,8 @@ pub struct MarketRow {
     pub momentum_score: f64,
     pub staleness_secs: Option<u64>,
     pub odds_api_fair_value: Option<u32>,
+    /// Which source produced the primary fair value: "odds-api", "score-feed", etc.
+    pub fair_value_source: String,
 }
 
 #[derive(Debug, Clone)]

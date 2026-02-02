@@ -422,6 +422,7 @@ impl SportPipeline {
                 rows: HashMap::new(),
                 has_live_games: false,
                 closed_tickers: Vec::new(),
+                order_intents: Vec::new(),
             };
         }
 
@@ -596,6 +597,7 @@ impl SportPipeline {
                     rows: HashMap::new(),
                     has_live_games: false,
                     closed_tickers: Vec::new(),
+                    order_intents: Vec::new(),
                 };
             }
             // Fall through to process_sport_updates so closed markets produce
@@ -612,6 +614,7 @@ impl SportPipeline {
                 rows: HashMap::new(),
                 has_live_games: false,
                 closed_tickers: Vec::new(),
+                order_intents: Vec::new(),
             };
         }
 
@@ -647,6 +650,8 @@ pub struct TickResult {
     pub has_live_games: bool,
     /// Tickers detected as closed this cycle, with their last fair value (for sim settlement).
     pub closed_tickers: Vec<(String, u32)>,
+    /// Order intents produced by evaluation in live mode.
+    pub order_intents: Vec<OrderIntent>,
 }
 
 // ── Moved helper functions ─────────────────────────────────────────────
@@ -655,8 +660,25 @@ pub struct TickResult {
 pub enum EvalOutcome {
     /// Market is closed or filtered out.
     Closed,
-    /// Market was evaluated successfully.
-    Evaluated(MarketRow),
+    /// Market was evaluated successfully, with an optional order intent for live mode.
+    Evaluated(MarketRow, Option<OrderIntent>),
+}
+
+/// An intent to place an order, produced by the evaluation pipeline in live mode.
+#[derive(Debug, Clone)]
+pub struct OrderIntent {
+    pub ticker: String,
+    pub quantity: u32,
+    pub price: u32,
+    pub is_buy: bool,
+    pub is_taker: bool,
+    pub edge: i32,
+    pub net_profit_estimate: i32,
+    pub fair_value: u32,
+    pub source: String,
+    pub trace: SignalTrace,
+    pub entry_cost_cents: u32,
+    pub sell_target: u32,
 }
 
 /// Build diagnostic rows from all odds updates for a given sport.
@@ -956,6 +978,11 @@ pub fn evaluate_matched_market(
     let pressure_score = bpt.score();
     let momentum = scorer.composite(velocity_score, pressure_score);
 
+    let fv_source = match &fair_value_method {
+        FairValueMethod::OddsFeed { source } => source.clone(),
+        FairValueMethod::ScoreFeed { source } => source.clone(),
+    };
+
     // CRITICAL: Skip stale data before strategy evaluation
     if is_stale {
         let row = MarketRow {
@@ -969,8 +996,9 @@ pub fn evaluate_matched_market(
             momentum_score: momentum,
             staleness_secs,
             odds_api_fair_value,
+            fair_value_source: fv_source,
         };
-        return EvalOutcome::Evaluated(row);
+        return EvalOutcome::Evaluated(row, None);
     }
 
     // Evaluate strategy
@@ -1033,9 +1061,19 @@ pub fn evaluate_matched_market(
         momentum_score: momentum,
         staleness_secs,
         odds_api_fair_value,
+        fair_value_source: fv_source,
     };
 
     if signal.action != strategy::TradeAction::Skip {
+        let mode_label = if sim_mode { "sim" } else { "live" };
+        let fill_price_preview = match &signal.action {
+            strategy::TradeAction::TakerBuy => ask,
+            strategy::TradeAction::MakerBuy { bid_price } => *bid_price,
+            strategy::TradeAction::Skip => 0,
+        };
+        let is_taker_preview = matches!(signal.action, strategy::TradeAction::TakerBuy);
+        let entry_fee_preview = calculate_fee(fill_price_preview, signal.quantity, is_taker_preview);
+        let total_cost_preview = (signal.quantity * fill_price_preview) + entry_fee_preview;
         tracing::warn!(
             ticker = %ticker,
             action = %action_str,
@@ -1045,13 +1083,25 @@ pub fn evaluate_matched_market(
             inverse = is_inverse,
             momentum = format!("{:.0}", momentum),
             source = source,
-            "signal detected (dry run)"
+            mode = mode_label,
+            "signal detected"
         );
+        // Push signal to TUI log so user can see every decision
+        let signal_ticker = ticker.to_string();
+        state_tx.send_modify(|s| {
+            s.push_log(
+                "SIGNAL",
+                format!(
+                    "{} {} {}x @ {}c (edge {}c, cost {}c, bid {} ask {})",
+                    action_str, signal_ticker, signal.quantity, fill_price_preview,
+                    signal.edge, total_cost_preview, bid, ask,
+                ),
+            );
+        });
     }
 
-    // Simulation mode
-    if sim_mode && signal.action != strategy::TradeAction::Skip {
-        let signal_ask = ask;
+    // Common break-even validation for both sim and live
+    if signal.action != strategy::TradeAction::Skip {
         let fill_price = match &signal.action {
             strategy::TradeAction::TakerBuy => ask,
             strategy::TradeAction::MakerBuy { bid_price } => *bid_price,
@@ -1063,9 +1113,9 @@ pub fn evaluate_matched_market(
         let entry_cost = (qty * fill_price) as i64;
         let entry_fee = calculate_fee(fill_price, qty, is_taker) as i64;
         let total_cost = entry_cost + entry_fee;
+        let entry_cost_total = entry_cost + entry_fee;
 
         // Validate break-even is achievable before entering
-        let entry_cost_total = entry_cost + entry_fee;
         if let Some(be_price) =
             crate::engine::fees::break_even_sell_price(entry_cost_total as u32, qty, true)
         {
@@ -1075,7 +1125,14 @@ pub fn evaluate_matched_market(
                     break_even = be_price,
                     "skipping trade: break-even too high (>95c)"
                 );
-                return EvalOutcome::Evaluated(row);
+                let be_ticker = ticker.to_string();
+                state_tx.send_modify(|s| {
+                    s.push_log(
+                        "SKIP",
+                        format!("{}: break-even {}c too high (>95c)", be_ticker, be_price),
+                    );
+                });
+                return EvalOutcome::Evaluated(row, None);
             }
         } else {
             tracing::warn!(
@@ -1084,64 +1141,126 @@ pub fn evaluate_matched_market(
                 quantity = qty,
                 "skipping trade: impossible to break even"
             );
-            return EvalOutcome::Evaluated(row);
+            let be_ticker = ticker.to_string();
+            state_tx.send_modify(|s| {
+                s.push_log(
+                    "SKIP",
+                    format!(
+                        "{}: impossible to break even (cost {}c, qty {})",
+                        be_ticker, entry_cost_total, qty
+                    ),
+                );
+            });
+            return EvalOutcome::Evaluated(row, None);
         }
 
         let sell_target = if sim_config.use_break_even_exit {
             let total_entry = (qty * fill_price) + calculate_fee(fill_price, qty, is_taker);
             match crate::engine::fees::break_even_sell_price(total_entry, qty, false) {
                 Some(price) => price,
-                None => return EvalOutcome::Evaluated(row), // Skip trade if break-even is impossible
+                None => {
+                    tracing::warn!(
+                        ticker = %ticker,
+                        total_entry,
+                        quantity = qty,
+                        "skipping trade: no viable sell target"
+                    );
+                    let st_ticker = ticker.to_string();
+                    state_tx.send_modify(|s| {
+                        s.push_log(
+                            "SKIP",
+                            format!(
+                                "{}: no viable sell target (entry {}c, qty {})",
+                                st_ticker, total_entry, qty
+                            ),
+                        );
+                    });
+                    return EvalOutcome::Evaluated(row, None);
+                }
             }
         } else {
             fair
         };
 
-        let slippage = fill_price as i32 - signal_ask as i32;
+        if sim_mode {
+            // Simulation mode: mutate state directly
+            let signal_ask = ask;
+            let slippage = fill_price as i32 - signal_ask as i32;
 
-        let ticker_owned = ticker.to_string();
-        state_tx.send_modify(|s| {
-            if s.sim_balance_cents < total_cost {
-                return;
-            }
-            if s.sim_positions.iter().any(|p| p.ticker == ticker_owned) {
-                return;
-            }
-            s.sim_balance_cents -= total_cost;
-            s.sim_positions.push(crate::tui::state::SimPosition {
-                ticker: ticker_owned.clone(),
-                quantity: qty,
-                entry_price: fill_price,
-                sell_price: sell_target,
-                entry_fee: entry_fee as u32,
-                filled_at: std::time::Instant::now(),
-                signal_ask,
-                trace: Some(trace.clone()),
+            let ticker_owned = ticker.to_string();
+            state_tx.send_modify(|s| {
+                if s.sim_balance_cents < total_cost {
+                    s.push_log(
+                        "SKIP",
+                        format!(
+                            "{}: insufficient balance (need {}c, have {}c)",
+                            ticker_owned, total_cost, s.sim_balance_cents
+                        ),
+                    );
+                    return;
+                }
+                if s.sim_positions.iter().any(|p| p.ticker == ticker_owned) {
+                    s.push_log(
+                        "SKIP",
+                        format!("{}: already holding position", ticker_owned),
+                    );
+                    return;
+                }
+                s.sim_balance_cents -= total_cost;
+                s.sim_positions.push(crate::tui::state::SimPosition {
+                    ticker: ticker_owned.clone(),
+                    quantity: qty,
+                    entry_price: fill_price,
+                    sell_price: sell_target,
+                    entry_fee: entry_fee as u32,
+                    filled_at: std::time::Instant::now(),
+                    signal_ask,
+                    trace: Some(trace.clone()),
+                });
+                s.push_trade(crate::tui::state::TradeRow {
+                    time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                    action: "BUY".to_string(),
+                    ticker: ticker_owned.clone(),
+                    price: fill_price,
+                    quantity: qty,
+                    order_type: "SIM".to_string(),
+                    pnl: None,
+                    slippage: Some(slippage),
+                    source: source.to_string(),
+                    fair_value_basis: format_fair_value_basis(&trace),
+                });
+                s.push_log(
+                    "TRADE",
+                    format!(
+                        "SIM BUY {}x {} @ {}c (ask was {}c, slip {:+}c), sell target {}c",
+                        qty, ticker_owned, fill_price, signal_ask, slippage, sell_target
+                    ),
+                );
+                s.sim_total_slippage_cents += slippage as i64;
             });
-            s.push_trade(crate::tui::state::TradeRow {
-                time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                action: "BUY".to_string(),
-                ticker: ticker_owned.clone(),
+
+            return EvalOutcome::Evaluated(row, None);
+        } else {
+            // Live mode: produce an OrderIntent for the engine loop to execute
+            let intent = OrderIntent {
+                ticker: ticker.to_string(),
+                quantity: qty,
                 price: fill_price,
-                quantity: qty,
-                order_type: "SIM".to_string(),
-                pnl: None,
-                slippage: Some(slippage),
+                is_buy: true,
+                is_taker,
+                edge: signal.edge,
+                net_profit_estimate: signal.net_profit_estimate,
+                fair_value: fair,
                 source: source.to_string(),
-                fair_value_basis: format_fair_value_basis(&trace),
-            });
-            s.push_log(
-                "TRADE",
-                format!(
-                    "SIM BUY {}x {} @ {}c (ask was {}c, slip {:+}c), sell target {}c",
-                    qty, ticker_owned, fill_price, signal_ask, slippage, sell_target
-                ),
-            );
-            s.sim_total_slippage_cents += slippage as i64;
-        });
+                trace,
+                entry_cost_cents: total_cost as u32,
+                sell_target,
+            };
+            return EvalOutcome::Evaluated(row, Some(intent));
+        }
     }
 
-    EvalOutcome::Evaluated(row)
+    EvalOutcome::Evaluated(row, None)
 }
 
 /// Process score feed updates through the fair-value/matching/evaluation pipeline.
@@ -1175,6 +1294,7 @@ fn process_score_updates(
     let mut rows: HashMap<String, MarketRow> = HashMap::new();
     let mut has_live_games = false;
     let mut closed_tickers: Vec<(String, u32)> = Vec::new();
+    let mut order_intents: Vec<OrderIntent> = Vec::new();
     let now_utc = chrono::Utc::now();
 
     // Get win_prob_table from fair_value_source
@@ -1189,6 +1309,7 @@ fn process_score_updates(
                 rows: HashMap::new(),
                 has_live_games: false,
                 closed_tickers: Vec::new(),
+                order_intents: Vec::new(),
             }
         }
     };
@@ -1353,8 +1474,11 @@ fn process_score_updates(
                         closed_tickers.push((mkt.ticker.clone(), fair));
                     }
                 }
-                EvalOutcome::Evaluated(row) => {
+                EvalOutcome::Evaluated(row, intent) => {
                     filter_live += 1;
+                    if let Some(i) = intent {
+                        order_intents.push(i);
+                    }
                     rows.insert(mkt.ticker.clone(), row);
                 }
             }
@@ -1369,6 +1493,7 @@ fn process_score_updates(
         rows,
         has_live_games,
         closed_tickers,
+        order_intents,
     }
 }
 
@@ -1432,6 +1557,7 @@ fn process_sport_updates(
     let mut rows: HashMap<String, MarketRow> = HashMap::new();
     let mut has_live_games = false;
     let mut closed_tickers: Vec<(String, u32)> = Vec::new();
+    let mut order_intents: Vec<OrderIntent> = Vec::new();
 
     for update in updates {
         // Average odds across all bookmakers for better fair value estimation
@@ -1575,8 +1701,11 @@ fn process_sport_updates(
                                 closed_tickers.push((side.ticker.clone(), fair));
                             }
                         }
-                        EvalOutcome::Evaluated(row) => {
+                        EvalOutcome::Evaluated(row, intent) => {
                             filter_live += 1;
+                            if let Some(i) = intent {
+                                order_intents.push(i);
+                            }
                             rows.insert(side.ticker.clone(), row);
                         }
                     }
@@ -1658,8 +1787,11 @@ fn process_sport_updates(
                             closed_tickers.push((mkt.ticker.clone(), fair));
                         }
                     }
-                    EvalOutcome::Evaluated(row) => {
+                    EvalOutcome::Evaluated(row, intent) => {
                         filter_live += 1;
+                        if let Some(i) = intent {
+                            order_intents.push(i);
+                        }
                         rows.insert(mkt.ticker.clone(), row);
                     }
                 }
@@ -1675,6 +1807,7 @@ fn process_sport_updates(
         rows,
         has_live_games,
         closed_tickers,
+        order_intents,
     }
 }
 

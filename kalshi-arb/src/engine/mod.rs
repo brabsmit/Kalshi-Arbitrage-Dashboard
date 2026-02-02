@@ -8,5 +8,5 @@ pub mod risk;
 pub mod strategy;
 pub mod win_prob;
 
-pub use pending_orders::{PendingOrder, PendingOrderRegistry};
-pub use positions::{Position, PositionTracker};
+pub use pending_orders::PendingOrderRegistry;
+pub use positions::PositionTracker;

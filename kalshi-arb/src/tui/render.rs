@@ -349,7 +349,7 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
         return;
     }
 
-    let fixed_cols_full: usize = 5 + 5 + 5 + 6 + 8 + 8; // fair+bid+ask+edge+action+latency = 37
+    let fixed_cols_full: usize = 8 + 5 + 5 + 6 + 8 + 8; // fair+bid+ask+edge+action+latency = 40
 
     let (headers, constraints, ticker_w, drop_latency, drop_action, drop_stale) =
         if inner_width < 45 {
@@ -400,7 +400,7 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 ],
                 vec![
                     Constraint::Length(ticker_w as u16),
-                    Constraint::Length(5),
+                    Constraint::Length(8),
                     Constraint::Length(5),
                     Constraint::Length(5),
                     Constraint::Length(6),
@@ -431,9 +431,14 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
             } else {
                 Color::DarkGray
             };
-            let fv_display = match m.odds_api_fair_value {
-                Some(oa_fv) => format!("{} ({})", m.fair_value, oa_fv),
-                None => m.fair_value.to_string(),
+            let fv_display = if m.fair_value_source != "odds-api" {
+                // Non-odds-api source: wrap in parentheses for visual validation
+                match m.odds_api_fair_value {
+                    Some(oa_fv) => format!("({}) {}", m.fair_value, oa_fv),
+                    None => format!("({})", m.fair_value),
+                }
+            } else {
+                m.fair_value.to_string()
             };
             let mut cells = vec![
                 Cell::from(ticker.into_owned()),

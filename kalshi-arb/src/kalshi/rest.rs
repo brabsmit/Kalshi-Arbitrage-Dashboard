@@ -67,7 +67,6 @@ impl KalshiRest {
     }
 
     /// Place an order.
-    #[allow(dead_code)]
     pub async fn create_order(&self, order: &CreateOrderRequest) -> Result<OrderResponse> {
         let path = "/trade-api/v2/portfolio/orders";
         let url = format!("{}{}", self.base_url, path);
@@ -96,7 +95,6 @@ impl KalshiRest {
     }
 
     /// Get open positions.
-    #[allow(dead_code)]
     pub async fn get_positions(&self) -> Result<Vec<MarketPosition>> {
         let path = "/trade-api/v2/portfolio/positions";
         let url = format!("{}{}", self.base_url, path);
@@ -140,6 +138,27 @@ impl KalshiRest {
         if !status.is_success() {
             let body = resp.text().await.unwrap_or_default();
             anyhow::bail!("Auth pre-flight failed ({}): {}", status, body);
+        }
+        Ok(())
+    }
+
+    /// Cancel an order by ID.
+    #[allow(dead_code)]
+    pub async fn cancel_order(&self, order_id: &str) -> Result<()> {
+        let path = format!("/trade-api/v2/portfolio/orders/{}", order_id);
+        let url = format!("{}{}", self.base_url, path);
+
+        let headers = self.auth.headers("DELETE", &path)?;
+        let mut req = self.client.delete(&url);
+        for (k, v) in &headers {
+            req = req.header(k, v);
+        }
+
+        let resp = req.send().await.context("cancel order request failed")?;
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            anyhow::bail!("cancel order failed ({}): {}", status, body);
         }
         Ok(())
     }

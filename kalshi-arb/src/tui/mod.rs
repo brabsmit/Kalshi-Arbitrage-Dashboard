@@ -104,6 +104,11 @@ async fn tui_loop(
             event = event_stream.next() => {
                 if let Some(Ok(Event::Key(key))) = event {
                     if key.kind == KeyEventKind::Press {
+                        // F12 kill switch: always active regardless of focus state
+                        if key.code == KeyCode::F(12) {
+                            let _ = cmd_tx.send(TuiCommand::KillSwitch).await;
+                            return Ok(());
+                        }
                         if config_focus {
                             if let Some(ref mut cv) = config_view {
                                 if cv.editing {

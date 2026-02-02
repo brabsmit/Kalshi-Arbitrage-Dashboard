@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Position {
     pub ticker: String,
     pub quantity: u32,
@@ -41,18 +42,22 @@ impl PositionTracker {
         );
     }
 
+    #[allow(dead_code)]
     pub fn record_exit(&mut self, ticker: &str) -> Option<Position> {
         self.positions.remove(ticker)
     }
 
+    #[allow(dead_code)]
     pub fn get(&self, ticker: &str) -> Option<&Position> {
         self.positions.get(ticker)
     }
 
+    #[allow(dead_code)]
     pub fn all_positions(&self) -> Vec<&Position> {
         self.positions.values().collect()
     }
 
+    #[allow(dead_code)]
     pub fn count(&self) -> usize {
         self.positions.len()
     }
