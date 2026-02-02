@@ -24,13 +24,34 @@ pub struct WinProbTable {
 }
 
 impl WinProbTable {
-    pub fn new(home_advantage: f64, k_start: f64, k_range: f64, ot_k_start: f64, ot_k_range: f64, regulation_secs: u16) -> Self {
-        Self { home_advantage, k_start, k_range, ot_k_start, ot_k_range, regulation_secs }
+    pub fn new(
+        home_advantage: f64,
+        k_start: f64,
+        k_range: f64,
+        ot_k_start: f64,
+        ot_k_range: f64,
+        regulation_secs: u16,
+    ) -> Self {
+        Self {
+            home_advantage,
+            k_start,
+            k_range,
+            ot_k_start,
+            ot_k_range,
+            regulation_secs,
+        }
     }
 
     /// Convenience constructor from config.
     pub fn from_config(config: &crate::config::WinProbConfig) -> Self {
-        Self::new(config.home_advantage, config.k_start, config.k_range, config.ot_k_start, config.ot_k_range, config.regulation_secs.unwrap_or(2880))
+        Self::new(
+            config.home_advantage,
+            config.k_start,
+            config.k_range,
+            config.ot_k_start,
+            config.ot_k_range,
+            config.regulation_secs.unwrap_or(2880),
+        )
     }
 
     /// Regulation lookup.

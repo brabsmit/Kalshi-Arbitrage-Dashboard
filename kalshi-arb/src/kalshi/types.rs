@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 #[allow(dead_code)]
 pub struct CreateOrderRequest {
     pub ticker: String,
-    pub action: String,       // "buy" or "sell"
-    pub side: String,         // "yes" or "no"
+    pub action: String, // "buy" or "sell"
+    pub side: String,   // "yes" or "no"
     pub count: u32,
     #[serde(rename = "type")]
-    pub order_type: String,   // "limit"
+    pub order_type: String, // "limit"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub yes_price: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]

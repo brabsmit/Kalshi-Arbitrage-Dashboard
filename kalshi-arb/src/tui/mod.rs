@@ -24,7 +24,12 @@ pub enum TuiCommand {
     ToggleSport(String),
     OpenConfig,
     CloseConfig,
-    UpdateConfig { #[allow(dead_code)] sport_key: Option<String>, field_path: String, value: String },
+    UpdateConfig {
+        #[allow(dead_code)]
+        sport_key: Option<String>,
+        field_path: String,
+        value: String,
+    },
     KillSwitch,
 }
 

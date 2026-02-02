@@ -22,17 +22,26 @@ impl PendingOrderRegistry {
     }
 
     /// Try to register a new order. Returns true if registered, false if already pending.
-    pub fn try_register(&mut self, ticker: String, quantity: u32, price: u32, is_taker: bool) -> bool {
+    pub fn try_register(
+        &mut self,
+        ticker: String,
+        quantity: u32,
+        price: u32,
+        is_taker: bool,
+    ) -> bool {
         if self.orders.contains_key(&ticker) {
             return false; // Already pending
         }
-        self.orders.insert(ticker.clone(), PendingOrder {
-            ticker,
-            quantity,
-            price,
-            is_taker,
-            submitted_at: Instant::now(),
-        });
+        self.orders.insert(
+            ticker.clone(),
+            PendingOrder {
+                ticker,
+                quantity,
+                price,
+                is_taker,
+                submitted_at: Instant::now(),
+            },
+        );
         true
     }
 
@@ -49,7 +58,8 @@ impl PendingOrderRegistry {
     /// Get all pending orders older than threshold (for timeout detection)
     pub fn old_orders(&self, threshold_secs: u64) -> Vec<&PendingOrder> {
         let now = Instant::now();
-        self.orders.values()
+        self.orders
+            .values()
             .filter(|o| now.duration_since(o.submitted_at).as_secs() > threshold_secs)
             .collect()
     }
@@ -117,10 +127,18 @@ mod tests {
         // Immediately check - orders just submitted are not "old" even with 0 threshold
         // (because duration is 0 seconds, and we check if duration > threshold)
         let old = registry.old_orders(0);
-        assert_eq!(old.len(), 0, "just-submitted order should not be > 0 seconds old");
+        assert_eq!(
+            old.len(),
+            0,
+            "just-submitted order should not be > 0 seconds old"
+        );
 
         // Very high threshold excludes all recent orders
         let old = registry.old_orders(999);
-        assert_eq!(old.len(), 0, "999 second threshold should exclude recent orders");
+        assert_eq!(
+            old.len(),
+            0,
+            "999 second threshold should exclude recent orders"
+        );
     }
 }

@@ -31,11 +31,7 @@ impl KalshiWs {
 
     /// Connect and run the WebSocket loop. Sends events on `tx`.
     /// `tickers` are subscribed immediately after connect.
-    pub async fn run(
-        &self,
-        tickers: Vec<String>,
-        tx: mpsc::Sender<KalshiWsEvent>,
-    ) -> Result<()> {
+    pub async fn run(&self, tickers: Vec<String>, tx: mpsc::Sender<KalshiWsEvent>) -> Result<()> {
         let mut consecutive_auth_failures = 0u32;
         loop {
             match self.connect_and_listen(&tickers, &tx).await {
@@ -50,23 +46,29 @@ impl KalshiWs {
                         consecutive_auth_failures += 1;
                         tracing::error!(
                             "kalshi WS auth failure #{}: {:#}",
-                            consecutive_auth_failures, e
+                            consecutive_auth_failures,
+                            e
                         );
                         if consecutive_auth_failures >= 3 {
                             tracing::error!(
                                 "3 consecutive WS auth failures — stopping reconnects. \
                                  Check API key/private key pair and system clock."
                             );
-                            let _ = tx.send(KalshiWsEvent::Disconnected(
-                                "Authentication failed repeatedly (401). Check credentials.".to_string()
-                            )).await;
+                            let _ = tx
+                                .send(KalshiWsEvent::Disconnected(
+                                    "Authentication failed repeatedly (401). Check credentials."
+                                        .to_string(),
+                                ))
+                                .await;
                             return Err(e);
                         }
                     } else {
                         consecutive_auth_failures = 0;
                         tracing::error!("kalshi WS error: {:#}, reconnecting in 2s...", e);
                     }
-                    let _ = tx.send(KalshiWsEvent::Disconnected(format!("{:#}", e))).await;
+                    let _ = tx
+                        .send(KalshiWsEvent::Disconnected(format!("{:#}", e)))
+                        .await;
                 }
             }
             let delay = if consecutive_auth_failures > 0 { 5 } else { 2 };
@@ -84,7 +86,10 @@ impl KalshiWs {
 
         // Build request from URL (adds WS upgrade headers automatically),
         // then attach Kalshi auth headers
-        let mut request = self.ws_url.as_str().into_client_request()
+        let mut request = self
+            .ws_url
+            .as_str()
+            .into_client_request()
             .context("failed to build WS request")?;
         for (k, v) in &auth_headers {
             request.headers_mut().insert(
@@ -162,13 +167,8 @@ impl KalshiWs {
         Ok(())
     }
 
-    async fn handle_message(
-        &self,
-        text: &str,
-        tx: &mpsc::Sender<KalshiWsEvent>,
-    ) -> Result<()> {
-        let ws_msg: WsMessage = serde_json::from_str(text)
-            .context("failed to parse WS message")?;
+    async fn handle_message(&self, text: &str, tx: &mpsc::Sender<KalshiWsEvent>) -> Result<()> {
+        let ws_msg: WsMessage = serde_json::from_str(text).context("failed to parse WS message")?;
 
         match ws_msg.msg_type.as_str() {
             "orderbook_snapshot" => {

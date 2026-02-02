@@ -23,13 +23,22 @@ impl PositionTracker {
         self.positions.contains_key(ticker)
     }
 
-    pub fn record_entry(&mut self, ticker: String, quantity: u32, entry_price: u32, entry_cost_cents: u32) {
-        self.positions.insert(ticker.clone(), Position {
-            ticker,
-            quantity,
-            entry_price,
-            entry_cost_cents,
-        });
+    pub fn record_entry(
+        &mut self,
+        ticker: String,
+        quantity: u32,
+        entry_price: u32,
+        entry_cost_cents: u32,
+    ) {
+        self.positions.insert(
+            ticker.clone(),
+            Position {
+                ticker,
+                quantity,
+                entry_price,
+                entry_cost_cents,
+            },
+        );
     }
 
     pub fn record_exit(&mut self, ticker: &str) -> Option<Position> {

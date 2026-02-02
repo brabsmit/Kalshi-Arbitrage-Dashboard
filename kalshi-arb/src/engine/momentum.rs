@@ -62,7 +62,10 @@ impl VelocityTracker {
             Some(s) => s,
             None => return 0.0,
         };
-        let dt_secs = newest.timestamp.duration_since(oldest.timestamp).as_secs_f64();
+        let dt_secs = newest
+            .timestamp
+            .duration_since(oldest.timestamp)
+            .as_secs_f64();
         if dt_secs < 0.001 {
             return 0.0;
         }
@@ -100,7 +103,11 @@ impl BookPressureTracker {
     /// `ask_depth`: total quantity on ask side within band of best ask.
     pub fn push(&mut self, bid_depth: u64, ask_depth: u64, timestamp: Instant) {
         let ratio = if ask_depth == 0 {
-            if bid_depth > 0 { 10.0 } else { 1.0 } // Cap at 10x when ask is empty
+            if bid_depth > 0 {
+                10.0
+            } else {
+                1.0
+            } // Cap at 10x when ask is empty
         } else {
             bid_depth as f64 / ask_depth as f64
         };
@@ -163,8 +170,8 @@ impl MomentumScorer {
 
     /// Compute composite score from sub-signal scores.
     pub fn composite(&self, velocity_score: f64, book_pressure_score: f64) -> f64 {
-        let raw = self.velocity_weight * velocity_score
-            + self.book_pressure_weight * book_pressure_score;
+        let raw =
+            self.velocity_weight * velocity_score + self.book_pressure_weight * book_pressure_score;
         raw.clamp(0.0, 100.0)
     }
 }
@@ -232,7 +239,11 @@ mod tests {
         // Oldest should now be 0.55, newest 0.65
         // delta = 10pp over 20s = 30 pp/min -> clamped to 100
         let score = tracker.score();
-        assert!(score > 90.0, "score should be high after eviction: {}", score);
+        assert!(
+            score > 90.0,
+            "score should be high after eviction: {}",
+            score
+        );
     }
 
     // --- BookPressureTracker tests ---
@@ -268,7 +279,11 @@ mod tests {
         tracker.push(200, 100, t0 + Duration::from_secs(1)); // ratio 2.0
         let score = tracker.score();
         // level: (2.0-1.0)/2.0*50 = 25, trend: 1.0/1.0*50 = 50 -> 75
-        assert!(score > 50.0, "increasing trend should score high: {}", score);
+        assert!(
+            score > 50.0,
+            "increasing trend should score high: {}",
+            score
+        );
     }
 
     #[test]

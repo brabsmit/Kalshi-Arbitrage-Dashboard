@@ -37,18 +37,25 @@ impl KalshiRest {
                 url.push_str(&format!("&cursor={}", c));
             }
 
-            let resp = self.client.get(&url).send().await.context("GET markets failed")?;
+            let resp = self
+                .client
+                .get(&url)
+                .send()
+                .await
+                .context("GET markets failed")?;
             let status = resp.status();
             if !status.is_success() {
                 let body = resp.text().await.unwrap_or_default();
                 anyhow::bail!("GET markets failed ({}): {}", status, body);
             }
 
-            let parsed: MarketsResponse = resp.json().await
+            let parsed: MarketsResponse = resp
+                .json()
+                .await
                 .context("failed to parse markets response")?;
 
-            let done = parsed.markets.is_empty()
-                || parsed.cursor.as_deref().is_none_or(|c| c.is_empty());
+            let done =
+                parsed.markets.is_empty() || parsed.cursor.as_deref().is_none_or(|c| c.is_empty());
             all_markets.extend(parsed.markets);
             if done {
                 break;

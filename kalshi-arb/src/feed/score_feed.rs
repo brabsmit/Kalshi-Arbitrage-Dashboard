@@ -204,10 +204,14 @@ pub fn parse_espn_scoreboard(json: &str) -> anyhow::Result<Vec<ScoreUpdate>> {
     let scoreboard: EspnScoreboard = serde_json::from_str(json)?;
     let mut updates = Vec::new();
     for event in scoreboard.events {
-        let Some(comp) = event.competitions.first() else { continue };
+        let Some(comp) = event.competitions.first() else {
+            continue;
+        };
         let home = comp.competitors.iter().find(|c| c.home_away == "home");
         let away = comp.competitors.iter().find(|c| c.home_away == "away");
-        let (Some(home), Some(away)) = (home, away) else { continue };
+        let (Some(home), Some(away)) = (home, away) else {
+            continue;
+        };
         let status = match comp.status.status_type.id.as_str() {
             "1" => GameStatus::PreGame,
             "2" => GameStatus::Live,
@@ -251,12 +255,7 @@ pub struct ScorePoller {
 }
 
 impl ScorePoller {
-    pub fn new(
-        nba_url: &str,
-        espn_url: &str,
-        timeout_ms: u64,
-        failover_threshold: u32,
-    ) -> Self {
+    pub fn new(nba_url: &str, espn_url: &str, timeout_ms: u64, failover_threshold: u32) -> Self {
         Self {
             client: Client::new(),
             nba_url: nba_url.to_string(),
@@ -292,22 +291,22 @@ impl ScorePoller {
             }
         }
 
-        let (primary_url, secondary_url, primary_parser, secondary_parser) =
-            if self.espn_is_primary {
-                (
-                    self.espn_url.clone(),
-                    self.nba_url.clone(),
-                    parse_espn_scoreboard as fn(&str) -> _,
-                    parse_nba_scoreboard as fn(&str) -> _,
-                )
-            } else {
-                (
-                    self.nba_url.clone(),
-                    self.espn_url.clone(),
-                    parse_nba_scoreboard as fn(&str) -> _,
-                    parse_espn_scoreboard as fn(&str) -> _,
-                )
-            };
+        let (primary_url, secondary_url, primary_parser, secondary_parser) = if self.espn_is_primary
+        {
+            (
+                self.espn_url.clone(),
+                self.nba_url.clone(),
+                parse_espn_scoreboard as fn(&str) -> _,
+                parse_nba_scoreboard as fn(&str) -> _,
+            )
+        } else {
+            (
+                self.nba_url.clone(),
+                self.espn_url.clone(),
+                parse_nba_scoreboard as fn(&str) -> _,
+                parse_espn_scoreboard as fn(&str) -> _,
+            )
+        };
 
         match self.fetch_and_parse(&primary_url, primary_parser).await {
             Ok(updates) => {
@@ -325,9 +324,7 @@ impl ScorePoller {
                 if !self.espn_is_primary {
                     self.nba_consecutive_failures += 1;
                     if self.nba_consecutive_failures >= self.failover_threshold {
-                        tracing::warn!(
-                            "NBA API hit failover threshold, swapping ESPN to primary"
-                        );
+                        tracing::warn!("NBA API hit failover threshold, swapping ESPN to primary");
                         self.espn_is_primary = true;
                         self.espn_primary_polls = 0;
                     }
@@ -364,7 +361,8 @@ impl ScorePoller {
 
         let text = resp.text().await?;
         let updates = parser(&text)?;
-        self.cached_response.insert(url.to_string(), updates.clone());
+        self.cached_response
+            .insert(url.to_string(), updates.clone());
         Ok(updates)
     }
 }
@@ -428,9 +426,11 @@ impl CollegeScorePoller {
         let mut updates = parse_espn_scoreboard(&text)?;
         // Recompute elapsed with college period structure
         for u in &mut updates {
-            u.total_elapsed_seconds = ScoreUpdate::compute_elapsed_college(u.period, u.clock_seconds);
+            u.total_elapsed_seconds =
+                ScoreUpdate::compute_elapsed_college(u.period, u.clock_seconds);
         }
-        self.cached_response.insert(url.to_string(), updates.clone());
+        self.cached_response
+            .insert(url.to_string(), updates.clone());
         Ok(updates)
     }
 }

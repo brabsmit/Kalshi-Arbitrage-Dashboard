@@ -18,7 +18,10 @@ impl KalshiAuth {
             anyhow::bail!("API key is empty");
         }
         if api_key.len() < 10 {
-            anyhow::bail!("API key too short ({} chars) — check for truncation", api_key.len());
+            anyhow::bail!(
+                "API key too short ({} chars) — check for truncation",
+                api_key.len()
+            );
         }
         if api_key.bytes().any(|b| !(0x20..=0x7e).contains(&b)) {
             anyhow::bail!(
@@ -55,18 +58,24 @@ impl KalshiAuth {
                 // Key is likely PKCS#1 (BEGIN RSA PRIVATE KEY).
                 // Wrap the raw PKCS#1 DER in a PKCS#8 envelope.
                 let pkcs8 = wrap_pkcs1_in_pkcs8(&der);
-                RsaKeyPair::from_pkcs8(&pkcs8)
-                    .map_err(|pkcs1_err| anyhow::anyhow!(
+                RsaKeyPair::from_pkcs8(&pkcs8).map_err(|pkcs1_err| {
+                    anyhow::anyhow!(
                         "Failed to parse RSA key:\n  PKCS#8: {}\n  PKCS#1: {}\n  \
                          DER size: {} bytes. Check that the key file is not corrupted.",
-                        pkcs8_err, pkcs1_err, der.len()
-                    ))?
+                        pkcs8_err,
+                        pkcs1_err,
+                        der.len()
+                    )
+                })?
             }
         };
 
         let key_bits = key_pair.public().modulus_len() * 8;
-        println!("  RSA key loaded: {} bits, API key: {}...",
-            key_bits, &api_key[..api_key.len().min(8)]);
+        println!(
+            "  RSA key loaded: {} bits, API key: {}...",
+            key_bits,
+            &api_key[..api_key.len().min(8)]
+        );
 
         Ok(Self {
             api_key,
@@ -91,7 +100,12 @@ impl KalshiAuth {
 
         let mut signature = vec![0u8; self.key_pair.public().modulus_len()];
         self.key_pair
-            .sign(&RSA_PSS_SHA256, &self.rng, message.as_bytes(), &mut signature)
+            .sign(
+                &RSA_PSS_SHA256,
+                &self.rng,
+                message.as_bytes(),
+                &mut signature,
+            )
             .map_err(|e| anyhow::anyhow!("RSA signing failed: {}", e))?;
 
         let sig_b64 = base64::engine::general_purpose::STANDARD.encode(&signature);

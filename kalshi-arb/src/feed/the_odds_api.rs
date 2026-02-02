@@ -52,12 +52,13 @@ impl TheOddsApi {
     /// Returns an error if the key is invalid or quota is exhausted.
     #[allow(dead_code)]
     pub async fn check_quota(&mut self) -> Result<ApiQuota> {
-        let url = format!(
-            "{}/v4/sports?apiKey={}",
-            self.base_url, self.api_key,
-        );
+        let url = format!("{}/v4/sports?apiKey={}", self.base_url, self.api_key,);
 
-        let resp = self.client.get(&url).send().await
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .context("failed to reach the-odds-api for quota check")?;
 
         let status = resp.status();
@@ -93,7 +94,11 @@ impl OddsFeed for TheOddsApi {
             self.base_url, api_sport, self.api_key, self.bookmakers,
         );
 
-        let resp = self.client.get(&url).send().await
+        let resp = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .context("the-odds-api request failed")?;
 
         // Extract quota from response headers
@@ -110,7 +115,9 @@ impl OddsFeed for TheOddsApi {
             anyhow::bail!("the-odds-api {} ({}): {}", api_sport, status, body);
         }
 
-        let events: Vec<TheOddsApiEvent> = resp.json().await
+        let events: Vec<TheOddsApiEvent> = resp
+            .json()
+            .await
             .context("failed to parse the-odds-api response")?;
 
         let mut updates: Vec<OddsUpdate> = Vec::new();
@@ -123,13 +130,19 @@ impl OddsFeed for TheOddsApi {
                 let h2h = bm.markets.iter().find(|m| m.key == "h2h");
 
                 if let Some(market) = h2h {
-                    let home_price = market.outcomes.iter()
+                    let home_price = market
+                        .outcomes
+                        .iter()
                         .find(|o| o.name == event.home_team)
                         .map(|o| o.price);
-                    let away_price = market.outcomes.iter()
+                    let away_price = market
+                        .outcomes
+                        .iter()
                         .find(|o| o.name == event.away_team)
                         .map(|o| o.price);
-                    let draw_price = market.outcomes.iter()
+                    let draw_price = market
+                        .outcomes
+                        .iter()
                         .find(|o| o.name == "Draw")
                         .map(|o| o.price);
 

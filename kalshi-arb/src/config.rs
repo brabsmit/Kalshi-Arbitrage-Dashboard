@@ -71,10 +71,18 @@ pub struct OddsSourceConfig {
     pub max_retries: u32,
 }
 
-fn default_live_poll() -> u64 { 20 }
-fn default_pre_game_poll() -> u64 { 120 }
-fn default_request_timeout() -> u64 { 5000 }
-fn default_max_retries() -> u32 { 2 }
+fn default_live_poll() -> u64 {
+    20
+}
+fn default_pre_game_poll() -> u64 {
+    120
+}
+fn default_request_timeout() -> u64 {
+    5000
+}
+fn default_max_retries() -> u32 {
+    2
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct SportConfig {
@@ -105,9 +113,15 @@ pub struct ScoreFeedConfig {
     pub request_timeout_ms: u64,
 }
 
-fn default_score_live_poll() -> u64 { 1 }
-fn default_score_pre_game_poll() -> u64 { 60 }
-fn default_failover_threshold() -> u32 { 3 }
+fn default_score_live_poll() -> u64 {
+    1
+}
+fn default_score_pre_game_poll() -> u64 {
+    60
+}
+fn default_failover_threshold() -> u32 {
+    3
+}
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct StrategyOverride {
@@ -139,9 +153,15 @@ pub struct DraftKingsFeedConfig {
     pub request_timeout_ms: u64,
 }
 
-fn default_dk_live_poll() -> u64 { 3 }
-fn default_dk_pre_game_poll() -> u64 { 30 }
-fn default_dk_timeout() -> u64 { 5000 }
+fn default_dk_live_poll() -> u64 {
+    3
+}
+fn default_dk_pre_game_poll() -> u64 {
+    30
+}
+fn default_dk_timeout() -> u64 {
+    5000
+}
 
 impl Default for DraftKingsFeedConfig {
     fn default() -> Self {
@@ -238,13 +258,19 @@ impl MomentumConfig {
         match ov {
             None => self.clone(),
             Some(o) => MomentumConfig {
-                taker_momentum_threshold: o.taker_momentum_threshold.unwrap_or(self.taker_momentum_threshold),
-                maker_momentum_threshold: o.maker_momentum_threshold.unwrap_or(self.maker_momentum_threshold),
+                taker_momentum_threshold: o
+                    .taker_momentum_threshold
+                    .unwrap_or(self.taker_momentum_threshold),
+                maker_momentum_threshold: o
+                    .maker_momentum_threshold
+                    .unwrap_or(self.maker_momentum_threshold),
                 cancel_threshold: o.cancel_threshold.unwrap_or(self.cancel_threshold),
                 velocity_weight: o.velocity_weight.unwrap_or(self.velocity_weight),
                 book_pressure_weight: o.book_pressure_weight.unwrap_or(self.book_pressure_weight),
                 velocity_window_size: o.velocity_window_size.unwrap_or(self.velocity_window_size),
-                cancel_check_interval_ms: o.cancel_check_interval_ms.unwrap_or(self.cancel_check_interval_ms),
+                cancel_check_interval_ms: o
+                    .cancel_check_interval_ms
+                    .unwrap_or(self.cancel_check_interval_ms),
                 bypass_for_score_signals: false,
             },
         }
@@ -270,9 +296,7 @@ pub fn persist_field(config_path: &Path, dotted_key: &str, value: &str) -> Resul
                     Some(toml::Value::Integer(_)) => {
                         toml::Value::Integer(value.parse().unwrap_or(0))
                     }
-                    Some(toml::Value::Float(_)) => {
-                        toml::Value::Float(value.parse().unwrap_or(0.0))
-                    }
+                    Some(toml::Value::Float(_)) => toml::Value::Float(value.parse().unwrap_or(0.0)),
                     Some(toml::Value::Boolean(_)) => {
                         toml::Value::Boolean(value.parse().unwrap_or(false))
                     }
@@ -328,8 +352,8 @@ impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-        let config: Config = toml::from_str(&content)
-            .with_context(|| "Failed to parse config TOML")?;
+        let config: Config =
+            toml::from_str(&content).with_context(|| "Failed to parse config TOML")?;
         Ok(config)
     }
 
@@ -406,8 +430,10 @@ impl Config {
             "UNKNOWN"
         };
 
-        println!("  Private key file: {} ({} bytes, format: {}, CR: {}, BOM: {})",
-            expanded, byte_count, pem_type, has_cr, has_bom);
+        println!(
+            "  Private key file: {} ({} bytes, format: {}, CR: {}, BOM: {})",
+            expanded, byte_count, pem_type, has_cr, has_bom
+        );
 
         // Strip BOM and carriage returns
         let pem = pem.strip_prefix('\u{feff}').unwrap_or(&pem).to_string();
@@ -556,8 +582,14 @@ odds_source = "the-odds-api"
         assert_eq!(bball.fair_value, "score-feed");
         assert!(bball.score_feed.is_some());
         assert!(bball.win_prob.is_some());
-        assert_eq!(bball.strategy.as_ref().unwrap().taker_edge_threshold, Some(3));
-        assert_eq!(bball.momentum.as_ref().unwrap().taker_momentum_threshold, Some(0));
+        assert_eq!(
+            bball.strategy.as_ref().unwrap().taker_edge_threshold,
+            Some(3)
+        );
+        assert_eq!(
+            bball.momentum.as_ref().unwrap().taker_momentum_threshold,
+            Some(0)
+        );
 
         let hockey = &config.sports["ice-hockey"];
         assert_eq!(hockey.fair_value, "odds-feed");
@@ -619,7 +651,10 @@ odds_source = "the-odds-api"
         assert_eq!(config.sports["basketball"].fair_value, "scraped-bovada");
         assert_eq!(config.sports["ice-hockey"].fair_value, "odds-feed");
         assert_eq!(config.sports["college-basketball"].fair_value, "score-feed");
-        assert_eq!(config.sports["college-basketball-womens"].fair_value, "scraped-bovada");
+        assert_eq!(
+            config.sports["college-basketball-womens"].fair_value,
+            "scraped-bovada"
+        );
         assert_eq!(config.sports["mma"].fair_value, "odds-feed");
     }
 
@@ -702,7 +737,12 @@ enabled = true
         )
         .unwrap();
 
-        persist_field(&path, "sports.basketball.strategy.taker_edge_threshold", "3").unwrap();
+        persist_field(
+            &path,
+            "sports.basketball.strategy.taker_edge_threshold",
+            "3",
+        )
+        .unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
         assert!(content.contains("taker_edge_threshold"));
 

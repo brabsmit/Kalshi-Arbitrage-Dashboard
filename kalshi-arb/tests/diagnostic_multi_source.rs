@@ -2,9 +2,9 @@
 
 #[cfg(test)]
 mod tests {
-    use kalshi_arb::pipeline::{build_diagnostic_rows, build_diagnostic_rows_from_scores};
+    use kalshi_arb::diagnostic::{build_diagnostic_rows, build_diagnostic_rows_from_scores};
+    use kalshi_arb::feed::score_feed::{GameStatus, ScoreSource, ScoreUpdate};
     use kalshi_arb::feed::types::OddsUpdate;
-    use kalshi_arb::feed::score_feed::{ScoreUpdate, GameStatus, ScoreSource};
     use std::collections::HashMap;
 
     #[test]

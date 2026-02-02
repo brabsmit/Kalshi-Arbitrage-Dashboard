@@ -1,12 +1,12 @@
 pub mod draftkings;
-pub mod scraped;
 pub mod score_feed;
+pub mod scraped;
 pub mod the_odds_api;
 pub mod types;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use types::{OddsUpdate, ApiQuota};
+use types::{ApiQuota, OddsUpdate};
 
 #[async_trait]
 pub trait OddsFeed: Send + Sync {

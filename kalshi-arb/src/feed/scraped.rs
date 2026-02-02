@@ -100,8 +100,8 @@ fn parse_american_odds(s: &str) -> Option<f64> {
 /// Public for unit testing with fixtures.
 pub fn parse_bovada_response(json: &str, sport: &str) -> Result<Vec<OddsUpdate>> {
     // Bovada returns an array of path-sections; each has events.
-    let sections: Vec<BovadaResponse> = serde_json::from_str(json)
-        .context("failed to parse Bovada JSON")?;
+    let sections: Vec<BovadaResponse> =
+        serde_json::from_str(json).context("failed to parse Bovada JSON")?;
 
     let now = chrono::Utc::now().to_rfc3339();
     let mut updates = Vec::new();
@@ -110,24 +110,36 @@ pub fn parse_bovada_response(json: &str, sport: &str) -> Result<Vec<OddsUpdate>>
         for event in &section.events {
             let home = event.competitors.iter().find(|c| c.home);
             let away = event.competitors.iter().find(|c| !c.home);
-            let (Some(home), Some(away)) = (home, away) else { continue };
+            let (Some(home), Some(away)) = (home, away) else {
+                continue;
+            };
 
             // Find moneyline market (key "2W-12" = 2-way moneyline)
-            let moneyline = event.display_groups.iter()
+            let moneyline = event
+                .display_groups
+                .iter()
                 .flat_map(|dg| &dg.markets)
                 .find(|m| m.key == "2W-12");
 
             let Some(ml) = moneyline else { continue };
-            if ml.outcomes.len() < 2 { continue }
+            if ml.outcomes.len() < 2 {
+                continue;
+            }
 
-            let home_odds = ml.outcomes.iter()
+            let home_odds = ml
+                .outcomes
+                .iter()
                 .find(|o| o.description == home.name)
                 .and_then(|o| parse_american_odds(&o.price.american));
-            let away_odds = ml.outcomes.iter()
+            let away_odds = ml
+                .outcomes
+                .iter()
                 .find(|o| o.description == away.name)
                 .and_then(|o| parse_american_odds(&o.price.american));
 
-            let (Some(h), Some(a)) = (home_odds, away_odds) else { continue };
+            let (Some(h), Some(a)) = (home_odds, away_odds) else {
+                continue;
+            };
 
             // Convert epoch millis to RFC3339
             let commence = chrono::DateTime::from_timestamp_millis(event.start_time)
@@ -192,7 +204,8 @@ impl ScrapedOddsFeed {
 #[async_trait]
 impl OddsFeed for ScrapedOddsFeed {
     async fn fetch_odds(&mut self, sport: &str) -> Result<Vec<OddsUpdate>> {
-        let url = self.build_url(sport)
+        let url = self
+            .build_url(sport)
             .with_context(|| format!("Bovada does not support sport: {}", sport))?;
 
         let mut last_err = None;
@@ -273,7 +286,10 @@ mod tests {
 
     #[test]
     fn test_bovada_sport_path() {
-        assert_eq!(bovada_sport_path("college-basketball"), Some("basketball/college-basketball"));
+        assert_eq!(
+            bovada_sport_path("college-basketball"),
+            Some("basketball/college-basketball")
+        );
         assert_eq!(bovada_sport_path("basketball"), Some("basketball/nba"));
         assert_eq!(bovada_sport_path("curling"), None);
     }
@@ -455,8 +471,15 @@ mod tests {
             Ok(updates) => {
                 println!("Got {} NCAAB events from Bovada", updates.len());
                 for u in &updates {
-                    println!("  {} vs {} | {}", u.away_team, u.home_team,
-                        u.bookmakers.first().map(|b| format!("home={} away={}", b.home_odds, b.away_odds)).unwrap_or_default());
+                    println!(
+                        "  {} vs {} | {}",
+                        u.away_team,
+                        u.home_team,
+                        u.bookmakers
+                            .first()
+                            .map(|b| format!("home={} away={}", b.home_odds, b.away_odds))
+                            .unwrap_or_default()
+                    );
                 }
             }
             Err(e) => {

@@ -27,7 +27,11 @@ impl RiskManager {
         {
             return false;
         }
-        let total_exposure: u64 = self.positions.values().map(|&q| q as u64 * 100).sum::<u64>()
+        let total_exposure: u64 = self
+            .positions
+            .values()
+            .map(|&q| q as u64 * 100)
+            .sum::<u64>()
             + cost_cents as u64;
         if total_exposure > self.config.max_total_exposure_cents {
             return false;

@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use chrono::NaiveDate;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct MarketKey {
@@ -49,7 +49,9 @@ pub struct MatchedMarket {
 fn team_code(sport: &str, name: &str) -> Option<&'static str> {
     let upper = name.to_uppercase();
     let upper = upper.trim();
-    let sport_norm: String = sport.to_uppercase().chars()
+    let sport_norm: String = sport
+        .to_uppercase()
+        .chars()
         .filter(|c| c.is_ascii_alphabetic())
         .collect();
     match sport_norm.as_str() {
@@ -184,64 +186,287 @@ pub fn normalize_team(sport: &str, name: &str) -> String {
     // Common mascots/suffixes to strip — must appear at end preceded by space
     let suffixes = [
         // NBA
-        "MAVERICKS", "JAZZ", "HAWKS", "CELTICS", "PISTONS", "PACERS", "HEAT",
-        "THUNDER", "WARRIORS", "SUNS", "LAKERS", "CLIPPERS", "BLAZERS", "KINGS",
-        "SPURS", "GRIZZLIES", "PELICANS", "ROCKETS", "TIMBERWOLVES", "NUGGETS",
-        "BUCKS", "BULLS", "CAVALIERS", "RAPTORS", "NETS", "KNICKS", "WIZARDS",
-        "HORNETS", "MAGIC", "TRAIL BLAZERS", "76ERS", "SIXERS", "CAVS",
+        "MAVERICKS",
+        "JAZZ",
+        "HAWKS",
+        "CELTICS",
+        "PISTONS",
+        "PACERS",
+        "HEAT",
+        "THUNDER",
+        "WARRIORS",
+        "SUNS",
+        "LAKERS",
+        "CLIPPERS",
+        "BLAZERS",
+        "KINGS",
+        "SPURS",
+        "GRIZZLIES",
+        "PELICANS",
+        "ROCKETS",
+        "TIMBERWOLVES",
+        "NUGGETS",
+        "BUCKS",
+        "BULLS",
+        "CAVALIERS",
+        "RAPTORS",
+        "NETS",
+        "KNICKS",
+        "WIZARDS",
+        "HORNETS",
+        "MAGIC",
+        "TRAIL BLAZERS",
+        "76ERS",
+        "SIXERS",
+        "CAVS",
         // NFL
-        "PACKERS", "BEARS", "LIONS", "VIKINGS", "COWBOYS", "GIANTS", "EAGLES",
-        "COMMANDERS", "REDSKINS", "BUCCANEERS", "SAINTS", "FALCONS", "PANTHERS",
-        "RAMS", "SEAHAWKS", "49ERS", "NINERS", "CARDINALS", "RAVENS", "BENGALS",
-        "BROWNS", "STEELERS", "TEXANS", "COLTS", "JAGUARS", "TITANS", "BRONCOS",
-        "CHIEFS", "RAIDERS", "CHARGERS", "BILLS", "DOLPHINS", "PATRIOTS", "JETS",
+        "PACKERS",
+        "BEARS",
+        "LIONS",
+        "VIKINGS",
+        "COWBOYS",
+        "GIANTS",
+        "EAGLES",
+        "COMMANDERS",
+        "REDSKINS",
+        "BUCCANEERS",
+        "SAINTS",
+        "FALCONS",
+        "PANTHERS",
+        "RAMS",
+        "SEAHAWKS",
+        "49ERS",
+        "NINERS",
+        "CARDINALS",
+        "RAVENS",
+        "BENGALS",
+        "BROWNS",
+        "STEELERS",
+        "TEXANS",
+        "COLTS",
+        "JAGUARS",
+        "TITANS",
+        "BRONCOS",
+        "CHIEFS",
+        "RAIDERS",
+        "CHARGERS",
+        "BILLS",
+        "DOLPHINS",
+        "PATRIOTS",
+        "JETS",
         // NHL
-        "BRUINS", "SABRES", "RED WINGS", "BLACKHAWKS", "AVALANCHE", "BLUE JACKETS",
-        "WILD", "PREDATORS", "BLUES", "FLAMES", "OILERS", "CANUCKS", "DUCKS",
-        "COYOTES", "GOLDEN KNIGHTS", "KRAKEN", "SHARKS", "HURRICANES", "LIGHTNING",
-        "CAPITALS", "FLYERS", "PENGUINS", "RANGERS", "ISLANDERS", "DEVILS",
-        "MAPLE LEAFS", "SENATORS", "CANADIENS",
+        "BRUINS",
+        "SABRES",
+        "RED WINGS",
+        "BLACKHAWKS",
+        "AVALANCHE",
+        "BLUE JACKETS",
+        "WILD",
+        "PREDATORS",
+        "BLUES",
+        "FLAMES",
+        "OILERS",
+        "CANUCKS",
+        "DUCKS",
+        "COYOTES",
+        "GOLDEN KNIGHTS",
+        "KRAKEN",
+        "SHARKS",
+        "HURRICANES",
+        "LIGHTNING",
+        "CAPITALS",
+        "FLYERS",
+        "PENGUINS",
+        "RANGERS",
+        "ISLANDERS",
+        "DEVILS",
+        "MAPLE LEAFS",
+        "SENATORS",
+        "CANADIENS",
         // MLB
-        "RED SOX", "YANKEES", "ORIOLES", "RAYS", "WHITE SOX", "INDIANS", "GUARDIANS",
-        "TIGERS", "ROYALS", "TWINS", "ASTROS", "ANGELS", "ATHLETICS", "MARINERS",
-        "BRAVES", "MARLINS", "METS", "PHILLIES", "NATIONALS", "CUBS", "REDS",
-        "BREWERS", "PIRATES", "DIAMONDBACKS", "ROCKIES", "DODGERS", "PADRES",
+        "RED SOX",
+        "YANKEES",
+        "ORIOLES",
+        "RAYS",
+        "WHITE SOX",
+        "INDIANS",
+        "GUARDIANS",
+        "TIGERS",
+        "ROYALS",
+        "TWINS",
+        "ASTROS",
+        "ANGELS",
+        "ATHLETICS",
+        "MARINERS",
+        "BRAVES",
+        "MARLINS",
+        "METS",
+        "PHILLIES",
+        "NATIONALS",
+        "CUBS",
+        "REDS",
+        "BREWERS",
+        "PIRATES",
+        "DIAMONDBACKS",
+        "ROCKIES",
+        "DODGERS",
+        "PADRES",
         // College – power conferences
-        "AGGIES", "WILDCATS", "BULLDOGS", "CRIMSON TIDE", "VOLUNTEERS",
-        "GATORS", "GAMECOCKS", "RAZORBACKS", "LONGHORNS", "SOONERS", "JAYHAWKS",
-        "CYCLONES", "MOUNTAINEERS", "HUSKIES", "TROJANS",
-        "CARDINAL", "SUN DEVILS", "GOLDEN BEARS", "BEAVERS", "COUGARS", "UTES",
-        "BUFFALOES", "CORNHUSKERS", "BADGERS", "HAWKEYES", "SPARTANS", "WOLVERINES",
-        "BUCKEYES", "NITTANY LIONS", "TERRAPINS", "SCARLET KNIGHTS", "HOOSIERS",
-        "FIGHTING IRISH", "BLUE DEVILS", "TAR HEELS", "ORANGE", "DEMON DEACONS",
-        "YELLOW JACKETS", "SEMINOLES", "ORANGEMEN",
-        "WOLFPACK", "HOKIES", "MUSTANGS", "BEARCATS", "HORNED FROGS",
-        "RED RAIDERS", "KNIGHTS", "BLUEJAYS", "BLUE DEMONS", "HOYAS",
-        "GOLDEN EAGLES", "FRIARS", "RED STORM", "MUSKETEERS",
-        "FIGHTING ILLINI", "GOLDEN GOPHERS", "BOILERMAKERS", "REBELS",
-        "COMMODORES", "OWLS",
+        "AGGIES",
+        "WILDCATS",
+        "BULLDOGS",
+        "CRIMSON TIDE",
+        "VOLUNTEERS",
+        "GATORS",
+        "GAMECOCKS",
+        "RAZORBACKS",
+        "LONGHORNS",
+        "SOONERS",
+        "JAYHAWKS",
+        "CYCLONES",
+        "MOUNTAINEERS",
+        "HUSKIES",
+        "TROJANS",
+        "CARDINAL",
+        "SUN DEVILS",
+        "GOLDEN BEARS",
+        "BEAVERS",
+        "COUGARS",
+        "UTES",
+        "BUFFALOES",
+        "CORNHUSKERS",
+        "BADGERS",
+        "HAWKEYES",
+        "SPARTANS",
+        "WOLVERINES",
+        "BUCKEYES",
+        "NITTANY LIONS",
+        "TERRAPINS",
+        "SCARLET KNIGHTS",
+        "HOOSIERS",
+        "FIGHTING IRISH",
+        "BLUE DEVILS",
+        "TAR HEELS",
+        "ORANGE",
+        "DEMON DEACONS",
+        "YELLOW JACKETS",
+        "SEMINOLES",
+        "ORANGEMEN",
+        "WOLFPACK",
+        "HOKIES",
+        "MUSTANGS",
+        "BEARCATS",
+        "HORNED FROGS",
+        "RED RAIDERS",
+        "KNIGHTS",
+        "BLUEJAYS",
+        "BLUE DEMONS",
+        "HOYAS",
+        "GOLDEN EAGLES",
+        "FRIARS",
+        "RED STORM",
+        "MUSKETEERS",
+        "FIGHTING ILLINI",
+        "GOLDEN GOPHERS",
+        "BOILERMAKERS",
+        "REBELS",
+        "COMMODORES",
+        "OWLS",
         // College – mid-majors
-        "AZTECS", "LOBOS", "SHOCKERS", "MIDSHIPMEN", "GREEN WAVE",
-        "GOLDEN HURRICANE", "ROADRUNNERS", "MEAN GREEN", "GAELS", "DUKES",
-        "BILLIKENS", "SPIDERS", "RAMBLERS", "MINUTEMEN", "EXPLORERS",
-        "BONNIES", "WAVES", "PILOTS", "TOREROS", "DONS", "BOBCATS",
-        "PEACOCKS", "CATAMOUNTS", "COLONIALS", "WOLF PACK",
+        "AZTECS",
+        "LOBOS",
+        "SHOCKERS",
+        "MIDSHIPMEN",
+        "GREEN WAVE",
+        "GOLDEN HURRICANE",
+        "ROADRUNNERS",
+        "MEAN GREEN",
+        "GAELS",
+        "DUKES",
+        "BILLIKENS",
+        "SPIDERS",
+        "RAMBLERS",
+        "MINUTEMEN",
+        "EXPLORERS",
+        "BONNIES",
+        "WAVES",
+        "PILOTS",
+        "TOREROS",
+        "DONS",
+        "BOBCATS",
+        "PEACOCKS",
+        "CATAMOUNTS",
+        "COLONIALS",
+        "WOLF PACK",
         // College – smaller conferences
-        "TERRIERS", "BISON", "CRUSADERS", "LEOPARDS", "BLACK KNIGHTS",
-        "PHOENIX", "SEAWOLVES", "DRAGONS", "BLUE HENS", "FIGHTING CAMELS",
-        "SYCAMORES", "BEACONS", "MASTODONS", "SALUKIS", "RACERS",
-        "SKYHAWKS", "LUMBERJACKS", "COLONELS", "CHANTICLEERS",
-        "THUNDERING HERD", "REDHAWKS", "MONARCHS", "VANDALS", "CRIMSON",
-        "QUAKERS", "ANTEATERS", "GAUCHOS", "MOCS", "PALADINS", "KEYDETS",
-        "STAGS", "JASPERS", "RED FOXES", "PURPLE EAGLES", "BRONCS",
-        "GOLDEN GRIFFINS", "PURPLE ACES", "REDBIRDS", "NORSE",
-        "GOLDEN GRIZZLIES", "MOUNTAIN HAWKS", "GREYHOUNDS", "PRIDE",
-        "TRIBE", "PIONEERS", "JACKRABBITS", "RED WOLVES", "WARHAWKS",
-        "RAGIN CAJUNS", "THUNDERBIRDS", "LANCERS", "ANTELOPES",
-        "GOVERNORS", "OSPREYS", "HATTERS", "MATADORS", "HIGHLANDERS",
-        "TRITONS", "BIG RED", "BIG GREEN", "RATTLERS", "DELTA DEVILS",
-        "PRIVATEERS", "DEMONS", "SCREAMING EAGLES", "LEATHERNECKS",
-        "TRAILBLAZERS", "RAINBOW WARRIORS",
+        "TERRIERS",
+        "BISON",
+        "CRUSADERS",
+        "LEOPARDS",
+        "BLACK KNIGHTS",
+        "PHOENIX",
+        "SEAWOLVES",
+        "DRAGONS",
+        "BLUE HENS",
+        "FIGHTING CAMELS",
+        "SYCAMORES",
+        "BEACONS",
+        "MASTODONS",
+        "SALUKIS",
+        "RACERS",
+        "SKYHAWKS",
+        "LUMBERJACKS",
+        "COLONELS",
+        "CHANTICLEERS",
+        "THUNDERING HERD",
+        "REDHAWKS",
+        "MONARCHS",
+        "VANDALS",
+        "CRIMSON",
+        "QUAKERS",
+        "ANTEATERS",
+        "GAUCHOS",
+        "MOCS",
+        "PALADINS",
+        "KEYDETS",
+        "STAGS",
+        "JASPERS",
+        "RED FOXES",
+        "PURPLE EAGLES",
+        "BRONCS",
+        "GOLDEN GRIFFINS",
+        "PURPLE ACES",
+        "REDBIRDS",
+        "NORSE",
+        "GOLDEN GRIZZLIES",
+        "MOUNTAIN HAWKS",
+        "GREYHOUNDS",
+        "PRIDE",
+        "TRIBE",
+        "PIONEERS",
+        "JACKRABBITS",
+        "RED WOLVES",
+        "WARHAWKS",
+        "RAGIN CAJUNS",
+        "THUNDERBIRDS",
+        "LANCERS",
+        "ANTELOPES",
+        "GOVERNORS",
+        "OSPREYS",
+        "HATTERS",
+        "MATADORS",
+        "HIGHLANDERS",
+        "TRITONS",
+        "BIG RED",
+        "BIG GREEN",
+        "RATTLERS",
+        "DELTA DEVILS",
+        "PRIVATEERS",
+        "DEMONS",
+        "SCREAMING EAGLES",
+        "LEATHERNECKS",
+        "TRAILBLAZERS",
+        "RAINBOW WARRIORS",
     ];
 
     // Find the longest matching suffix so multi-word mascots (e.g. "GOLDEN EAGLES")
@@ -277,7 +502,11 @@ pub fn generate_key(sport: &str, team1: &str, team2: &str, date: NaiveDate) -> O
     let mut teams = [n1, n2];
     teams.sort();
     Some(MarketKey {
-        sport: sport.to_uppercase().chars().filter(|c| c.is_ascii_alphabetic()).collect(),
+        sport: sport
+            .to_uppercase()
+            .chars()
+            .filter(|c| c.is_ascii_alphabetic())
+            .collect(),
         date,
         teams,
     })
@@ -294,10 +523,18 @@ pub fn parse_date_from_ticker(ticker: &str) -> Option<NaiveDate> {
 
             if let (Ok(year), Ok(day)) = (year_str.parse::<i32>(), day_str.parse::<u32>()) {
                 let month = match month_str {
-                    "JAN" => Some(1), "FEB" => Some(2), "MAR" => Some(3),
-                    "APR" => Some(4), "MAY" => Some(5), "JUN" => Some(6),
-                    "JUL" => Some(7), "AUG" => Some(8), "SEP" => Some(9),
-                    "OCT" => Some(10), "NOV" => Some(11), "DEC" => Some(12),
+                    "JAN" => Some(1),
+                    "FEB" => Some(2),
+                    "MAR" => Some(3),
+                    "APR" => Some(4),
+                    "MAY" => Some(5),
+                    "JUN" => Some(6),
+                    "JUL" => Some(7),
+                    "AUG" => Some(8),
+                    "SEP" => Some(9),
+                    "OCT" => Some(10),
+                    "NOV" => Some(11),
+                    "DEC" => Some(12),
                     _ => None,
                 };
                 if let Some(m) = month {
@@ -454,7 +691,8 @@ mod tests {
 
     #[test]
     fn test_parse_kalshi_title() {
-        let (away, home) = parse_kalshi_title("Dallas Mavericks at Los Angeles Lakers Winner?").unwrap();
+        let (away, home) =
+            parse_kalshi_title("Dallas Mavericks at Los Angeles Lakers Winner?").unwrap();
         assert_eq!(away, "Dallas Mavericks");
         assert_eq!(home, "Los Angeles Lakers");
     }
@@ -463,17 +701,29 @@ mod tests {
     fn test_is_away_market() {
         // IND in "Indiana Pacers" → away
         assert_eq!(
-            is_away_market("KXNBAGAME-26JAN19INDPHI-IND", "Indiana Pacers", "Philadelphia 76ers"),
+            is_away_market(
+                "KXNBAGAME-26JAN19INDPHI-IND",
+                "Indiana Pacers",
+                "Philadelphia 76ers"
+            ),
             Some(true)
         );
         // PHI in "Philadelphia 76ers" → home
         assert_eq!(
-            is_away_market("KXNBAGAME-26JAN19INDPHI-PHI", "Indiana Pacers", "Philadelphia 76ers"),
+            is_away_market(
+                "KXNBAGAME-26JAN19INDPHI-PHI",
+                "Indiana Pacers",
+                "Philadelphia 76ers"
+            ),
             Some(false)
         );
         // Multi-word city abbreviations (LAC) resolved via ticker segment
         assert_eq!(
-            is_away_market("KXNBAGAME-26JAN19LACWAS-LAC", "Los Angeles Clippers", "Washington Wizards"),
+            is_away_market(
+                "KXNBAGAME-26JAN19LACWAS-LAC",
+                "Los Angeles Clippers",
+                "Washington Wizards"
+            ),
             Some(true),
         );
     }
@@ -482,12 +732,20 @@ mod tests {
     fn test_is_away_market_from_ticker_segment() {
         // LAC appears first in "LACWAS" = away, winner code "LAC" = away market
         assert_eq!(
-            is_away_market("KXNBAGAME-26JAN19LACWAS-LAC", "Los Angeles Clippers", "Washington Wizards"),
+            is_away_market(
+                "KXNBAGAME-26JAN19LACWAS-LAC",
+                "Los Angeles Clippers",
+                "Washington Wizards"
+            ),
             Some(true),
         );
         // WAS appears second in "LACWAS" = home, winner code "WAS" = home market
         assert_eq!(
-            is_away_market("KXNBAGAME-26JAN19LACWAS-WAS", "Los Angeles Clippers", "Washington Wizards"),
+            is_away_market(
+                "KXNBAGAME-26JAN19LACWAS-WAS",
+                "Los Angeles Clippers",
+                "Washington Wizards"
+            ),
             Some(false),
         );
     }
@@ -497,7 +755,10 @@ mod tests {
         let result = parse_ufc_title(
             "Will Alex Volkanovski win the Volkanovski vs Lopes professional MMA fight scheduled for Jan 31, 2026?"
         );
-        assert_eq!(result, Some(("Volkanovski".to_string(), "Lopes".to_string())));
+        assert_eq!(
+            result,
+            Some(("Volkanovski".to_string(), "Lopes".to_string()))
+        );
     }
 
     #[test]
@@ -505,7 +766,10 @@ mod tests {
         let result = parse_ufc_title(
             "Will Benoit Saint-Denis win the Hooker vs Saint-Denis professional MMA fight scheduled for Jan 31, 2026?"
         );
-        assert_eq!(result, Some(("Hooker".to_string(), "Saint-Denis".to_string())));
+        assert_eq!(
+            result,
+            Some(("Hooker".to_string(), "Saint-Denis".to_string()))
+        );
     }
 
     #[test]
@@ -534,11 +798,20 @@ mod tests {
     fn test_team_code_nba_full_names() {
         assert_eq!(team_code("basketball", "Los Angeles Lakers"), Some("LAL"));
         assert_eq!(team_code("basketball", "Los Angeles Clippers"), Some("LAC"));
-        assert_eq!(team_code("basketball", "Portland Trail Blazers"), Some("POR"));
-        assert_eq!(team_code("basketball", "Golden State Warriors"), Some("GSW"));
+        assert_eq!(
+            team_code("basketball", "Portland Trail Blazers"),
+            Some("POR")
+        );
+        assert_eq!(
+            team_code("basketball", "Golden State Warriors"),
+            Some("GSW")
+        );
         assert_eq!(team_code("basketball", "New York Knicks"), Some("NYK"));
         assert_eq!(team_code("basketball", "Brooklyn Nets"), Some("BKN"));
-        assert_eq!(team_code("basketball", "Oklahoma City Thunder"), Some("OKC"));
+        assert_eq!(
+            team_code("basketball", "Oklahoma City Thunder"),
+            Some("OKC")
+        );
         assert_eq!(team_code("basketball", "New Orleans Pelicans"), Some("NOP"));
     }
 
@@ -599,7 +872,10 @@ mod tests {
         assert_eq!(normalize_team(s, "San Diego State Aztecs"), "SANDIEGOSTATE");
         assert_eq!(normalize_team(s, "Wichita State Shockers"), "WICHITASTATE");
         assert_eq!(normalize_team(s, "Saint Peter's Peacocks"), "STPETERS");
-        assert_eq!(normalize_team(s, "Western Carolina Catamounts"), "WESTERNCAROLINA");
+        assert_eq!(
+            normalize_team(s, "Western Carolina Catamounts"),
+            "WESTERNCAROLINA"
+        );
         // Smaller conference mascots
         assert_eq!(normalize_team(s, "Army Black Knights"), "ARMY");
         assert_eq!(normalize_team(s, "Holy Cross Crusaders"), "HOLYCROSS");
@@ -626,9 +902,15 @@ mod tests {
         // "RED RAIDERS" must beat "RAIDERS" (NFL entry)
         assert_eq!(normalize_team(s, "Texas Tech Red Raiders"), "TEXASTECH");
         // "SCREAMING EAGLES" must beat "EAGLES"
-        assert_eq!(normalize_team(s, "Southern Indiana Screaming Eagles"), "SOUTHERNINDIANA");
+        assert_eq!(
+            normalize_team(s, "Southern Indiana Screaming Eagles"),
+            "SOUTHERNINDIANA"
+        );
         // "DELTA DEVILS" must beat "DEVILS" (NHL entry)
-        assert_eq!(normalize_team(s, "Mississippi Valley State Delta Devils"), "MISSISSIPPIVALLEYSTA");
+        assert_eq!(
+            normalize_team(s, "Mississippi Valley State Delta Devils"),
+            "MISSISSIPPIVALLEYSTA"
+        );
         // "RAINBOW WARRIORS" must beat "WARRIORS" (NBA entry)
         assert_eq!(normalize_team(s, "Hawaii Rainbow Warriors"), "HAWAII");
     }
@@ -662,29 +944,50 @@ mod tests {
     fn test_normalize_team_cross_source_matching() {
         // Odds API full name and Kalshi abbreviated name must produce same output
         let sport = "basketball";
-        assert_eq!(normalize_team(sport, "Los Angeles Lakers"), normalize_team(sport, "Los Angeles L"));
-        assert_eq!(normalize_team(sport, "Los Angeles Clippers"), normalize_team(sport, "Los Angeles C"));
-        assert_eq!(normalize_team(sport, "Portland Trail Blazers"), normalize_team(sport, "Portland"));
+        assert_eq!(
+            normalize_team(sport, "Los Angeles Lakers"),
+            normalize_team(sport, "Los Angeles L")
+        );
+        assert_eq!(
+            normalize_team(sport, "Los Angeles Clippers"),
+            normalize_team(sport, "Los Angeles C")
+        );
+        assert_eq!(
+            normalize_team(sport, "Portland Trail Blazers"),
+            normalize_team(sport, "Portland")
+        );
 
         // NHL disambiguation
         let sport = "ice-hockey";
-        assert_eq!(normalize_team(sport, "New York Rangers"), normalize_team(sport, "New York R"));
-        assert_eq!(normalize_team(sport, "New York Islanders"), normalize_team(sport, "New York I"));
+        assert_eq!(
+            normalize_team(sport, "New York Rangers"),
+            normalize_team(sport, "New York R")
+        );
+        assert_eq!(
+            normalize_team(sport, "New York Islanders"),
+            normalize_team(sport, "New York I")
+        );
         // NHL Rangers != Islanders
-        assert_ne!(normalize_team(sport, "New York Rangers"), normalize_team(sport, "New York Islanders"));
+        assert_ne!(
+            normalize_team(sport, "New York Rangers"),
+            normalize_team(sport, "New York Islanders")
+        );
     }
 
     #[test]
     fn test_generate_key_cross_source() {
         let d = NaiveDate::from_ymd_opt(2026, 1, 30).unwrap();
         // Odds API: "Los Angeles Lakers" vs Kalshi title: "Los Angeles L" — must produce same key
-        let k_odds = generate_key("basketball", "Los Angeles Lakers", "Washington Wizards", d).unwrap();
+        let k_odds =
+            generate_key("basketball", "Los Angeles Lakers", "Washington Wizards", d).unwrap();
         let k_kalshi = generate_key("basketball", "Los Angeles L", "Washington", d).unwrap();
         assert_eq!(k_odds, k_kalshi);
 
         // Lakers and Clippers must NOT collide
-        let k_lakers = generate_key("basketball", "Los Angeles Lakers", "Washington Wizards", d).unwrap();
-        let k_clippers = generate_key("basketball", "Los Angeles Clippers", "Denver Nuggets", d).unwrap();
+        let k_lakers =
+            generate_key("basketball", "Los Angeles Lakers", "Washington Wizards", d).unwrap();
+        let k_clippers =
+            generate_key("basketball", "Los Angeles Clippers", "Denver Nuggets", d).unwrap();
         assert_ne!(k_lakers, k_clippers);
     }
 }

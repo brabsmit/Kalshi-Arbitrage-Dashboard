@@ -17,8 +17,8 @@ pub struct OddsUpdate {
 #[allow(dead_code)]
 pub struct BookmakerOdds {
     pub name: String,
-    pub home_odds: f64,  // American odds
-    pub away_odds: f64,  // American odds
+    pub home_odds: f64, // American odds
+    pub away_odds: f64, // American odds
     pub draw_odds: Option<f64>,
     pub last_update: String,
 }

@@ -19,7 +19,7 @@ pub struct DiagnosticRow {
     pub kalshi_ticker: Option<String>,
     pub market_status: Option<String>,
     pub reason: String,
-    pub source: String,  // NEW: "ESPN", "TheOddsAPI", "DraftKings", "Bovada"
+    pub source: String, // NEW: "ESPN", "TheOddsAPI", "DraftKings", "Bovada"
 }
 
 #[derive(Debug, Clone)]

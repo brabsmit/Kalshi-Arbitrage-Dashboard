@@ -46,7 +46,11 @@ impl OrderExecutor {
         let order_type = if is_taker { "market" } else { "limit" };
         let order = CreateOrderRequest {
             ticker: ticker.to_string(),
-            action: if is_buy { "buy".to_string() } else { "sell".to_string() },
+            action: if is_buy {
+                "buy".to_string()
+            } else {
+                "sell".to_string()
+            },
             side: "yes".to_string(), // We only trade YES side
             count: quantity,
             order_type: order_type.to_string(),
@@ -56,7 +60,9 @@ impl OrderExecutor {
         };
 
         // Submit to Kalshi API
-        let response = self.rest.create_order(&order)
+        let response = self
+            .rest
+            .create_order(&order)
             .await
             .context("order submission failed")?;
 

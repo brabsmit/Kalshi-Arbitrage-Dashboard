@@ -96,9 +96,8 @@ impl OddsFeed for DraftKingsFeed {
         // Handle rate limiting
         if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
             tracing::warn!("DraftKings 429 rate limited, backing off");
-            self.poll_interval = Duration::from_secs(
-                self.poll_interval.as_secs().saturating_mul(2).min(30)
-            );
+            self.poll_interval =
+                Duration::from_secs(self.poll_interval.as_secs().saturating_mul(2).min(30));
             anyhow::bail!("DraftKings rate limited (429)");
         }
 
@@ -116,7 +115,9 @@ impl OddsFeed for DraftKingsFeed {
             self.last_etag = etag.to_str().ok().map(|s| s.to_string());
         }
 
-        let dk_resp: DkResponse = resp.json().await
+        let dk_resp: DkResponse = resp
+            .json()
+            .await
             .context("failed to parse DraftKings response")?;
 
         let Some(event_group) = dk_resp.event_group else {
@@ -124,10 +125,8 @@ impl OddsFeed for DraftKingsFeed {
         };
 
         // Build event_id -> DkEvent lookup
-        let event_map: std::collections::HashMap<u64, &DkEvent> = event_group.events
-            .iter()
-            .map(|e| (e.event_id, e))
-            .collect();
+        let event_map: std::collections::HashMap<u64, &DkEvent> =
+            event_group.events.iter().map(|e| (e.event_id, e)).collect();
 
         let mut updates: Vec<OddsUpdate> = Vec::new();
 
@@ -149,17 +148,24 @@ impl OddsFeed for DraftKingsFeed {
                         _ => {
                             // Fall back to outcome labels
                             if offer.outcomes.len() >= 2 {
-                                (offer.outcomes[0].label.clone(), offer.outcomes[1].label.clone())
+                                (
+                                    offer.outcomes[0].label.clone(),
+                                    offer.outcomes[1].label.clone(),
+                                )
                             } else {
                                 continue;
                             }
                         }
                     };
 
-                    let home_odds = offer.outcomes.iter()
+                    let home_odds = offer
+                        .outcomes
+                        .iter()
                         .find(|o| o.label == home_team)
                         .and_then(|o| parse_american_odds(&o.odds_american));
-                    let away_odds = offer.outcomes.iter()
+                    let away_odds = offer
+                        .outcomes
+                        .iter()
                         .find(|o| o.label == away_team)
                         .and_then(|o| parse_american_odds(&o.odds_american));
 
@@ -237,9 +243,17 @@ mod tests {
             Ok(updates) => {
                 println!("Got {} NBA events from DraftKings", updates.len());
                 for u in &updates {
-                    println!("  {} vs {} | bookmakers: {}", u.home_team, u.away_team, u.bookmakers.len());
+                    println!(
+                        "  {} vs {} | bookmakers: {}",
+                        u.home_team,
+                        u.away_team,
+                        u.bookmakers.len()
+                    );
                     for bm in &u.bookmakers {
-                        println!("    {}: home={} away={}", bm.name, bm.home_odds, bm.away_odds);
+                        println!(
+                            "    {}: home={} away={}",
+                            bm.name, bm.home_odds, bm.away_odds
+                        );
                     }
                 }
             }

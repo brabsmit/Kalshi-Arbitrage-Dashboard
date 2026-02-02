@@ -7,7 +7,7 @@ pub struct ConfigField {
     pub value: String,
     pub field_type: FieldType,
     pub is_override: bool,   // differs from global default
-    pub config_path: String,  // TOML dotted path for persistence
+    pub config_path: String, // TOML dotted path for persistence
     pub read_only: bool,
 }
 
@@ -74,7 +74,12 @@ pub fn build_config_tabs(
         tabs.push(ConfigTab {
             label: pipe.label.clone(),
             sport_key: Some(pipe.key.clone()),
-            fields: build_sport_fields(pipe, global_strategy, global_momentum, available_odds_sources),
+            fields: build_sport_fields(
+                pipe,
+                global_strategy,
+                global_momentum,
+                available_odds_sources,
+            ),
         });
     }
 
@@ -335,7 +340,13 @@ fn build_sport_fields(
     });
 
     // Score feed fields (if applicable)
-    if let FairValueSource::ScoreFeed { poller, live_poll_s, pre_game_poll_s, .. } = &pipe.fair_value_source {
+    if let FairValueSource::ScoreFeed {
+        poller,
+        live_poll_s,
+        pre_game_poll_s,
+        ..
+    } = &pipe.fair_value_source
+    {
         fields.push(ConfigField {
             label: "score_feed.primary_url".to_string(),
             value: poller.primary_url().to_string(),

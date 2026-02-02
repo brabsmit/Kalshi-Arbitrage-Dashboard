@@ -14,7 +14,12 @@ pub fn kelly_size(
     bankroll_cents: u64,
     kelly_fraction: f64,
 ) -> u32 {
-    if entry_price == 0 || entry_price >= 100 || fair_value == 0 || bankroll_cents == 0 || kelly_fraction <= 0.0 {
+    if entry_price == 0
+        || entry_price >= 100
+        || fair_value == 0
+        || bankroll_cents == 0
+        || kelly_fraction <= 0.0
+    {
         return 1;
     }
 

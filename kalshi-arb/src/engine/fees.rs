@@ -23,7 +23,11 @@ pub fn calculate_fee(price_cents: u32, quantity: u32, is_taker: bool) -> u32 {
 
 /// Find minimum sell price to break even after exit fees.
 /// Returns None if break-even is impossible (would require price > 99).
-pub fn break_even_sell_price(total_entry_cost_cents: u32, quantity: u32, is_taker_exit: bool) -> Option<u32> {
+pub fn break_even_sell_price(
+    total_entry_cost_cents: u32,
+    quantity: u32,
+    is_taker_exit: bool,
+) -> Option<u32> {
     for price in 1..=99u32 {
         let fee = calculate_fee(price, quantity, is_taker_exit);
         let gross = price * quantity;
@@ -79,11 +83,17 @@ mod tests {
         let be = break_even_sell_price(entry_cost, 10, false).expect("should have break-even");
         let exit_fee = calculate_fee(be, 10, false);
         let gross = be * 10;
-        assert!(gross >= entry_cost + exit_fee, "break_even={be}, gross={gross}, entry={entry_cost}, exit_fee={exit_fee}");
+        assert!(
+            gross >= entry_cost + exit_fee,
+            "break_even={be}, gross={gross}, entry={entry_cost}, exit_fee={exit_fee}"
+        );
         if be > 1 {
             let prev_fee = calculate_fee(be - 1, 10, false);
             let prev_gross = (be - 1) * 10;
-            assert!(prev_gross < entry_cost + prev_fee, "be-1 should not break even");
+            assert!(
+                prev_gross < entry_cost + prev_fee,
+                "be-1 should not break even"
+            );
         }
     }
 
@@ -110,14 +120,20 @@ mod tests {
         // Create truly impossible scenario: very high entry cost
         let impossible_entry_cost = 10000; // $100 for 1 contract (impossible)
         let result = break_even_sell_price(impossible_entry_cost, 1, false);
-        assert_eq!(result, None, "should return None when break-even impossible");
+        assert_eq!(
+            result, None,
+            "should return None when break-even impossible"
+        );
     }
 
     #[test]
     fn test_break_even_some_when_possible() {
         let entry_cost = 50 + calculate_fee(50, 1, true); // 52
         let result = break_even_sell_price(entry_cost, 1, true);
-        assert!(result.is_some(), "should return Some when break-even possible");
+        assert!(
+            result.is_some(),
+            "should return Some when break-even possible"
+        );
         let be = result.unwrap();
         assert!(be > 50 && be <= 99);
     }
@@ -129,20 +145,25 @@ mod tests {
         let entry_fee = calculate_fee(buy_price, qty, true);
         let total_entry = buy_price * qty + entry_fee;
 
-        let sell_price = break_even_sell_price(total_entry, qty, false).expect("should have break-even");
+        let sell_price =
+            break_even_sell_price(total_entry, qty, false).expect("should have break-even");
         let exit_fee = calculate_fee(sell_price, qty, false);
         let gross_exit = sell_price * qty;
         let net_exit = gross_exit - exit_fee;
 
-        assert!(net_exit >= total_entry,
-            "round trip should break even: net_exit={net_exit}, total_entry={total_entry}");
+        assert!(
+            net_exit >= total_entry,
+            "round trip should break even: net_exit={net_exit}, total_entry={total_entry}"
+        );
 
         if sell_price > 1 {
             let worse_exit_fee = calculate_fee(sell_price - 1, qty, false);
             let worse_gross = (sell_price - 1) * qty;
             let worse_net = worse_gross - worse_exit_fee;
-            assert!(worse_net < total_entry,
-                "one cent below break-even should lose money");
+            assert!(
+                worse_net < total_entry,
+                "one cent below break-even should lose money"
+            );
         }
     }
 }

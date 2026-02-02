@@ -65,18 +65,21 @@ pub fn evaluate(
     let entry_fee_taker = calculate_fee(best_ask, taker_qty, true) as i32;
     let exit_fee_maker_t = calculate_fee(fair_value, taker_qty, false) as i32;
     let taker_profit = (fair_value as i32 - best_ask as i32) * taker_qty as i32
-        - entry_fee_taker - exit_fee_maker_t;
+        - entry_fee_taker
+        - exit_fee_maker_t;
 
     // Kelly-size for maker path
     let maker_buy_price = best_bid.saturating_add(1).min(99);
     let maker_qty = {
-        let raw = super::kelly::kelly_size(fair_value, maker_buy_price, bankroll_cents, kelly_fraction);
+        let raw =
+            super::kelly::kelly_size(fair_value, maker_buy_price, bankroll_cents, kelly_fraction);
         raw.min(max_contracts)
     };
     let entry_fee_maker = calculate_fee(maker_buy_price, maker_qty, false) as i32;
     let exit_fee_maker_m = calculate_fee(fair_value, maker_qty, false) as i32;
     let maker_profit = (fair_value as i32 - maker_buy_price as i32) * maker_qty as i32
-        - entry_fee_maker - exit_fee_maker_m;
+        - entry_fee_maker
+        - exit_fee_maker_m;
 
     if edge >= taker_threshold as i32 && taker_profit >= min_edge_after_fees as i32 {
         StrategySignal {
@@ -88,7 +91,9 @@ pub fn evaluate(
         }
     } else if edge >= maker_threshold as i32 && maker_profit >= min_edge_after_fees as i32 {
         StrategySignal {
-            action: TradeAction::MakerBuy { bid_price: maker_buy_price },
+            action: TradeAction::MakerBuy {
+                bid_price: maker_buy_price,
+            },
             price: maker_buy_price,
             edge,
             net_profit_estimate: maker_profit,
@@ -189,7 +194,11 @@ pub fn devig_3way(home_odds: f64, away_odds: f64, draw_odds: f64) -> (f64, f64, 
     if total == 0.0 {
         return (1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0);
     }
-    (home_implied / total, away_implied / total, draw_implied / total)
+    (
+        home_implied / total,
+        away_implied / total,
+        draw_implied / total,
+    )
 }
 
 /// Compute fair value in cents from devigged probability.
@@ -220,7 +229,7 @@ mod tests {
     #[test]
     fn test_fair_value_cents() {
         assert_eq!(fair_value_cents(0.60), 60);
-        assert_eq!(fair_value_cents(0.0), 1);  // clamped
+        assert_eq!(fair_value_cents(0.0), 1); // clamped
         assert_eq!(fair_value_cents(1.0), 99); // clamped
     }
 

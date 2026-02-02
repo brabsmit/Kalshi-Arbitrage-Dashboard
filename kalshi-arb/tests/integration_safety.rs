@@ -2,10 +2,10 @@
 
 #[cfg(test)]
 mod tests {
-    use kalshi_arb::engine::risk::RiskManager;
-    use kalshi_arb::engine::positions::PositionTracker;
-    use kalshi_arb::engine::pending_orders::PendingOrderRegistry;
     use kalshi_arb::config::RiskConfig;
+    use kalshi_arb::engine::pending_orders::PendingOrderRegistry;
+    use kalshi_arb::engine::positions::PositionTracker;
+    use kalshi_arb::engine::risk::RiskManager;
 
     #[test]
     fn test_risk_manager_enforces_limits() {
@@ -41,10 +41,16 @@ mod tests {
         let entry_cost = 98;
         let quantity = 1;
         let result = fees::break_even_sell_price(entry_cost, quantity, true);
-        assert!(result.is_some(), "should have break-even for reasonable entry");
+        assert!(
+            result.is_some(),
+            "should have break-even for reasonable entry"
+        );
 
         let impossible_cost = 10000;
         let result_impossible = fees::break_even_sell_price(impossible_cost, 1, true);
-        assert!(result_impossible.is_none(), "should return None for impossible break-even");
+        assert!(
+            result_impossible.is_none(),
+            "should return None for impossible break-even"
+        );
     }
 }

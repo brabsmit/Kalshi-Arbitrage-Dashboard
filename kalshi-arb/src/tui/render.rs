@@ -138,22 +138,34 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     };
 
     let activity_indicator = if state.is_paused {
-        Span::styled(" PAUSED", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD))
+        Span::styled(
+            " PAUSED",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
     } else {
         let ch = SPINNER_FRAMES[(spinner_frame as usize) % SPINNER_FRAMES.len()];
-        Span::styled(
-            format!(" {} RUN", ch),
-            Style::default().fg(Color::Cyan),
-        )
+        Span::styled(format!(" {} RUN", ch), Style::default().fg(Color::Cyan))
     };
 
     let (bal_cents, exp_cents, pnl_cents) = if state.sim_mode {
-        let exposure: i64 = state.sim_positions.iter()
+        let exposure: i64 = state
+            .sim_positions
+            .iter()
             .map(|p| (p.entry_price * p.quantity) as i64)
             .sum();
-        (state.sim_balance_cents, exposure, state.sim_realized_pnl_cents)
+        (
+            state.sim_balance_cents,
+            exposure,
+            state.sim_realized_pnl_cents,
+        )
     } else {
-        (state.balance_cents, state.total_exposure_cents, state.realized_pnl_cents)
+        (
+            state.balance_cents,
+            state.total_exposure_cents,
+            state.realized_pnl_cents,
+        )
     };
 
     let bal = format!("${:.2}", bal_cents as f64 / 100.0);
@@ -203,10 +215,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
                     Style::default().fg(Color::Cyan),
                 ),
                 Span::styled(" | Win: ", Style::default().fg(Color::DarkGray)),
-                Span::styled(
-                    format!("{}%", win_pct),
-                    Style::default().fg(win_color),
-                ),
+                Span::styled(format!("{}%", win_pct), Style::default().fg(win_color)),
                 Span::styled(" | Avg Slip: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     format!("{:+.1}\u{00a2}", avg_slip),
@@ -268,7 +277,9 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
     };
 
     let title_style = if state.sim_mode {
-        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        Style::default()
+            .fg(Color::Cyan)
+            .add_modifier(Modifier::BOLD)
     } else {
         Style::default()
     };
@@ -289,7 +300,9 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 "No live markets",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             )),
             Line::from(Span::styled(
                 format!(
@@ -338,61 +351,72 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
 
     let fixed_cols_full: usize = 5 + 5 + 5 + 6 + 8 + 8; // fair+bid+ask+edge+action+latency = 37
 
-    let (headers, constraints, ticker_w, drop_latency, drop_action, drop_stale) = if inner_width < 45 {
-        // Drop both Latency and Action
-        let fixed = 5 + 5 + 5 + 6 + 5; // fair+bid+ask+edge+mom
-        let ticker_w = inner_width.saturating_sub(fixed).max(4);
-        (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom"],
-            vec![
-                Constraint::Length(ticker_w as u16),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(6),
-                Constraint::Length(5),
-            ],
-            ticker_w, true, true, true,
-        )
-    } else if inner_width < 55 {
-        // Drop Latency only
-        let fixed = 5 + 5 + 5 + 6 + 5 + 8; // fair+bid+ask+edge+mom+action
-        let ticker_w = inner_width.saturating_sub(fixed).max(4);
-        (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Action"],
-            vec![
-                Constraint::Length(ticker_w as u16),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(6),
-                Constraint::Length(5),
-                Constraint::Length(8),
-            ],
-            ticker_w, true, false, true,
-        )
-    } else {
-        let fixed_with_mom = fixed_cols_full + 5 + 7; // +mom +stale columns
-        let ticker_w = inner_width.saturating_sub(fixed_with_mom).max(4);
-        (
-            vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Stale", "Action", "Latency"],
-            vec![
-                Constraint::Length(ticker_w as u16),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(5),
-                Constraint::Length(6),
-                Constraint::Length(5),
-                Constraint::Length(7),
-                Constraint::Length(8),
-                Constraint::Length(8),
-            ],
-            ticker_w, false, false, false,
-        )
-    };
+    let (headers, constraints, ticker_w, drop_latency, drop_action, drop_stale) =
+        if inner_width < 45 {
+            // Drop both Latency and Action
+            let fixed = 5 + 5 + 5 + 6 + 5; // fair+bid+ask+edge+mom
+            let ticker_w = inner_width.saturating_sub(fixed).max(4);
+            (
+                vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom"],
+                vec![
+                    Constraint::Length(ticker_w as u16),
+                    Constraint::Length(5),
+                    Constraint::Length(5),
+                    Constraint::Length(5),
+                    Constraint::Length(6),
+                    Constraint::Length(5),
+                ],
+                ticker_w,
+                true,
+                true,
+                true,
+            )
+        } else if inner_width < 55 {
+            // Drop Latency only
+            let fixed = 5 + 5 + 5 + 6 + 5 + 8; // fair+bid+ask+edge+mom+action
+            let ticker_w = inner_width.saturating_sub(fixed).max(4);
+            (
+                vec!["Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Action"],
+                vec![
+                    Constraint::Length(ticker_w as u16),
+                    Constraint::Length(5),
+                    Constraint::Length(5),
+                    Constraint::Length(5),
+                    Constraint::Length(6),
+                    Constraint::Length(5),
+                    Constraint::Length(8),
+                ],
+                ticker_w,
+                true,
+                false,
+                true,
+            )
+        } else {
+            let fixed_with_mom = fixed_cols_full + 5 + 7; // +mom +stale columns
+            let ticker_w = inner_width.saturating_sub(fixed_with_mom).max(4);
+            (
+                vec![
+                    "Ticker", "Fair", "Bid", "Ask", "Edge", "Mom", "Stale", "Action", "Latency",
+                ],
+                vec![
+                    Constraint::Length(ticker_w as u16),
+                    Constraint::Length(5),
+                    Constraint::Length(5),
+                    Constraint::Length(5),
+                    Constraint::Length(6),
+                    Constraint::Length(5),
+                    Constraint::Length(7),
+                    Constraint::Length(8),
+                    Constraint::Length(8),
+                ],
+                ticker_w,
+                false,
+                false,
+                false,
+            )
+        };
 
-    let header = Row::new(headers)
-        .style(Style::default().add_modifier(Modifier::BOLD));
+    let header = Row::new(headers).style(Style::default().add_modifier(Modifier::BOLD));
 
     let rows: Vec<Row> = state
         .markets
@@ -412,13 +436,13 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                 Cell::from(m.fair_value.to_string()),
                 Cell::from(m.bid.to_string()),
                 Cell::from(m.ask.to_string()),
-                Cell::from(format!("{:+}", m.edge))
-                    .style(Style::default().fg(edge_color)),
+                Cell::from(format!("{:+}", m.edge)).style(Style::default().fg(edge_color)),
                 Cell::from(format!("{:.0}", m.momentum_score))
                     .style(Style::default().fg(mom_color)),
             ];
             if !drop_stale {
-                let stale_text = m.staleness_secs
+                let stale_text = m
+                    .staleness_secs
                     .map(|s| format!("{}s", s))
                     .unwrap_or_else(|| "\u{2014}".to_string());
                 let stale_color = match m.staleness_secs {
@@ -427,9 +451,7 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
                     Some(_) => Color::Red,
                     None => Color::DarkGray,
                 };
-                cells.push(
-                    Cell::from(stale_text).style(Style::default().fg(stale_color)),
-                );
+                cells.push(Cell::from(stale_text).style(Style::default().fg(stale_color)));
             }
             if !drop_action {
                 cells.push(Cell::from(m.action.clone()));
@@ -448,7 +470,9 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
     let visible_lines = area.height.saturating_sub(4) as usize; // borders + header row + padding
     let total = rows.len();
     let offset = if state.market_focus {
-        state.market_scroll_offset.min(total.saturating_sub(visible_lines))
+        state
+            .market_scroll_offset
+            .min(total.saturating_sub(visible_lines))
     } else {
         0
     };
@@ -467,11 +491,7 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
 
     let table = Table::new(rows, constraints)
         .header(header)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL),
-        );
+        .block(Block::default().title(title).borders(Borders::ALL));
 
     f.render_widget(table, area);
 }
@@ -509,31 +529,50 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
 
     // Build header
     let mut headers: Vec<&str> = vec!["Ticker"];
-    if show_side { headers.push("Side"); }
+    if show_side {
+        headers.push("Side");
+    }
     headers.extend_from_slice(&["Qty", "Entry", "Bid", "Sell @"]);
-    if show_edge { headers.push("Edge"); }
+    if show_edge {
+        headers.push("Edge");
+    }
     headers.push("Tgt");
-    if show_mkt { headers.push("Mkt"); }
-    if show_age { headers.push("Age"); }
-    if show_src { headers.push("Src"); }
+    if show_mkt {
+        headers.push("Mkt");
+    }
+    if show_age {
+        headers.push("Age");
+    }
+    if show_src {
+        headers.push("Src");
+    }
 
-    let header = Row::new(headers)
-        .style(Style::default().add_modifier(Modifier::BOLD));
+    let header = Row::new(headers).style(Style::default().add_modifier(Modifier::BOLD));
 
     // Build constraints
     let mut constraints: Vec<Constraint> = vec![Constraint::Length(ticker_w as u16)];
-    if show_side { constraints.push(Constraint::Length(4)); }
+    if show_side {
+        constraints.push(Constraint::Length(4));
+    }
     constraints.extend_from_slice(&[
         Constraint::Length(5),
         Constraint::Length(6),
         Constraint::Length(5),
         Constraint::Length(6),
     ]);
-    if show_edge { constraints.push(Constraint::Length(6)); }
+    if show_edge {
+        constraints.push(Constraint::Length(6));
+    }
     constraints.push(Constraint::Length(7));
-    if show_mkt { constraints.push(Constraint::Length(7)); }
-    if show_age { constraints.push(Constraint::Length(6)); }
-    if show_src { constraints.push(Constraint::Length(6)); }
+    if show_mkt {
+        constraints.push(Constraint::Length(7));
+    }
+    if show_age {
+        constraints.push(Constraint::Length(6));
+    }
+    if show_src {
+        constraints.push(Constraint::Length(6));
+    }
 
     let now = std::time::Instant::now();
 
@@ -547,13 +586,15 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
             let ticker = truncate_with_ellipsis(&sp.ticker, ticker_w);
 
             // Look up live prices
-            let (yes_bid, yes_ask) = state.live_book
+            let (yes_bid, yes_ask) = state
+                .live_book
                 .get(&sp.ticker)
                 .map(|&(yb, ya, _, _)| (yb, ya))
                 .unwrap_or((0, 0));
 
             // Look up fair value from markets
-            let fair_value = state.markets
+            let fair_value = state
+                .markets
                 .iter()
                 .find(|m| m.ticker == sp.ticker)
                 .map(|m| m.fair_value)
@@ -562,21 +603,34 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
             // Target P&L: (sell@ - entry) * qty - entry_fee
             let tgt_pnl = (sp.sell_price as i32 - sp.entry_price as i32) * sp.quantity as i32
                 - sp.entry_fee as i32;
-            let tgt_color = if tgt_pnl >= 0 { Color::Green } else { Color::Red };
+            let tgt_color = if tgt_pnl >= 0 {
+                Color::Green
+            } else {
+                Color::Red
+            };
 
             // Mkt P&L: (bid * qty - exit_fee) - (entry * qty + entry_fee)
             let mkt_pnl = if yes_bid > 0 {
                 let exit_revenue = (yes_bid as i64) * (sp.quantity as i64);
                 let exit_fee = calculate_fee(yes_bid, sp.quantity, true) as i64;
-                let entry_cost = (sp.entry_price as i64) * (sp.quantity as i64) + sp.entry_fee as i64;
+                let entry_cost =
+                    (sp.entry_price as i64) * (sp.quantity as i64) + sp.entry_fee as i64;
                 (exit_revenue - exit_fee - entry_cost) as i32
             } else {
                 -((sp.entry_price as i32) * (sp.quantity as i32) + sp.entry_fee as i32)
             };
-            let mkt_color = if mkt_pnl >= 0 { Color::Green } else { Color::Red };
+            let mkt_color = if mkt_pnl >= 0 {
+                Color::Green
+            } else {
+                Color::Red
+            };
 
             // Edge: fair - ask
-            let edge = if yes_ask > 0 { fair_value as i32 - yes_ask as i32 } else { 0 };
+            let edge = if yes_ask > 0 {
+                fair_value as i32 - yes_ask as i32
+            } else {
+                0
+            };
             let edge_color = if edge > 0 { Color::Green } else { Color::Red };
 
             // Age
@@ -592,27 +646,25 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
             cells.extend_from_slice(&[
                 Cell::from(sp.quantity.to_string()),
                 Cell::from(format!("{}c", sp.entry_price)),
-                Cell::from(if yes_bid > 0 { format!("{}c", yes_bid) } else { "--".to_string() })
-                    .style(Style::default().fg(Color::Yellow)),
+                Cell::from(if yes_bid > 0 {
+                    format!("{}c", yes_bid)
+                } else {
+                    "--".to_string()
+                })
+                .style(Style::default().fg(Color::Yellow)),
                 Cell::from(format!("{}c", sp.sell_price)),
             ]);
 
             if show_edge {
-                cells.push(
-                    Cell::from(format!("{:+}", edge))
-                        .style(Style::default().fg(edge_color)),
-                );
+                cells
+                    .push(Cell::from(format!("{:+}", edge)).style(Style::default().fg(edge_color)));
             }
 
-            cells.push(
-                Cell::from(format!("{:+}c", tgt_pnl))
-                    .style(Style::default().fg(tgt_color)),
-            );
+            cells.push(Cell::from(format!("{:+}c", tgt_pnl)).style(Style::default().fg(tgt_color)));
 
             if show_mkt {
                 cells.push(
-                    Cell::from(format!("{:+}c", mkt_pnl))
-                        .style(Style::default().fg(mkt_color)),
+                    Cell::from(format!("{:+}c", mkt_pnl)).style(Style::default().fg(mkt_color)),
                 );
             }
 
@@ -621,15 +673,16 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
             }
 
             if show_src {
-                let src_text = sp.trace.as_ref().map(|t| {
-                    match &t.fair_value_method {
+                let src_text = sp
+                    .trace
+                    .as_ref()
+                    .map(|t| match &t.fair_value_method {
                         crate::pipeline::FairValueMethod::ScoreFeed { .. } => "score",
                         crate::pipeline::FairValueMethod::OddsFeed { .. } => "odds",
-                    }
-                }).unwrap_or("\u{2014}");
+                    })
+                    .unwrap_or("\u{2014}");
                 cells.push(
-                    Cell::from(src_text.to_string())
-                        .style(Style::default().fg(Color::DarkGray)),
+                    Cell::from(src_text.to_string()).style(Style::default().fg(Color::DarkGray)),
                 );
             }
 
@@ -640,7 +693,9 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
     let visible_lines = area.height.saturating_sub(4) as usize;
     let total = rows.len();
     let offset = if state.position_focus {
-        state.position_scroll_offset.min(total.saturating_sub(visible_lines))
+        state
+            .position_scroll_offset
+            .min(total.saturating_sub(visible_lines))
     } else {
         0
     };
@@ -659,11 +714,7 @@ fn draw_positions(f: &mut Frame, state: &AppState, area: Rect) {
 
     let table = Table::new(rows, constraints)
         .header(header)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL),
-        );
+        .block(Block::default().title(title).borders(Borders::ALL));
 
     f.render_widget(table, area);
 }
@@ -675,7 +726,9 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
     let total = state.trades.len();
 
     let offset = if state.trade_focus {
-        state.trade_scroll_offset.min(total.saturating_sub(visible_lines))
+        state
+            .trade_scroll_offset
+            .min(total.saturating_sub(visible_lines))
     } else {
         0
     };
@@ -687,10 +740,13 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
     let fixed_cols = base_fixed + if show_src { 6 } else { 0 };
     let ticker_w = inner_width.saturating_sub(fixed_cols).max(4);
 
-    let mut headers = vec!["Time", "Action", "Ticker", "Price", "Qty", "Type", "P&L", "Slip"];
-    if show_src { headers.push("SRC"); }
-    let header = Row::new(headers)
-        .style(Style::default().add_modifier(Modifier::BOLD));
+    let mut headers = vec![
+        "Time", "Action", "Ticker", "Price", "Qty", "Type", "P&L", "Slip",
+    ];
+    if show_src {
+        headers.push("SRC");
+    }
+    let header = Row::new(headers).style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut constraints = vec![
         Constraint::Length(8),
@@ -702,7 +758,9 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
         Constraint::Length(7),
         Constraint::Length(6),
     ];
-    if show_src { constraints.push(Constraint::Length(6)); }
+    if show_src {
+        constraints.push(Constraint::Length(6));
+    }
 
     let rows: Vec<Row> = state
         .trades
@@ -712,25 +770,25 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
         .take(if state.trade_focus { visible_lines } else { 4 })
         .map(|t| {
             let pnl_cell = match t.pnl {
-                Some(p) if p > 0 => Cell::from(format!("{:+}c", p))
-                    .style(Style::default().fg(Color::Green)),
-                Some(p) if p < 0 => Cell::from(format!("{:+}c", p))
-                    .style(Style::default().fg(Color::Red)),
-                Some(_) => Cell::from("0c")
-                    .style(Style::default().fg(Color::DarkGray)),
-                None => Cell::from("\u{2014}")
-                    .style(Style::default().fg(Color::DarkGray)),
+                Some(p) if p > 0 => {
+                    Cell::from(format!("{:+}c", p)).style(Style::default().fg(Color::Green))
+                }
+                Some(p) if p < 0 => {
+                    Cell::from(format!("{:+}c", p)).style(Style::default().fg(Color::Red))
+                }
+                Some(_) => Cell::from("0c").style(Style::default().fg(Color::DarkGray)),
+                None => Cell::from("\u{2014}").style(Style::default().fg(Color::DarkGray)),
             };
 
             let slip_cell = match t.slippage {
-                Some(s) if s > 0 => Cell::from(format!("+{}", s))
-                    .style(Style::default().fg(Color::Yellow)),
-                Some(s) if s < 0 => Cell::from(format!("{}", s))
-                    .style(Style::default().fg(Color::Green)),
-                Some(_) => Cell::from("0")
-                    .style(Style::default().fg(Color::DarkGray)),
-                None => Cell::from("\u{2014}")
-                    .style(Style::default().fg(Color::DarkGray)),
+                Some(s) if s > 0 => {
+                    Cell::from(format!("+{}", s)).style(Style::default().fg(Color::Yellow))
+                }
+                Some(s) if s < 0 => {
+                    Cell::from(format!("{}", s)).style(Style::default().fg(Color::Green))
+                }
+                Some(_) => Cell::from("0").style(Style::default().fg(Color::DarkGray)),
+                None => Cell::from("\u{2014}").style(Style::default().fg(Color::DarkGray)),
             };
 
             let ticker = truncate_with_ellipsis(&t.ticker, ticker_w);
@@ -751,10 +809,7 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
                 } else {
                     truncate_with_ellipsis(&t.source, 6).into_owned()
                 };
-                cells.push(
-                    Cell::from(src_text)
-                        .style(Style::default().fg(Color::DarkGray)),
-                );
+                cells.push(Cell::from(src_text).style(Style::default().fg(Color::DarkGray)));
             }
             Row::new(cells)
         })
@@ -774,11 +829,7 @@ fn draw_trades(f: &mut Frame, state: &AppState, area: Rect) {
 
     let table = Table::new(rows, constraints)
         .header(header)
-        .block(
-            Block::default()
-                .title(title)
-                .borders(Borders::ALL),
-        );
+        .block(Block::default().title(title).borders(Borders::ALL));
 
     f.render_widget(table, area);
 }
@@ -789,7 +840,9 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
 
     let total = state.logs.len();
     let offset = if state.log_focus {
-        state.log_scroll_offset.min(total.saturating_sub(visible_lines))
+        state
+            .log_scroll_offset
+            .min(total.saturating_sub(visible_lines))
     } else {
         0
     };
@@ -819,14 +872,16 @@ fn draw_logs(f: &mut Frame, state: &AppState, area: Rect) {
         .collect();
 
     let title = if state.log_focus {
-        format!(" Engine Log [{}/{} lines] ", offset + visible_lines.min(total), total)
+        format!(
+            " Engine Log [{}/{} lines] ",
+            offset + visible_lines.min(total),
+            total
+        )
     } else {
         " Engine Log ".to_string()
     };
 
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL);
+    let block = Block::default().title(title).borders(Borders::ALL);
     let para = Paragraph::new(lines).block(block);
     f.render_widget(para, area);
 }
@@ -847,9 +902,7 @@ fn draw_api_status(f: &mut Frame, state: &AppState, area: Rect) {
 
     let filter_str = format!(
         " | {} live \u{00b7} {} pre-game \u{00b7} {} closed",
-        state.filter_stats.live,
-        state.filter_stats.pre_game,
-        state.filter_stats.closed,
+        state.filter_stats.live, state.filter_stats.pre_game, state.filter_stats.closed,
     );
 
     let color = if state.api_requests_remaining < 100 {
@@ -869,7 +922,8 @@ fn draw_api_status(f: &mut Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_footer(f: &mut Frame, state: &AppState, area: Rect) {
-    let line = if state.log_focus || state.market_focus || state.position_focus || state.trade_focus {
+    let line = if state.log_focus || state.market_focus || state.position_focus || state.trade_focus
+    {
         Line::from(vec![
             Span::styled("  [Esc]", Style::default().fg(Color::Yellow)),
             Span::raw(" back  "),
@@ -914,7 +968,10 @@ fn draw_sport_legend(f: &mut Frame, state: &AppState, area: Rect) {
             Style::default().fg(Color::DarkGray)
         };
 
-        spans.push(Span::styled(format!("[{}]", hotkey), Style::default().fg(Color::Yellow)));
+        spans.push(Span::styled(
+            format!("[{}]", hotkey),
+            Style::default().fg(Color::Yellow),
+        ));
         spans.push(Span::styled(label.as_str(), style));
         spans.push(Span::raw(" "));
     }
@@ -962,7 +1019,9 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
             Line::from(""),
             Line::from(Span::styled(
                 "No games returned from The Odds API",
-                Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
             )),
             Line::from(""),
             Line::from(Span::styled(
@@ -971,7 +1030,9 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
             )),
         ];
         let block = Block::default().borders(Borders::ALL);
-        let para = Paragraph::new(lines).alignment(Alignment::Center).block(block);
+        let para = Paragraph::new(lines)
+            .alignment(Alignment::Center)
+            .block(block);
         f.render_widget(para, area);
         return;
     }
@@ -1030,7 +1091,9 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
             };
 
             let reason_style = if row.reason.contains("tradeable") {
-                Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD)
             } else if row.reason.contains("No match") {
                 Style::default().fg(Color::DarkGray)
             } else {
@@ -1048,17 +1111,17 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
                         .unwrap_or_else(|| "\u{2014}".to_string()),
                 ),
                 Cell::from(
-                    row.market_status.as_deref().unwrap_or("\u{2014}").to_string(),
+                    row.market_status
+                        .as_deref()
+                        .unwrap_or("\u{2014}")
+                        .to_string(),
                 )
                 .style(market_style),
                 Cell::from(row.reason.clone()).style(reason_style),
             ];
 
             if show_source {
-                cells.push(
-                    Cell::from(row.source.clone())
-                        .style(Style::default().fg(Color::Cyan)),
-                );
+                cells.push(Cell::from(row.source.clone()).style(Style::default().fg(Color::Cyan)));
             }
 
             display_rows.push(Row::new(cells));
@@ -1079,13 +1142,19 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
 
     let matchup_w = matchup_w as u16;
 
-    let mut header_labels = vec!["Matchup", "Commence(ET)", "Status", "Kalshi Ticker", "Market", "Reason"];
+    let mut header_labels = vec![
+        "Matchup",
+        "Commence(ET)",
+        "Status",
+        "Kalshi Ticker",
+        "Market",
+        "Reason",
+    ];
     if show_source {
         header_labels.push("Source");
     }
 
-    let table_header = Row::new(header_labels)
-        .style(Style::default().add_modifier(Modifier::BOLD));
+    let table_header = Row::new(header_labels).style(Style::default().add_modifier(Modifier::BOLD));
 
     let mut constraints = vec![
         Constraint::Length(matchup_w),
@@ -1100,16 +1169,16 @@ fn draw_diagnostic(f: &mut Frame, state: &AppState, area: Rect) {
     }
 
     let table = Table::new(visible_rows, constraints)
-    .header(table_header)
-    .block(
-        Block::default()
-            .title(format!(
-                " [{}/{}] ",
-                (offset + visible_count).min(total),
-                total,
-            ))
-            .borders(Borders::ALL),
-    );
+        .header(table_header)
+        .block(
+            Block::default()
+                .title(format!(
+                    " [{}/{}] ",
+                    (offset + visible_count).min(total),
+                    total,
+                ))
+                .borders(Borders::ALL),
+        );
 
     f.render_widget(table, area);
 }
@@ -1150,7 +1219,7 @@ fn render_config(f: &mut Frame, state: &AppState) {
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // tab bar
-            Constraint::Min(0),   // body
+            Constraint::Min(0),    // body
             Constraint::Length(1), // help line
         ])
         .split(f.area());
@@ -1288,7 +1357,8 @@ mod tests {
         let s = "price 1¢ ok";
         assert_eq!(truncate_with_ellipsis(s, 9), "price ...");
         // The exact crash string from production
-        let prod = "SIM BUY 10x KXNCAAMBGAME-26JAN31UNCGT-GT @ 1¢ (ask was 1¢, slip +0¢), sell target 2¢";
+        let prod =
+            "SIM BUY 10x KXNCAAMBGAME-26JAN31UNCGT-GT @ 1¢ (ask was 1¢, slip +0¢), sell target 2¢";
         let result = truncate_with_ellipsis(prod, 72);
         assert!(result.ends_with("..."));
         assert!(result.chars().count() <= 72);
