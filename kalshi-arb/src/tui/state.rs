@@ -81,6 +81,7 @@ pub struct MarketRow {
     pub latency_ms: Option<u64>,
     pub momentum_score: f64,
     pub staleness_secs: Option<u64>,
+    pub odds_api_fair_value: Option<u32>,
 }
 
 #[derive(Debug, Clone)]

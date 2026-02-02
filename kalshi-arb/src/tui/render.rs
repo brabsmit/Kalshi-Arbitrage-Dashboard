@@ -431,9 +431,13 @@ fn draw_markets(f: &mut Frame, state: &AppState, area: Rect) {
             } else {
                 Color::DarkGray
             };
+            let fv_display = match m.odds_api_fair_value {
+                Some(oa_fv) => format!("{} ({})", m.fair_value, oa_fv),
+                None => m.fair_value.to_string(),
+            };
             let mut cells = vec![
                 Cell::from(ticker.into_owned()),
-                Cell::from(m.fair_value.to_string()),
+                Cell::from(fv_display),
                 Cell::from(m.bid.to_string()),
                 Cell::from(m.ask.to_string()),
                 Cell::from(format!("{:+}", m.edge)).style(Style::default().fg(edge_color)),

@@ -437,6 +437,11 @@ fn apply_config_update(
                     sim_config.use_break_even_exit = v;
                 }
             }
+            "validate_fair_value" => {
+                if let Ok(v) = value.parse() {
+                    sim_config.validate_fair_value = v;
+                }
+            }
             _ => {}
         },
         _ => {}

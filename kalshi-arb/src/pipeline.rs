@@ -315,9 +315,16 @@ impl SportPipeline {
     ) -> TickResult {
         // Poll odds feed for diagnostic rows (pre-game interval to avoid
         // burning API quota — the score feed drives actual fair value).
+        // When validate_fair_value is on, use live_poll_s for faster updates.
         let diag_poll_s = odds_source_configs
             .get(&self.odds_source)
-            .map(|c| c.pre_game_poll_s)
+            .map(|c| {
+                if sim_config.validate_fair_value {
+                    c.live_poll_s
+                } else {
+                    c.pre_game_poll_s
+                }
+            })
             .unwrap_or(120);
         let should_fetch_odds = match self.last_odds_poll {
             Some(last) => cycle_start.duration_since(last) >= Duration::from_secs(diag_poll_s),
@@ -351,6 +358,7 @@ impl SportPipeline {
                         let source_name = format_source_name(&self.odds_source);
                         self.diagnostic_rows =
                             build_diagnostic_rows(&updates, &self.key, market_index, &source_name);
+                        self.cached_odds = updates;
                     }
                     Err(e) => {
                         tracing::warn!(sport = %self.key, error = %e, "diagnostic odds fetch failed");
@@ -436,6 +444,11 @@ impl SportPipeline {
             &self.fair_value_source,
             risk_config,
             bankroll_cents,
+            if sim_config.validate_fair_value {
+                &self.cached_odds
+            } else {
+                &[]
+            },
         )
     }
 
@@ -899,6 +912,7 @@ pub fn evaluate_matched_market(
     sport: &str,
     fair_value_method: FairValueMethod,
     fair_value_inputs: FairValueInputs,
+    odds_api_fair_value: Option<u32>,
 ) -> EvalOutcome {
     // Check market is open
     let market_open = side_market.is_some_and(|sm| {
@@ -954,6 +968,7 @@ pub fn evaluate_matched_market(
             latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
             momentum_score: momentum,
             staleness_secs,
+            odds_api_fair_value,
         };
         return EvalOutcome::Evaluated(row);
     }
@@ -1017,6 +1032,7 @@ pub fn evaluate_matched_market(
         latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
         momentum_score: momentum,
         staleness_secs,
+        odds_api_fair_value,
     };
 
     if signal.action != strategy::TradeAction::Skip {
@@ -1150,6 +1166,7 @@ fn process_score_updates(
     fair_value_source: &FairValueSource,
     risk_config: &crate::config::RiskConfig,
     bankroll_cents: u64,
+    cached_odds_for_validation: &[OddsUpdate],
 ) -> TickResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -1174,6 +1191,28 @@ fn process_score_updates(
                 closed_tickers: Vec::new(),
             }
         }
+    };
+
+    // Build odds-api fair value lookup from cached odds (for validation mode).
+    // Maps (normalized_home, normalized_away) -> home_fair_value_cents.
+    let odds_api_fv_lookup: HashMap<(String, String), u32> = if !cached_odds_for_validation.is_empty()
+    {
+        cached_odds_for_validation
+            .iter()
+            .filter_map(|ou| {
+                let (home_fv, _) = {
+                    let avg = average_bookmaker_odds(&ou.bookmakers)?;
+                    let (home_odds, away_odds, _, _, _) = avg;
+                    let (hfv, _afv) = strategy::devig(home_odds, away_odds);
+                    (strategy::fair_value_cents(hfv), strategy::fair_value_cents(_afv))
+                };
+                let home_norm = ou.home_team.to_uppercase();
+                let away_norm = ou.away_team.to_uppercase();
+                Some(((home_norm, away_norm), home_fv))
+            })
+            .collect()
+    } else {
+        HashMap::new()
     };
 
     // OT period threshold: for 2-half sports (regulation <= 2400), OT at period > 2.
@@ -1258,6 +1297,17 @@ fn process_score_updates(
                 }
             });
 
+            // Look up odds-api fair value for this game (validation mode)
+            let oa_fv = if !odds_api_fv_lookup.is_empty() {
+                let home_norm = update.home_team.to_uppercase();
+                let away_norm = update.away_team.to_uppercase();
+                odds_api_fv_lookup
+                    .get(&(home_norm, away_norm))
+                    .copied()
+            } else {
+                None
+            };
+
             let fv_method = FairValueMethod::ScoreFeed {
                 source: "score-feed".to_string(),
             };
@@ -1295,6 +1345,7 @@ fn process_score_updates(
                 sport,
                 fv_method,
                 fv_inputs,
+                oa_fv,
             ) {
                 EvalOutcome::Closed => {
                     filter_closed += 1;
@@ -1516,6 +1567,7 @@ fn process_sport_updates(
                         sport,
                         fv_method,
                         fv_inputs,
+                        None, // odds-feed sports don't need comparison FV
                     ) {
                         EvalOutcome::Closed => {
                             filter_closed += 1;
@@ -1598,6 +1650,7 @@ fn process_sport_updates(
                     sport,
                     fv_method,
                     fv_inputs,
+                    None, // odds-feed sports don't need comparison FV
                 ) {
                     EvalOutcome::Closed => {
                         filter_closed += 1;

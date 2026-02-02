@@ -225,6 +225,14 @@ fn build_global_fields(
             config_path: "simulation.use_break_even_exit".to_string(),
             read_only: false,
         },
+        ConfigField {
+            label: "simulation.validate_fair_value".to_string(),
+            value: sim.validate_fair_value.to_string(),
+            field_type: FieldType::Bool,
+            is_override: false,
+            config_path: "simulation.validate_fair_value".to_string(),
+            read_only: false,
+        },
     ]
 }
 

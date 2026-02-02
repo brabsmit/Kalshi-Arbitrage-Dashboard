@@ -191,6 +191,8 @@ pub struct MomentumConfig {
 pub struct SimulationConfig {
     pub latency_ms: u64,
     pub use_break_even_exit: bool,
+    #[serde(default)]
+    pub validate_fair_value: bool,
 }
 
 impl Default for SimulationConfig {
@@ -198,6 +200,7 @@ impl Default for SimulationConfig {
         Self {
             latency_ms: 500,
             use_break_even_exit: true,
+            validate_fair_value: false,
         }
     }
 }
