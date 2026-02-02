@@ -412,3 +412,47 @@ pre_game_poll_s = 60                # 1-minute polling before games start
 request_timeout_ms = 10000          # 10-second timeout (Bovada can be slow)
 max_retries = 2                     # Retry up to 2 times with backoff
 ```
+
+## Diagnostic View
+
+The diagnostic view provides visibility into all data sources for a sport, showing why events from external feeds do (or don't) match Kalshi markets.
+
+### Accessing the Diagnostic View
+
+Press `d` from the main TUI to open the diagnostic view. Select a sport from the dropdown to see all events from all configured sources for that sport.
+
+### Multi-Source Display
+
+The diagnostic view now shows events from **all sources** for the selected sport:
+
+- **Odds feeds** (TheOddsAPI, DraftKings, Bovada): Each event includes commence time, game status (e.g., "Upcoming (2h 15m)"), and matching status.
+- **Score feeds** (ESPN, NBA API): Each event shows live game status with score/clock (e.g., "Live (P2 7:23 105-98)") and uses "—" for commence time (not available in score feeds).
+
+### Table Columns
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| **Sport** | Sport identifier | `basketball_ncaab` |
+| **Matchup** | Teams (formatted by source) | `UNC @ Duke` (odds) or `UNC vs Duke` (scores) |
+| **Commence** | Scheduled start time (ET) or "—" for score feeds | `Feb 01 19:00` or `—` |
+| **Game Status** | Current game state | `Live`, `Upcoming (2h 15m)`, `Live (P2 7:23 105-98)` |
+| **Kalshi Ticker** | Matched market ticker or blank | `KXNCBAGAME-26FEB01DUKEUNC-DUKE` |
+| **Market Status** | Kalshi market state or blank | `Open`, `Closed` |
+| **Reason** | Why matched/not matched | `Live & tradeable`, `No match found` |
+| **Source** | Data source name | `TheOddsAPI`, `ESPN`, `DraftKings`, `Bovada` |
+
+### Example Output
+
+```
+Sport              Matchup              Commence       Game Status          Kalshi Ticker                      Market  Reason              Source
+basketball_ncaab   UNC @ Duke           Feb 01 19:00   Upcoming (2h 15m)    KXNCBAGAME-26FEB01DUKEUNC-DUKE    Open    Not started yet     TheOddsAPI
+basketball_ncaab   UNC vs Duke          —              Live (P1 15:32 45-42) KXNCBAGAME-26FEB01DUKEUNC-DUKE    Open    Live & tradeable    ESPN
+basketball_ncaab   Kansas @ Kentucky    Feb 01 20:30   Upcoming (3h 45m)    —                                  —       No match found      DraftKings
+basketball_ncaab   Villanova @ Gonzaga  Feb 01 22:00   Upcoming (5h 15m)    KXNCBAGAME-26FEB01GONZVILL-GONZ   Open    Not started yet     Bovada
+```
+
+### Implementation Details
+
+- **Data fetching**: `handle_fetch_diagnostic()` in `tui/mod.rs` calls both odds feed and score feed fetchers for the sport, tagging each with its source name.
+- **Row building**: `build_diagnostic_rows()` and `build_diagnostic_rows_from_scores()` in `diagnostic.rs` format rows with source-specific conventions.
+- **Display**: `render_diagnostic_view()` in `tui/render.rs` renders the table with the "Source" column.
