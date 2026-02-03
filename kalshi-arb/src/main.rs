@@ -1092,10 +1092,6 @@ async fn main() -> Result<()> {
                                     ticker = %intent.ticker,
                                     "BLOCKED: already holding position"
                                 );
-                                let t = intent.ticker.clone();
-                                state_tx_engine.send_modify(|s| {
-                                    s.push_log("SKIP", format!("{}: already holding position", t));
-                                });
                                 continue;
                             }
                         }
@@ -1107,10 +1103,6 @@ async fn main() -> Result<()> {
                                     ticker = %intent.ticker,
                                     "BLOCKED: order already pending"
                                 );
-                                let t = intent.ticker.clone();
-                                state_tx_engine.send_modify(|s| {
-                                    s.push_log("SKIP", format!("{}: order already pending", t));
-                                });
                                 continue;
                             }
                         }
@@ -1124,14 +1116,6 @@ async fn main() -> Result<()> {
                                     cost = intent.entry_cost_cents,
                                     "BLOCKED: risk limits exceeded"
                                 );
-                                let t = intent.ticker.clone();
-                                let cost = intent.entry_cost_cents;
-                                state_tx_engine.send_modify(|s| {
-                                    s.push_log(
-                                        "SKIP",
-                                        format!("{}: risk limits exceeded (cost {}c)", t, cost),
-                                    );
-                                });
                                 continue;
                             }
                         }
@@ -1144,17 +1128,6 @@ async fn main() -> Result<()> {
                                 available = available_balance_cents,
                                 "BLOCKED: insufficient balance"
                             );
-                            let t = intent.ticker.clone();
-                            let cost = intent.entry_cost_cents;
-                            state_tx_engine.send_modify(|s| {
-                                s.push_log(
-                                    "SKIP",
-                                    format!(
-                                        "{}: insufficient balance (need {}c, have {}c)",
-                                        t, cost, s.balance_cents
-                                    ),
-                                );
-                            });
                             continue;
                         }
 

@@ -1066,14 +1066,6 @@ pub fn evaluate_matched_market(
 
     if signal.action != strategy::TradeAction::Skip {
         let mode_label = if sim_mode { "sim" } else { "live" };
-        let fill_price_preview = match &signal.action {
-            strategy::TradeAction::TakerBuy => ask,
-            strategy::TradeAction::MakerBuy { bid_price } => *bid_price,
-            strategy::TradeAction::Skip => 0,
-        };
-        let is_taker_preview = matches!(signal.action, strategy::TradeAction::TakerBuy);
-        let entry_fee_preview = calculate_fee(fill_price_preview, signal.quantity, is_taker_preview);
-        let total_cost_preview = (signal.quantity * fill_price_preview) + entry_fee_preview;
         tracing::warn!(
             ticker = %ticker,
             action = %action_str,
@@ -1086,18 +1078,6 @@ pub fn evaluate_matched_market(
             mode = mode_label,
             "signal detected"
         );
-        // Push signal to TUI log so user can see every decision
-        let signal_ticker = ticker.to_string();
-        state_tx.send_modify(|s| {
-            s.push_log(
-                "SIGNAL",
-                format!(
-                    "{} {} {}x @ {}c (edge {}c, cost {}c, bid {} ask {})",
-                    action_str, signal_ticker, signal.quantity, fill_price_preview,
-                    signal.edge, total_cost_preview, bid, ask,
-                ),
-            );
-        });
     }
 
     // Common break-even validation for both sim and live
@@ -1125,13 +1105,6 @@ pub fn evaluate_matched_market(
                     break_even = be_price,
                     "skipping trade: break-even too high (>95c)"
                 );
-                let be_ticker = ticker.to_string();
-                state_tx.send_modify(|s| {
-                    s.push_log(
-                        "SKIP",
-                        format!("{}: break-even {}c too high (>95c)", be_ticker, be_price),
-                    );
-                });
                 return EvalOutcome::Evaluated(row, None);
             }
         } else {
@@ -1141,16 +1114,6 @@ pub fn evaluate_matched_market(
                 quantity = qty,
                 "skipping trade: impossible to break even"
             );
-            let be_ticker = ticker.to_string();
-            state_tx.send_modify(|s| {
-                s.push_log(
-                    "SKIP",
-                    format!(
-                        "{}: impossible to break even (cost {}c, qty {})",
-                        be_ticker, entry_cost_total, qty
-                    ),
-                );
-            });
             return EvalOutcome::Evaluated(row, None);
         }
 
@@ -1165,16 +1128,6 @@ pub fn evaluate_matched_market(
                         quantity = qty,
                         "skipping trade: no viable sell target"
                     );
-                    let st_ticker = ticker.to_string();
-                    state_tx.send_modify(|s| {
-                        s.push_log(
-                            "SKIP",
-                            format!(
-                                "{}: no viable sell target (entry {}c, qty {})",
-                                st_ticker, total_entry, qty
-                            ),
-                        );
-                    });
                     return EvalOutcome::Evaluated(row, None);
                 }
             }
@@ -1190,20 +1143,9 @@ pub fn evaluate_matched_market(
             let ticker_owned = ticker.to_string();
             state_tx.send_modify(|s| {
                 if s.sim_balance_cents < total_cost {
-                    s.push_log(
-                        "SKIP",
-                        format!(
-                            "{}: insufficient balance (need {}c, have {}c)",
-                            ticker_owned, total_cost, s.sim_balance_cents
-                        ),
-                    );
                     return;
                 }
                 if s.sim_positions.iter().any(|p| p.ticker == ticker_owned) {
-                    s.push_log(
-                        "SKIP",
-                        format!("{}: already holding position", ticker_owned),
-                    );
                     return;
                 }
                 s.sim_balance_cents -= total_cost;
