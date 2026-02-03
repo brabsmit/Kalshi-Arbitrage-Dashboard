@@ -22,6 +22,50 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, watch};
 use tui::state::{AppState, MarketRow};
 
+/// Retry an async operation with exponential backoff.
+async fn retry_with_backoff<T, E, F, Fut>(
+    operation_name: &str,
+    max_attempts: u32,
+    initial_delay_ms: u64,
+    mut operation: F,
+) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    let mut attempt = 0;
+    let mut delay_ms = initial_delay_ms;
+
+    loop {
+        attempt += 1;
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(e) => {
+                if attempt >= max_attempts {
+                    tracing::error!(
+                        operation = operation_name,
+                        attempts = attempt,
+                        error = %e,
+                        "operation failed after max retries"
+                    );
+                    return Err(e);
+                }
+                tracing::warn!(
+                    operation = operation_name,
+                    attempt = attempt,
+                    max_attempts = max_attempts,
+                    delay_ms = delay_ms,
+                    error = %e,
+                    "operation failed, retrying"
+                );
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                delay_ms = (delay_ms * 2).min(30_000); // Cap at 30 seconds
+            }
+        }
+    }
+}
+
 /// Per-ticker orderbook depth: price_cents -> quantity for each side.
 /// Supports snapshot replacement and incremental delta application.
 #[derive(Debug, Clone)]
@@ -821,40 +865,39 @@ async fn main() -> Result<()> {
 
         // Reconcile positions on startup (live mode only)
         if !sim_mode_engine {
-            match rest_for_engine.get_positions().await {
-                Ok(positions) => {
-                    if !positions.is_empty() {
-                        tracing::warn!(
-                            count = positions.len(),
-                            "found existing positions on startup"
-                        );
-                        for pos in &positions {
-                            tracing::info!(
-                                ticker = %pos.ticker,
-                                position = pos.position,
-                                "existing position"
-                            );
-                            if pos.position > 0 {
-                                if let Some(ref mut rm) = risk_manager {
-                                    rm.record_buy(&pos.ticker, pos.position as u32);
-                                }
-                                if let Some(ref mut pt) = position_tracker {
-                                    pt.record_entry(pos.ticker.clone(), pos.position as u32, 0, 0);
-                                }
-                            }
+            let rest_clone = rest_for_engine.clone();
+            let positions = retry_with_backoff(
+                "position_reconciliation",
+                3,      // max 3 attempts
+                1000,   // start with 1 second delay
+                || {
+                    let rest = rest_clone.clone();
+                    async move { rest.get_positions().await }
+                },
+            )
+            .await
+            .context("Cannot start without position reconciliation")?;
+
+            if !positions.is_empty() {
+                tracing::warn!(count = positions.len(), "found existing positions on startup");
+                for pos in &positions {
+                    tracing::info!(
+                        ticker = %pos.ticker,
+                        position = pos.position,
+                        "existing position"
+                    );
+                    if pos.position > 0 {
+                        if let Some(ref mut rm) = risk_manager {
+                            rm.record_buy(&pos.ticker, pos.position as u32);
                         }
-                        tracing::info!("position reconciliation complete");
-                    } else {
-                        tracing::info!("no existing positions found");
+                        if let Some(ref mut pt) = position_tracker {
+                            pt.record_entry(pos.ticker.clone(), pos.position as u32, 0, 0);
+                        }
                     }
                 }
-                Err(e) => {
-                    tracing::error!(
-                        error = %e,
-                        "failed to fetch positions on startup"
-                    );
-                    anyhow::bail!("Cannot start without position reconciliation: {}", e);
-                }
+                tracing::info!("position reconciliation complete");
+            } else {
+                tracing::info!("no existing positions found");
             }
         } else {
             tracing::info!("simulation mode: skipping position reconciliation");
@@ -881,17 +924,29 @@ async fn main() -> Result<()> {
                         is_paused = false;
                         state_tx_engine.send_modify(|s| s.is_paused = false);
                     }
-                    tui::TuiCommand::Quit => return Ok(()),
+                    tui::TuiCommand::Quit => return Ok::<(), anyhow::Error>(()),
                     tui::TuiCommand::KillSwitch => {
                         tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
+
+                        // Cancel all pending orders
                         if let Some(ref mut po) = pending_orders {
-                            let count = po.count();
-                            if count > 0 {
-                                tracing::error!(count, "clearing pending orders");
+                            let orders = po.drain();
+                            if !orders.is_empty() {
+                                tracing::error!(count = orders.len(), "cancelling pending orders");
+                                for order in &orders {
+                                    if let Some(ref order_id) = order.order_id {
+                                        if let Some(ref exec) = executor {
+                                            if let Err(e) = exec.cancel_order(order_id).await {
+                                                tracing::error!(order_id = %order_id, error = %e, "failed to cancel order");
+                                            } else {
+                                                tracing::info!(order_id = %order_id, "order cancelled");
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            // Note: PendingOrderRegistry doesn't have drain, so we log the count
-                            // Actual order cancellation would require order IDs (future work)
                         }
+
                         state_tx_engine.send_modify(|s| {
                             s.is_paused = true;
                             s.push_log("KILL", "KILL SWITCH ACTIVATED - all trading halted".to_string());
@@ -970,6 +1025,28 @@ async fn main() -> Result<()> {
                                 &field_path,
                                 &value,
                             );
+                        }
+                    }
+                }
+            }
+
+            // Expire stale pending orders
+            if let Some(ref mut po) = pending_orders {
+                let timeout = Duration::from_secs(execution_config.order_timeout_secs);
+                let expired = po.expire_older_than(timeout);
+                for order in expired {
+                    tracing::warn!(
+                        ticker = %order.ticker,
+                        age_secs = order.submitted_at.elapsed().as_secs(),
+                        order_id = ?order.order_id,
+                        "expired stale pending order"
+                    );
+                    // Attempt to cancel if we have an order ID
+                    if let Some(ref order_id) = order.order_id {
+                        if let Some(ref exec) = executor {
+                            if let Err(e) = exec.cancel_order(order_id).await {
+                                tracing::error!(order_id = %order_id, error = %e, "failed to cancel expired order");
+                            }
                         }
                     }
                 }
@@ -1331,6 +1408,26 @@ async fn main() -> Result<()> {
                                     tui::TuiCommand::Quit => return Ok(()),
                                     tui::TuiCommand::KillSwitch => {
                                         tracing::error!("KILL SWITCH ACTIVATED - halting all trading");
+
+                                        // Cancel all pending orders
+                                        if let Some(ref mut po) = pending_orders {
+                                            let orders = po.drain();
+                                            if !orders.is_empty() {
+                                                tracing::error!(count = orders.len(), "cancelling pending orders");
+                                                for order in &orders {
+                                                    if let Some(ref order_id) = order.order_id {
+                                                        if let Some(ref exec) = executor {
+                                                            if let Err(e) = exec.cancel_order(order_id).await {
+                                                                tracing::error!(order_id = %order_id, error = %e, "failed to cancel order");
+                                                            } else {
+                                                                tracing::info!(order_id = %order_id, "order cancelled");
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         state_tx_engine.send_modify(|s| {
                                             s.is_paused = true;
                                             s.push_log("KILL", "KILL SWITCH ACTIVATED - all trading halted".to_string());

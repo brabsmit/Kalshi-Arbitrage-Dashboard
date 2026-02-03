@@ -75,4 +75,37 @@ impl OrderExecutor {
 
         Ok(Some(response.order.order_id))
     }
+
+    /// Cancel an order by ID.
+    /// In dry-run mode, logs the cancellation attempt and returns Ok.
+    pub async fn cancel_order(&self, order_id: &str) -> Result<()> {
+        if self.dry_run {
+            tracing::info!(
+                order_id = %order_id,
+                "DRY RUN: would cancel order"
+            );
+            return Ok(());
+        }
+
+        self.rest
+            .cancel_order(order_id)
+            .await
+            .context(format!("failed to cancel order {}", order_id))?;
+
+        tracing::info!(order_id = %order_id, "order cancelled");
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_executor_has_cancel_method() {
+        // Compile-time verification that cancel_order exists with correct signature
+        fn _assert_cancel_exists(executor: &OrderExecutor) {
+            let _ = executor.cancel_order("test-id");
+        }
+    }
 }

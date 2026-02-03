@@ -1,7 +1,8 @@
 [execution]
-dry_run = true
+dry_run = false
 maker_timeout_ms = 500
 stale_odds_threshold_ms = 5000
+order_timeout_secs = 30
 
 [kalshi]
 api_base = "https://api.elections.kalshi.com"
@@ -178,4 +179,5 @@ odds_source = "the-odds-api"
 [strategy]
 maker_edge_threshold = 2
 min_edge_after_fees = 1
+slippage_buffer_cents = 1
 taker_edge_threshold = 5

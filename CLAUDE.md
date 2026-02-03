@@ -37,6 +37,8 @@ Safety features active:
 - ✅ Staleness check before strategy evaluation
 - ✅ Break-even validation before entry
 - ✅ Bankroll deduction prevents over-allocation
-- ✅ Position reconciliation on startup
-- ✅ Kill switch (F12) for emergency halt
+- ✅ Position reconciliation on startup (with retry)
+- ✅ Kill switch (F12) for emergency halt with order cancellation
+- ✅ Order timeout detection (30s default)
+- ✅ Slippage buffer in strategy evaluation
 - ✅ Error handling (no critical unwraps)

@@ -1002,7 +1002,7 @@ pub fn evaluate_matched_market(
     }
 
     // Evaluate strategy
-    let mut signal = strategy::evaluate(
+    let mut signal = strategy::evaluate_with_slippage(
         fair,
         bid,
         ask,
@@ -1012,6 +1012,7 @@ pub fn evaluate_matched_market(
         bankroll_cents,
         risk_config.kelly_fraction,
         risk_config.max_contracts_per_market,
+        strategy_config.slippage_buffer_cents,
     );
 
     let bypass_momentum = momentum_config.bypass_for_score_signals && source == "score_feed";
@@ -1763,6 +1764,7 @@ mod tests {
             taker_edge_threshold: 5,
             maker_edge_threshold: 2,
             min_edge_after_fees: 1,
+            slippage_buffer_cents: 0,
         }
     }
 

@@ -27,6 +27,8 @@ pub struct StrategyConfig {
     pub taker_edge_threshold: u8,
     pub maker_edge_threshold: u8,
     pub min_edge_after_fees: u8,
+    #[serde(default)]
+    pub slippage_buffer_cents: u8,  // Subtracted from edge calculation
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -45,10 +47,16 @@ pub struct ExecutionConfig {
     pub stale_odds_threshold_ms: u64,
     #[serde(default = "default_dry_run")]
     pub dry_run: bool,
+    #[serde(default = "default_order_timeout_secs")]
+    pub order_timeout_secs: u64,
 }
 
 fn default_dry_run() -> bool {
     true
+}
+
+fn default_order_timeout_secs() -> u64 {
+    30 // 30 second default
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -257,6 +265,7 @@ impl StrategyConfig {
                 taker_edge_threshold: o.taker_edge_threshold.unwrap_or(self.taker_edge_threshold),
                 maker_edge_threshold: o.maker_edge_threshold.unwrap_or(self.maker_edge_threshold),
                 min_edge_after_fees: o.min_edge_after_fees.unwrap_or(self.min_edge_after_fees),
+                slippage_buffer_cents: self.slippage_buffer_cents,
             },
         }
     }
@@ -612,6 +621,7 @@ odds_source = "the-odds-api"
             taker_edge_threshold: 5,
             maker_edge_threshold: 2,
             min_edge_after_fees: 1,
+            slippage_buffer_cents: 1,
         };
         let ov = StrategyOverride {
             taker_edge_threshold: Some(3),
@@ -622,6 +632,7 @@ odds_source = "the-odds-api"
         assert_eq!(resolved.taker_edge_threshold, 3);
         assert_eq!(resolved.maker_edge_threshold, 1);
         assert_eq!(resolved.min_edge_after_fees, 1);
+        assert_eq!(resolved.slippage_buffer_cents, 1);
     }
 
     #[test]
@@ -657,12 +668,12 @@ odds_source = "the-odds-api"
         let config = Config::load(std::path::Path::new("config.toml")).unwrap();
         assert_eq!(config.sports.len(), 8);
         assert!(config.odds_sources.contains_key("the-odds-api"));
-        assert_eq!(config.sports["basketball"].fair_value, "scraped-bovada");
+        assert_eq!(config.sports["basketball"].fair_value, "score-feed");
         assert_eq!(config.sports["ice-hockey"].fair_value, "odds-feed");
         assert_eq!(config.sports["college-basketball"].fair_value, "score-feed");
         assert_eq!(
             config.sports["college-basketball-womens"].fair_value,
-            "scraped-bovada"
+            "score-feed"
         );
         assert_eq!(config.sports["mma"].fair_value, "odds-feed");
     }

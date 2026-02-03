@@ -110,6 +110,98 @@ pub fn evaluate(
     }
 }
 
+/// Evaluate with slippage buffer applied to edge calculation.
+/// slippage_buffer_cents is subtracted from the raw edge before threshold comparison.
+#[allow(clippy::too_many_arguments)]
+pub fn evaluate_with_slippage(
+    fair_value: u32,
+    best_bid: u32,
+    best_ask: u32,
+    taker_threshold: u8,
+    maker_threshold: u8,
+    min_edge_after_fees: u8,
+    bankroll_cents: u64,
+    kelly_fraction: f64,
+    max_contracts: u32,
+    slippage_buffer_cents: u8,
+) -> StrategySignal {
+    if best_ask == 0 || fair_value == 0 {
+        return StrategySignal {
+            action: TradeAction::Skip,
+            price: 0,
+            edge: 0,
+            net_profit_estimate: 0,
+            quantity: 0,
+        };
+    }
+
+    let raw_edge = fair_value as i32 - best_ask as i32;
+    let effective_edge = raw_edge - slippage_buffer_cents as i32;
+
+    if effective_edge < maker_threshold as i32 {
+        return StrategySignal {
+            action: TradeAction::Skip,
+            price: 0,
+            edge: raw_edge,  // Report raw edge for display
+            net_profit_estimate: 0,
+            quantity: 0,
+        };
+    }
+
+    // Kelly-size for taker path (using actual price, not buffered)
+    let taker_qty = {
+        let raw = super::kelly::kelly_size(fair_value, best_ask, bankroll_cents, kelly_fraction);
+        raw.min(max_contracts)
+    };
+    let entry_fee_taker = calculate_fee(best_ask, taker_qty, true) as i32;
+    let exit_fee_maker_t = calculate_fee(fair_value, taker_qty, false) as i32;
+    let taker_profit = (fair_value as i32 - best_ask as i32) * taker_qty as i32
+        - entry_fee_taker
+        - exit_fee_maker_t
+        - (slippage_buffer_cents as i32 * taker_qty as i32); // Deduct expected slippage
+
+    // Kelly-size for maker path
+    let maker_buy_price = best_bid.saturating_add(1).min(99);
+    let maker_qty = {
+        let raw =
+            super::kelly::kelly_size(fair_value, maker_buy_price, bankroll_cents, kelly_fraction);
+        raw.min(max_contracts)
+    };
+    let entry_fee_maker = calculate_fee(maker_buy_price, maker_qty, false) as i32;
+    let exit_fee_maker_m = calculate_fee(fair_value, maker_qty, false) as i32;
+    let maker_profit = (fair_value as i32 - maker_buy_price as i32) * maker_qty as i32
+        - entry_fee_maker
+        - exit_fee_maker_m; // Maker has less slippage risk
+
+    if effective_edge >= taker_threshold as i32 && taker_profit >= min_edge_after_fees as i32 {
+        StrategySignal {
+            action: TradeAction::TakerBuy,
+            price: best_ask,
+            edge: raw_edge,
+            net_profit_estimate: taker_profit,
+            quantity: taker_qty,
+        }
+    } else if effective_edge >= maker_threshold as i32 && maker_profit >= min_edge_after_fees as i32 {
+        StrategySignal {
+            action: TradeAction::MakerBuy {
+                bid_price: maker_buy_price,
+            },
+            price: maker_buy_price,
+            edge: raw_edge,
+            net_profit_estimate: maker_profit,
+            quantity: maker_qty,
+        }
+    } else {
+        StrategySignal {
+            action: TradeAction::Skip,
+            price: 0,
+            edge: raw_edge,
+            net_profit_estimate: 0,
+            quantity: 0,
+        }
+    }
+}
+
 /// Apply momentum gating to a strategy signal.
 ///
 /// Downgrades actions based on momentum score:
@@ -324,5 +416,29 @@ mod tests {
         assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
         let gated = momentum_gate(signal, 50.0, 40, 75);
         assert!(matches!(gated.action, TradeAction::MakerBuy { .. }));
+    }
+
+    #[test]
+    fn test_evaluate_with_slippage_buffer() {
+        // Edge of 5 with 2-cent slippage buffer -> effective edge of 3
+        // Should downgrade from taker (threshold 5) to maker (threshold 2)
+        let signal = evaluate_with_slippage(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100, 2);
+        assert!(matches!(signal.action, TradeAction::MakerBuy { .. }));
+    }
+
+    #[test]
+    fn test_slippage_buffer_can_cause_skip() {
+        // Edge of 3 with 2-cent slippage buffer -> effective edge of 1
+        // Below maker threshold (2) -> SKIP
+        let signal = evaluate_with_slippage(63, 58, 60, 5, 2, 1, 100_000, 0.25, 100, 2);
+        assert_eq!(signal.action, TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_slippage_zero_same_as_evaluate() {
+        // With 0 slippage buffer, should behave same as regular evaluate
+        let signal_with = evaluate_with_slippage(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100, 0);
+        let signal_without = evaluate(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
+        assert_eq!(signal_with.action, signal_without.action);
     }
 }
