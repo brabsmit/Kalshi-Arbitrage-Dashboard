@@ -1259,6 +1259,7 @@ async fn main() -> Result<()> {
                                 intent.price,
                                 intent.is_buy,
                                 intent.is_taker,
+                                &intent.side,
                             )
                             .await
                         {

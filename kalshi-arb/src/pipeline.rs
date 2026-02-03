@@ -679,6 +679,7 @@ pub struct OrderIntent {
     pub trace: SignalTrace,
     pub entry_cost_cents: u32,
     pub sell_target: u32,
+    pub side: String, // "yes" or "no"
 }
 
 /// Build diagnostic rows from all odds updates for a given sport.
@@ -949,32 +950,47 @@ pub fn evaluate_matched_market(
         return EvalOutcome::Closed;
     }
 
-    // Get live bid/ask from orderbook
-    let (bid, ask) = if let Ok(book) = live_book_engine.lock() {
+    // Get live bid/ask from orderbook - BOTH SIDES
+    let (yes_bid, yes_ask, no_bid, no_ask) = if let Ok(book) = live_book_engine.lock() {
         if let Some(depth) = book.get(ticker) {
-            let (yes_bid, yes_ask, _, _) = depth.best_bid_ask();
-            if yes_ask > 0 {
-                (yes_bid, yes_ask)
+            let (yb, ya, nb, na) = depth.best_bid_ask();
+            if ya > 0 {
+                (yb, ya, nb, na)
             } else {
-                (fallback_bid, fallback_ask)
+                // Fallback: use fallback values for YES, derive NO from complement
+                (
+                    fallback_bid,
+                    fallback_ask,
+                    100u32.saturating_sub(fallback_ask),
+                    100u32.saturating_sub(fallback_bid),
+                )
             }
         } else {
-            (fallback_bid, fallback_ask)
+            (
+                fallback_bid,
+                fallback_ask,
+                100u32.saturating_sub(fallback_ask),
+                100u32.saturating_sub(fallback_bid),
+            )
         }
     } else {
-        (fallback_bid, fallback_ask)
+        (
+            fallback_bid,
+            fallback_ask,
+            100u32.saturating_sub(fallback_ask),
+            100u32.saturating_sub(fallback_bid),
+        )
     };
 
-    // Book pressure
+    // Book pressure (use yes_bid already extracted)
     let bpt = book_pressure_trackers
         .entry(ticker.to_string())
         .or_insert_with(|| BookPressureTracker::new(10));
-    if let Ok(book) = live_book_engine.lock() {
-        if let Some(depth) = book.get(ticker) {
-            let (yb, _, _, _) = depth.best_bid_ask();
-            bpt.push(yb as u64, 100u64.saturating_sub(yb as u64), Instant::now());
-        }
-    }
+    bpt.push(
+        yes_bid as u64,
+        100u64.saturating_sub(yes_bid as u64),
+        Instant::now(),
+    );
     let pressure_score = bpt.score();
     let momentum = scorer.composite(velocity_score, pressure_score);
 
@@ -988,8 +1004,8 @@ pub fn evaluate_matched_market(
         let row = MarketRow {
             ticker: ticker.to_string(),
             fair_value: fair,
-            bid,
-            ask,
+            bid: yes_bid,
+            ask: yes_ask,
             edge: 0,
             action: "STALE".to_string(),
             latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
@@ -1001,11 +1017,13 @@ pub fn evaluate_matched_market(
         return EvalOutcome::Evaluated(row, None);
     }
 
-    // Evaluate strategy
-    let mut signal = strategy::evaluate_with_slippage(
+    // Evaluate strategy - BOTH SIDES
+    let dual = strategy::evaluate_best_side(
         fair,
-        bid,
-        ask,
+        yes_bid,
+        yes_ask,
+        no_bid,
+        no_ask,
         strategy_config.taker_edge_threshold,
         strategy_config.maker_edge_threshold,
         strategy_config.min_edge_after_fees,
@@ -1014,6 +1032,15 @@ pub fn evaluate_matched_market(
         risk_config.max_contracts_per_market,
         strategy_config.slippage_buffer_cents,
     );
+    let mut signal = dual.signal;
+    let trade_side = dual.side;
+
+    // Use appropriate bid/ask for the chosen side
+    let (bid, ask) = if trade_side == "yes" {
+        (yes_bid, yes_ask)
+    } else {
+        (no_bid, no_ask)
+    };
 
     let bypass_momentum = momentum_config.bypass_for_score_signals && source == "score_feed";
     let pre_gate_action = signal.action.clone();
@@ -1070,6 +1097,7 @@ pub fn evaluate_matched_market(
         tracing::warn!(
             ticker = %ticker,
             action = %action_str,
+            side = %trade_side,
             price = signal.price,
             edge = signal.edge,
             net = signal.net_profit_estimate,
@@ -1198,6 +1226,7 @@ pub fn evaluate_matched_market(
                 trace,
                 entry_cost_cents: total_cost as u32,
                 sell_target,
+                side: trade_side.to_string(),
             };
             return EvalOutcome::Evaluated(row, Some(intent));
         }

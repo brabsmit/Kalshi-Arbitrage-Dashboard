@@ -202,6 +202,84 @@ pub fn evaluate_with_slippage(
     }
 }
 
+/// Result of dual-side evaluation, includes which side to trade.
+#[derive(Debug, Clone)]
+pub struct DualSideSignal {
+    pub signal: StrategySignal,
+    pub side: &'static str, // "yes" or "no"
+}
+
+/// Evaluate both YES and NO sides, return the better opportunity.
+#[allow(clippy::too_many_arguments)]
+pub fn evaluate_best_side(
+    fair_value: u32,
+    yes_bid: u32,
+    yes_ask: u32,
+    no_bid: u32,
+    no_ask: u32,
+    taker_threshold: u8,
+    maker_threshold: u8,
+    min_edge_after_fees: u8,
+    bankroll_cents: u64,
+    kelly_fraction: f64,
+    max_contracts: u32,
+    slippage_buffer_cents: u8,
+) -> DualSideSignal {
+    // Evaluate YES side
+    let yes_signal = evaluate_with_slippage(
+        fair_value,
+        yes_bid,
+        yes_ask,
+        taker_threshold,
+        maker_threshold,
+        min_edge_after_fees,
+        bankroll_cents,
+        kelly_fraction,
+        max_contracts,
+        slippage_buffer_cents,
+    );
+
+    // Evaluate NO side (fair value is complement)
+    let no_fair_value = 100u32.saturating_sub(fair_value);
+    let no_signal = evaluate_with_slippage(
+        no_fair_value,
+        no_bid,
+        no_ask,
+        taker_threshold,
+        maker_threshold,
+        min_edge_after_fees,
+        bankroll_cents,
+        kelly_fraction,
+        max_contracts,
+        slippage_buffer_cents,
+    );
+
+    // Pick the better side based on net profit (or edge if both skip)
+    let yes_score = if yes_signal.action != TradeAction::Skip {
+        yes_signal.net_profit_estimate
+    } else {
+        yes_signal.edge // Use edge for comparison when both skip
+    };
+
+    let no_score = if no_signal.action != TradeAction::Skip {
+        no_signal.net_profit_estimate
+    } else {
+        no_signal.edge
+    };
+
+    if no_score > yes_score && no_signal.action != TradeAction::Skip {
+        DualSideSignal {
+            signal: no_signal,
+            side: "no",
+        }
+    } else {
+        DualSideSignal {
+            signal: yes_signal,
+            side: "yes",
+        }
+    }
+}
+
 /// Apply momentum gating to a strategy signal.
 ///
 /// Downgrades actions based on momentum score:
@@ -440,5 +518,54 @@ mod tests {
         let signal_with = evaluate_with_slippage(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100, 0);
         let signal_without = evaluate(65, 58, 60, 5, 2, 1, 100_000, 0.25, 100);
         assert_eq!(signal_with.action, signal_without.action);
+    }
+
+    #[test]
+    fn test_dual_side_prefers_profitable_no() {
+        // YES edge -12, NO edge +10 → should return NO side
+        // fair_value=55, yes_ask=67 → YES edge = 55-67 = -12
+        // no_fair_value=45, no_ask=35 → NO edge = 45-35 = +10
+        let dual = evaluate_best_side(55, 65, 67, 33, 35, 5, 2, 1, 100_000, 0.25, 100, 0);
+        assert_eq!(dual.side, "no");
+        assert!(dual.signal.action != TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_dual_side_prefers_yes_when_better() {
+        // YES edge +5, NO edge +3 → should return YES side
+        // fair_value=65, yes_ask=60 → YES edge = 65-60 = +5
+        // no_fair_value=35, no_ask=40 → NO edge = 35-40 = -5
+        let dual = evaluate_best_side(65, 58, 60, 38, 40, 5, 2, 1, 100_000, 0.25, 100, 0);
+        assert_eq!(dual.side, "yes");
+    }
+
+    #[test]
+    fn test_dual_side_both_skip_returns_yes() {
+        // Both edges negative → should return YES side Skip
+        // fair_value=50, yes_ask=52 → YES edge = -2
+        // no_fair_value=50, no_ask=52 → NO edge = -2
+        let dual = evaluate_best_side(50, 48, 52, 48, 52, 5, 2, 1, 100_000, 0.25, 100, 0);
+        assert_eq!(dual.side, "yes");
+        assert_eq!(dual.signal.action, TradeAction::Skip);
+    }
+
+    #[test]
+    fn test_dual_side_no_side_only_tradeable() {
+        // YES has poor edge, NO has good edge
+        // fair_value=30, yes_ask=40 → YES edge = 30-40 = -10 (Skip)
+        // no_fair_value=70, no_ask=60 → NO edge = 70-60 = +10 (Taker)
+        let dual = evaluate_best_side(30, 38, 40, 58, 60, 5, 2, 1, 100_000, 0.25, 100, 0);
+        assert_eq!(dual.side, "no");
+        assert_eq!(dual.signal.action, TradeAction::TakerBuy);
+    }
+
+    #[test]
+    fn test_dual_side_yes_side_only_tradeable() {
+        // YES has good edge, NO has poor edge
+        // fair_value=70, yes_ask=60 → YES edge = 70-60 = +10 (Taker)
+        // no_fair_value=30, no_ask=40 → NO edge = 30-40 = -10 (Skip)
+        let dual = evaluate_best_side(70, 58, 60, 38, 40, 5, 2, 1, 100_000, 0.25, 100, 0);
+        assert_eq!(dual.side, "yes");
+        assert_eq!(dual.signal.action, TradeAction::TakerBuy);
     }
 }

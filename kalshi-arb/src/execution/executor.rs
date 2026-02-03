@@ -21,6 +21,7 @@ impl OrderExecutor {
         price: u32,
         is_buy: bool,
         is_taker: bool,
+        side: &str, // "yes" or "no"
     ) -> Result<Option<String>> {
         // Validation
         if quantity == 0 {
@@ -29,20 +30,24 @@ impl OrderExecutor {
         if price == 0 || price > 99 {
             anyhow::bail!("price must be 1-99, got {}", price);
         }
+        if side != "yes" && side != "no" {
+            anyhow::bail!("side must be 'yes' or 'no', got '{}'", side);
+        }
 
         if self.dry_run {
             tracing::info!(
                 ticker = %ticker,
                 quantity = quantity,
                 price = price,
-                side = if is_buy { "BUY" } else { "SELL" },
+                action = if is_buy { "BUY" } else { "SELL" },
+                side = %side,
                 order_type = if is_taker { "TAKER" } else { "MAKER" },
                 "DRY RUN: would submit order"
             );
             return Ok(None); // No order ID in dry run
         }
 
-        // Build order request
+        // Build order request with dynamic side and price field
         let order_type = if is_taker { "market" } else { "limit" };
         let order = CreateOrderRequest {
             ticker: ticker.to_string(),
@@ -51,11 +56,11 @@ impl OrderExecutor {
             } else {
                 "sell".to_string()
             },
-            side: "yes".to_string(), // We only trade YES side
+            side: side.to_string(),
             count: quantity,
             order_type: order_type.to_string(),
-            yes_price: Some(price),
-            no_price: None,
+            yes_price: if side == "yes" { Some(price) } else { None },
+            no_price: if side == "no" { Some(price) } else { None },
             client_order_id: None,
         };
 
@@ -68,6 +73,7 @@ impl OrderExecutor {
 
         tracing::info!(
             ticker = %ticker,
+            side = %side,
             order_id = %response.order.order_id,
             status = %response.order.status,
             "order submitted"
