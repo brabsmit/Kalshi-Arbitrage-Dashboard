@@ -936,6 +936,7 @@ pub fn evaluate_matched_market(
     fair_value_method: FairValueMethod,
     fair_value_inputs: FairValueInputs,
     odds_api_fair_value: Option<u32>,
+    fill_simulator: Option<&mut crate::engine::FillSimulator>,
 ) -> EvalOutcome {
     // Check market is open
     let market_open = side_market.is_some_and(|sm| {
@@ -1167,47 +1168,106 @@ pub fn evaluate_matched_market(
         if sim_mode {
             // Simulation mode: mutate state directly
             let signal_ask = ask;
-            let slippage = fill_price as i32 - signal_ask as i32;
+
+            // Determine fill result using FillSimulator if provided
+            let fill_result = if let Some(fill_sim) = fill_simulator {
+                if is_taker {
+                    fill_sim.try_taker_entry(ask, ask)
+                } else {
+                    fill_sim.try_maker_entry(fill_price)
+                }
+            } else {
+                crate::engine::FillResult::Filled { price: fill_price }
+            };
 
             let ticker_owned = ticker.to_string();
+            let source_owned = source.to_string();
+            let trace_clone = trace.clone();
             state_tx.send_modify(|s| {
-                if s.sim_balance_cents < total_cost {
-                    return;
+                s.sim_entries_attempted += 1;
+
+                match fill_result {
+                    crate::engine::FillResult::Filled { price: actual_price } => {
+                        // Recalculate costs with actual fill price
+                        let actual_entry_cost = (qty * actual_price) as i64;
+                        let actual_entry_fee = calculate_fee(actual_price, qty, is_taker) as i64;
+                        let actual_total_cost = actual_entry_cost + actual_entry_fee;
+
+                        // Recalculate sell target with actual price
+                        let actual_sell_target = if sim_config.use_break_even_exit {
+                            let total_entry = (qty * actual_price) + calculate_fee(actual_price, qty, is_taker);
+                            crate::engine::fees::break_even_sell_price(total_entry, qty, false)
+                                .unwrap_or(fair)
+                        } else {
+                            fair
+                        };
+
+                        if s.sim_balance_cents < actual_total_cost {
+                            return;
+                        }
+                        if s.sim_positions.iter().any(|p| p.ticker == ticker_owned) {
+                            return;
+                        }
+
+                        let slippage = actual_price as i32 - signal_ask as i32;
+
+                        s.sim_balance_cents -= actual_total_cost;
+                        s.sim_entries_filled += 1;
+                        s.sim_positions.push(crate::tui::state::SimPosition {
+                            ticker: ticker_owned.clone(),
+                            quantity: qty,
+                            entry_price: actual_price,
+                            sell_price: actual_sell_target,
+                            entry_fee: actual_entry_fee as u32,
+                            filled_at: std::time::Instant::now(),
+                            signal_ask,
+                            trace: Some(trace_clone.clone()),
+                        });
+                        s.push_trade(crate::tui::state::TradeRow {
+                            time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                            action: "BUY".to_string(),
+                            ticker: ticker_owned.clone(),
+                            price: actual_price,
+                            quantity: qty,
+                            order_type: "SIM".to_string(),
+                            pnl: None,
+                            slippage: Some(slippage),
+                            source: source_owned.clone(),
+                            fair_value_basis: format_fair_value_basis(&trace_clone),
+                        });
+                        s.push_log(
+                            "TRADE",
+                            format!(
+                                "SIM BUY {}x {} @ {}c (ask was {}c, slip {:+}c), sell target {}c",
+                                qty, ticker_owned, actual_price, signal_ask, slippage, actual_sell_target
+                            ),
+                        );
+                        s.sim_total_slippage_cents += slippage as i64;
+                    }
+                    crate::engine::FillResult::Missed => {
+                        s.sim_entries_missed += 1;
+                        s.push_log(
+                            "MISSED",
+                            format!(
+                                "SIM entry missed: {} @ {}c (price moved)",
+                                ticker_owned, signal_ask
+                            ),
+                        );
+                    }
+                    crate::engine::FillResult::Rejected => {
+                        s.sim_entries_rejected += 1;
+                        s.push_log(
+                            "REJECTED",
+                            format!(
+                                "SIM entry rejected: {} @ {}c (queue position)",
+                                ticker_owned, fill_price
+                            ),
+                        );
+                    }
+                    crate::engine::FillResult::Pending => {
+                        // Shouldn't happen for entries, but handle gracefully
+                    }
                 }
-                if s.sim_positions.iter().any(|p| p.ticker == ticker_owned) {
-                    return;
-                }
-                s.sim_balance_cents -= total_cost;
-                s.sim_positions.push(crate::tui::state::SimPosition {
-                    ticker: ticker_owned.clone(),
-                    quantity: qty,
-                    entry_price: fill_price,
-                    sell_price: sell_target,
-                    entry_fee: entry_fee as u32,
-                    filled_at: std::time::Instant::now(),
-                    signal_ask,
-                    trace: Some(trace.clone()),
-                });
-                s.push_trade(crate::tui::state::TradeRow {
-                    time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                    action: "BUY".to_string(),
-                    ticker: ticker_owned.clone(),
-                    price: fill_price,
-                    quantity: qty,
-                    order_type: "SIM".to_string(),
-                    pnl: None,
-                    slippage: Some(slippage),
-                    source: source.to_string(),
-                    fair_value_basis: format_fair_value_basis(&trace),
-                });
-                s.push_log(
-                    "TRADE",
-                    format!(
-                        "SIM BUY {}x {} @ {}c (ask was {}c, slip {:+}c), sell target {}c",
-                        qty, ticker_owned, fill_price, signal_ask, slippage, sell_target
-                    ),
-                );
-                s.sim_total_slippage_cents += slippage as i64;
             });
 
             return EvalOutcome::Evaluated(row, None);
@@ -1439,6 +1499,7 @@ fn process_score_updates(
                 fv_method,
                 fv_inputs,
                 oa_fv,
+                None, // fill_simulator - wired up in a later task
             ) {
                 EvalOutcome::Closed => {
                     filter_closed += 1;
@@ -1666,6 +1727,7 @@ fn process_sport_updates(
                         fv_method,
                         fv_inputs,
                         None, // odds-feed sports don't need comparison FV
+                        None, // fill_simulator - wired up in a later task
                     ) {
                         EvalOutcome::Closed => {
                             filter_closed += 1;
@@ -1752,6 +1814,7 @@ fn process_sport_updates(
                     fv_method,
                     fv_inputs,
                     None, // odds-feed sports don't need comparison FV
+                    None, // fill_simulator - wired up in a later task
                 ) {
                     EvalOutcome::Closed => {
                         filter_closed += 1;
