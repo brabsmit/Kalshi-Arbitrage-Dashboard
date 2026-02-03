@@ -44,6 +44,17 @@ latency_ms = 500
 use_break_even_exit = true
 validate_fair_value = false
 
+[simulation.realism]
+enabled = true
+taker_fill_rate = 0.85
+taker_slippage_mean_cents = 1
+taker_slippage_std_cents = 1
+maker_fill_rate = 0.45
+maker_require_price_through = true
+apply_latency = true
+max_hold_seconds = 300
+timeout_exit_slippage_cents = 2
+
 [sports.american-football]
 enabled = false
 fair_value = "odds-feed"
