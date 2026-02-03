@@ -1619,7 +1619,7 @@ async fn main() -> Result<()> {
                         let ticker = snap.market_ticker.clone();
 
                         // Lock FillSimulator for exit attempts (blocking since we're in sync context)
-                        let mut fill_sim = fill_sim_ws.blocking_lock();
+                        let mut fill_sim = fill_sim_ws.lock().await;
 
                         state_tx_ws.send_modify(|s| {
                             let mut filled_indices = Vec::new();
@@ -1729,7 +1729,7 @@ async fn main() -> Result<()> {
                         };
 
                         // Lock FillSimulator for exit attempts (blocking since we're in sync context)
-                        let mut fill_sim = fill_sim_ws.blocking_lock();
+                        let mut fill_sim = fill_sim_ws.lock().await;
 
                         state_tx_ws.send_modify(|s| {
                             let mut filled_indices = Vec::new();
