@@ -207,6 +207,8 @@ pub struct SimulationConfig {
     pub use_break_even_exit: bool,
     #[serde(default)]
     pub validate_fair_value: bool,
+    #[serde(default)]
+    pub realism: SimulationRealismConfig,
 }
 
 impl Default for SimulationConfig {
@@ -215,6 +217,55 @@ impl Default for SimulationConfig {
             latency_ms: 500,
             use_break_even_exit: true,
             validate_fair_value: false,
+            realism: SimulationRealismConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct SimulationRealismConfig {
+    #[serde(default = "default_realism_enabled")]
+    pub enabled: bool,
+    #[serde(default = "default_taker_fill_rate")]
+    pub taker_fill_rate: f64,
+    #[serde(default = "default_taker_slippage_mean")]
+    pub taker_slippage_mean_cents: u32,
+    #[serde(default = "default_taker_slippage_std")]
+    pub taker_slippage_std_cents: u32,
+    #[serde(default = "default_maker_fill_rate")]
+    pub maker_fill_rate: f64,
+    #[serde(default = "default_maker_require_through")]
+    pub maker_require_price_through: bool,
+    #[serde(default = "default_apply_latency")]
+    pub apply_latency: bool,
+    #[serde(default = "default_max_hold_seconds")]
+    pub max_hold_seconds: u64,
+    #[serde(default = "default_timeout_slippage")]
+    pub timeout_exit_slippage_cents: u32,
+}
+
+fn default_realism_enabled() -> bool { true }
+fn default_taker_fill_rate() -> f64 { 0.85 }
+fn default_taker_slippage_mean() -> u32 { 1 }
+fn default_taker_slippage_std() -> u32 { 1 }
+fn default_maker_fill_rate() -> f64 { 0.45 }
+fn default_maker_require_through() -> bool { true }
+fn default_apply_latency() -> bool { true }
+fn default_max_hold_seconds() -> u64 { 300 }
+fn default_timeout_slippage() -> u32 { 2 }
+
+impl Default for SimulationRealismConfig {
+    fn default() -> Self {
+        Self {
+            enabled: default_realism_enabled(),
+            taker_fill_rate: default_taker_fill_rate(),
+            taker_slippage_mean_cents: default_taker_slippage_mean(),
+            taker_slippage_std_cents: default_taker_slippage_std(),
+            maker_fill_rate: default_maker_fill_rate(),
+            maker_require_price_through: default_maker_require_through(),
+            apply_latency: default_apply_latency(),
+            max_hold_seconds: default_max_hold_seconds(),
+            timeout_exit_slippage_cents: default_timeout_slippage(),
         }
     }
 }
