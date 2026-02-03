@@ -109,7 +109,7 @@ fair_value = "score-feed"
 hotkey = "5"
 kalshi_series = "KXNCAAMBGAME"
 label = "NCAAM"
-odds_source = "scraped-bovada"
+odds_source = "the-odds-api"
 
 [sports.college-basketball.momentum]
 maker_momentum_threshold = 0
@@ -139,7 +139,7 @@ fair_value = "score-feed"
 hotkey = "6"
 kalshi_series = "KXNCAAWBGAME"
 label = "NCAAW"
-odds_source = "scraped-bovada"
+odds_source = "the-odds-api"
 
 [sports.college-basketball-womens.momentum]
 maker_momentum_threshold = 0
