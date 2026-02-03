@@ -270,16 +270,10 @@ impl Default for SimulationRealismConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, Default)]
 #[serde(default)]
 pub struct KillSwitchConfig {
     pub enabled: bool,
-}
-
-impl Default for KillSwitchConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
 }
 
 #[derive(Debug, Deserialize, Clone)]

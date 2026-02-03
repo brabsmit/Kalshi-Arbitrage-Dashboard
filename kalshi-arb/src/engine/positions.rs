@@ -13,6 +13,12 @@ pub struct PositionTracker {
     positions: HashMap<String, Position>,
 }
 
+impl Default for PositionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PositionTracker {
     pub fn new() -> Self {
         Self {

@@ -60,7 +60,7 @@ impl FillSimulator {
 
         // Apply slippage (normal distribution, clamped)
         let slippage = self.sample_slippage();
-        let fill_price = (current_ask as i32 + slippage).max(1).min(99) as u32;
+        let fill_price = (current_ask as i32 + slippage).clamp(1, 99) as u32;
 
         // Clamp slippage to reasonable bounds [ask, ask+3]
         let fill_price = fill_price.min(current_ask + 3);

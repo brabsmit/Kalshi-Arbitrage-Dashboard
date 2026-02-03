@@ -664,6 +664,7 @@ pub struct TickResult {
 // ── Moved helper functions ─────────────────────────────────────────────
 
 /// Result of evaluating a single matched market through the common pipeline.
+#[allow(clippy::large_enum_variant)]
 pub enum EvalOutcome {
     /// Market is closed or filtered out.
     Closed,
@@ -1540,6 +1541,7 @@ fn process_score_updates(
 
 /// Average odds across all bookmakers for better fair value estimation.
 /// Returns (avg_home_odds, avg_away_odds, avg_draw_odds_if_any, last_update, bookmaker_names).
+#[allow(clippy::type_complexity)]
 fn average_bookmaker_odds(
     bookmakers: &[crate::feed::types::BookmakerOdds],
 ) -> Option<(f64, f64, Option<f64>, String, Vec<String>)> {

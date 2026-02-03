@@ -16,6 +16,12 @@ pub struct PendingOrderRegistry {
     orders: HashMap<String, PendingOrder>, // ticker -> pending order
 }
 
+impl Default for PendingOrderRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PendingOrderRegistry {
     pub fn new() -> Self {
         Self {
