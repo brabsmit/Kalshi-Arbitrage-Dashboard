@@ -185,14 +185,31 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
 
     // Build sim stats spans (only shown in sim mode)
     let sim_stats_spans: Vec<Span> = if state.sim_mode {
-        if state.sim_total_trades == 0 {
+        if state.sim_entries_attempted == 0 {
             vec![
-                Span::styled(" | Trades: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(" | Entries: ", Style::default().fg(Color::DarkGray)),
                 Span::styled("0", Style::default().fg(Color::DarkGray)),
             ]
         } else {
-            let win_pct = state.sim_winning_trades * 100 / state.sim_total_trades;
-            let avg_slip = state.sim_total_slippage_cents as f64 / state.sim_total_trades as f64;
+            let fill_rate = state.sim_entries_filled * 100 / state.sim_entries_attempted;
+            let win_pct = if state.sim_total_trades > 0 {
+                state.sim_winning_trades * 100 / state.sim_total_trades
+            } else {
+                0
+            };
+            let avg_slip = if state.sim_entries_filled > 0 {
+                state.sim_total_slippage_cents as f64 / state.sim_entries_filled as f64
+            } else {
+                0.0
+            };
+
+            let fill_color = if fill_rate >= 70 {
+                Color::Green
+            } else if fill_rate >= 50 {
+                Color::Yellow
+            } else {
+                Color::Red
+            };
 
             let win_color = if win_pct > 55 {
                 Color::Green
@@ -202,21 +219,25 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
                 Color::Red
             };
 
-            let slip_color = if avg_slip <= 0.0 {
+            let slip_color = if avg_slip <= 0.5 {
                 Color::Green
             } else {
                 Color::Yellow
             };
 
             vec![
-                Span::styled(" | Trades: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(" | Fill: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    format!("{}", state.sim_total_trades),
-                    Style::default().fg(Color::Cyan),
+                    format!("{}%", fill_rate),
+                    Style::default().fg(fill_color),
+                ),
+                Span::styled(
+                    format!(" ({}/{})", state.sim_entries_filled, state.sim_entries_attempted),
+                    Style::default().fg(Color::DarkGray),
                 ),
                 Span::styled(" | Win: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(format!("{}%", win_pct), Style::default().fg(win_color)),
-                Span::styled(" | Avg Slip: ", Style::default().fg(Color::DarkGray)),
+                Span::styled(" | Slip: ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
                     format!("{:+.1}\u{00a2}", avg_slip),
                     Style::default().fg(slip_color),
