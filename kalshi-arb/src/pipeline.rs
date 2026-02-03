@@ -243,6 +243,7 @@ impl SportPipeline {
         bankroll_cents: u64,
         api_request_times: &mut VecDeque<Instant>,
         odds_source_configs: &HashMap<String, OddsSourceConfig>,
+        fill_simulator: Option<&mut crate::engine::FillSimulator>,
     ) -> TickResult {
         match &self.fair_value_source {
             FairValueSource::ScoreFeed {
@@ -270,6 +271,7 @@ impl SportPipeline {
                     pre_game_poll_s,
                     api_request_times,
                     odds_source_configs,
+                    fill_simulator,
                 )
                 .await
             }
@@ -287,6 +289,7 @@ impl SportPipeline {
                     bankroll_cents,
                     api_request_times,
                     odds_source_configs,
+                    fill_simulator,
                 )
                 .await
             }
@@ -312,6 +315,7 @@ impl SportPipeline {
         pre_game_poll_s: u64,
         api_request_times: &mut VecDeque<Instant>,
         odds_source_configs: &HashMap<String, OddsSourceConfig>,
+        fill_simulator: Option<&mut crate::engine::FillSimulator>,
     ) -> TickResult {
         // Poll odds feed for diagnostic rows (pre-game interval to avoid
         // burning API quota — the score feed drives actual fair value).
@@ -450,6 +454,7 @@ impl SportPipeline {
             } else {
                 &[]
             },
+            fill_simulator,
         )
     }
 
@@ -469,6 +474,7 @@ impl SportPipeline {
         bankroll_cents: u64,
         api_request_times: &mut VecDeque<Instant>,
         odds_source_configs: &HashMap<String, OddsSourceConfig>,
+        fill_simulator: Option<&mut crate::engine::FillSimulator>,
     ) -> TickResult {
         // Determine if any event is live (from commence times)
         let is_live = self.commence_times.iter().any(|ct| {
@@ -635,6 +641,7 @@ impl SportPipeline {
             sim_config,
             risk_config,
             bankroll_cents,
+            fill_simulator,
         )
     }
 }
@@ -1318,6 +1325,7 @@ fn process_score_updates(
     risk_config: &crate::config::RiskConfig,
     bankroll_cents: u64,
     cached_odds_for_validation: &[OddsUpdate],
+    mut fill_simulator: Option<&mut crate::engine::FillSimulator>,
 ) -> TickResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -1499,7 +1507,7 @@ fn process_score_updates(
                 fv_method,
                 fv_inputs,
                 oa_fv,
-                None, // fill_simulator - wired up in a later task
+                fill_simulator.as_deref_mut()
             ) {
                 EvalOutcome::Closed => {
                     filter_closed += 1;
@@ -1582,6 +1590,7 @@ fn process_sport_updates(
     sim_config: &crate::config::SimulationConfig,
     risk_config: &crate::config::RiskConfig,
     bankroll_cents: u64,
+    mut fill_simulator: Option<&mut crate::engine::FillSimulator>,
 ) -> TickResult {
     let mut filter_live: usize = 0;
     let mut filter_pre_game: usize = 0;
@@ -1727,7 +1736,7 @@ fn process_sport_updates(
                         fv_method,
                         fv_inputs,
                         None, // odds-feed sports don't need comparison FV
-                        None, // fill_simulator - wired up in a later task
+                        fill_simulator.as_deref_mut()
                     ) {
                         EvalOutcome::Closed => {
                             filter_closed += 1;
@@ -1814,7 +1823,7 @@ fn process_sport_updates(
                     fv_method,
                     fv_inputs,
                     None, // odds-feed sports don't need comparison FV
-                    None, // fill_simulator - wired up in a later task
+                    fill_simulator.as_deref_mut()
                 ) {
                     EvalOutcome::Closed => {
                         filter_closed += 1;

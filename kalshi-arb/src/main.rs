@@ -825,6 +825,13 @@ async fn main() -> Result<()> {
 
     let rest_for_engine = rest.clone();
 
+    // Create shared FillSimulator for sim mode (entries and exits)
+    // Using tokio::sync::Mutex to allow holding lock across await points
+    let fill_simulator = std::sync::Arc::new(tokio::sync::Mutex::new(
+        crate::engine::FillSimulator::new(config.simulation.realism.clone()),
+    ));
+    let fill_sim_engine = fill_simulator.clone();
+
     let sim_mode_engine = sim_mode;
     let state_tx_engine = state_tx.clone();
     let config_path = Path::new("config.toml").to_path_buf();
@@ -1084,6 +1091,8 @@ async fn main() -> Result<()> {
                     continue;
                 }
 
+                // Lock fill_simulator for entry evaluation
+                let mut fill_sim_guard = fill_sim_engine.lock().await;
                 let result = pipeline
                     .tick(
                         cycle_start,
@@ -1098,8 +1107,14 @@ async fn main() -> Result<()> {
                         bankroll_cents,
                         &mut api_request_times,
                         &odds_source_configs,
+                        if sim_mode_engine {
+                            Some(&mut *fill_sim_guard)
+                        } else {
+                            None
+                        },
                     )
                     .await;
+                drop(fill_sim_guard);
 
                 filter_live += result.filter_live;
                 filter_pre_game += result.filter_pre_game;
@@ -1574,6 +1589,8 @@ async fn main() -> Result<()> {
     // --- Phase 4: Process Kalshi WS events (update orderbook) ---
     let sim_mode_ws = sim_mode;
     let state_tx_ws = state_tx.clone();
+    let fill_sim_ws = fill_simulator.clone();
+
     tokio::spawn(async move {
         while let Some(event) = kalshi_ws_rx.recv().await {
             match event {
@@ -1600,18 +1617,49 @@ async fn main() -> Result<()> {
 
                     if sim_mode_ws {
                         let ticker = snap.market_ticker.clone();
+
+                        // Lock FillSimulator for exit attempts (blocking since we're in sync context)
+                        let mut fill_sim = fill_sim_ws.blocking_lock();
+
                         state_tx_ws.send_modify(|s| {
                             let mut filled_indices = Vec::new();
                             for (i, pos) in s.sim_positions.iter().enumerate() {
-                                if pos.ticker == ticker && yes_bid >= pos.sell_price {
-                                    filled_indices.push(i);
+                                if pos.ticker != ticker {
+                                    continue;
+                                }
+
+                                s.sim_exits_attempted += 1;
+
+                                // Check for timeout first
+                                let held_secs = pos.filled_at.elapsed().as_secs();
+                                let max_hold = fill_sim.max_hold_seconds();
+
+                                let (fill_result, is_timeout) = if max_hold > 0 && held_secs > max_hold {
+                                    // Force taker exit due to timeout
+                                    (fill_sim.force_taker_exit(yes_bid), true)
+                                } else {
+                                    // Try normal maker exit
+                                    (fill_sim.try_maker_exit(pos.sell_price, yes_bid), false)
+                                };
+
+                                match fill_result {
+                                    crate::engine::FillResult::Filled { price } => {
+                                        filled_indices.push((i, price, is_timeout));
+                                    }
+                                    crate::engine::FillResult::Pending => {
+                                        // Not filled this tick, try again next time
+                                    }
+                                    _ => {
+                                        // Rejected or Missed - shouldn't happen for exits
+                                    }
                                 }
                             }
-                            for &i in filled_indices.iter().rev() {
-                                let pos = s.sim_positions.remove(i);
-                                let exit_revenue = (pos.quantity * pos.sell_price) as i64;
+
+                            for (i, exit_price, is_timeout) in filled_indices.iter().rev() {
+                                let pos = s.sim_positions.remove(*i);
+                                let exit_revenue = (pos.quantity * exit_price) as i64;
                                 let exit_fee =
-                                    calculate_fee(pos.sell_price, pos.quantity, false) as i64;
+                                    calculate_fee(*exit_price, pos.quantity, *is_timeout) as i64;
                                 let entry_cost =
                                     (pos.quantity * pos.entry_price) as i64 + pos.entry_fee as i64;
                                 let pnl = (exit_revenue - exit_fee) - entry_cost;
@@ -1619,6 +1667,10 @@ async fn main() -> Result<()> {
                                 s.sim_balance_cents += exit_revenue - exit_fee;
                                 s.sim_realized_pnl_cents += pnl;
                                 s.sim_total_trades += 1;
+                                s.sim_exits_filled += 1;
+                                if *is_timeout {
+                                    s.sim_timeout_exits += 1;
+                                }
                                 if pnl > 0 {
                                     s.sim_winning_trades += 1;
                                 }
@@ -1633,11 +1685,12 @@ async fn main() -> Result<()> {
                                         (src.to_string(), pipeline::format_fair_value_basis(t))
                                     })
                                     .unwrap_or_default();
+                                let action = if *is_timeout { "TIMEOUT" } else { "SELL" };
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    action: "SELL".to_string(),
+                                    action: action.to_string(),
                                     ticker: pos.ticker.clone(),
-                                    price: pos.sell_price,
+                                    price: *exit_price,
                                     quantity: pos.quantity,
                                     order_type: "SIM".to_string(),
                                     pnl: Some(pnl as i32),
@@ -1648,8 +1701,8 @@ async fn main() -> Result<()> {
                                 s.push_log(
                                     "TRADE",
                                     format!(
-                                        "SIM SELL {}x {} @ {}c, P&L: {:+}c",
-                                        pos.quantity, pos.ticker, pos.sell_price, pnl
+                                        "SIM {} {}x {} @ {}c, P&L: {:+}c",
+                                        action, pos.quantity, pos.ticker, exit_price, pnl
                                     ),
                                 );
                             }
@@ -1675,18 +1728,48 @@ async fn main() -> Result<()> {
                             0
                         };
 
+                        // Lock FillSimulator for exit attempts (blocking since we're in sync context)
+                        let mut fill_sim = fill_sim_ws.blocking_lock();
+
                         state_tx_ws.send_modify(|s| {
                             let mut filled_indices = Vec::new();
                             for (i, pos) in s.sim_positions.iter().enumerate() {
-                                if pos.ticker == ticker && yes_bid >= pos.sell_price {
-                                    filled_indices.push(i);
+                                if pos.ticker != ticker {
+                                    continue;
+                                }
+
+                                s.sim_exits_attempted += 1;
+
+                                // Check for timeout first
+                                let held_secs = pos.filled_at.elapsed().as_secs();
+                                let max_hold = fill_sim.max_hold_seconds();
+
+                                let (fill_result, is_timeout) = if max_hold > 0 && held_secs > max_hold {
+                                    // Force taker exit due to timeout
+                                    (fill_sim.force_taker_exit(yes_bid), true)
+                                } else {
+                                    // Try normal maker exit
+                                    (fill_sim.try_maker_exit(pos.sell_price, yes_bid), false)
+                                };
+
+                                match fill_result {
+                                    crate::engine::FillResult::Filled { price } => {
+                                        filled_indices.push((i, price, is_timeout));
+                                    }
+                                    crate::engine::FillResult::Pending => {
+                                        // Not filled this tick, try again next time
+                                    }
+                                    _ => {
+                                        // Rejected or Missed - shouldn't happen for exits
+                                    }
                                 }
                             }
-                            for &i in filled_indices.iter().rev() {
-                                let pos = s.sim_positions.remove(i);
-                                let exit_revenue = (pos.quantity * pos.sell_price) as i64;
+
+                            for (i, exit_price, is_timeout) in filled_indices.iter().rev() {
+                                let pos = s.sim_positions.remove(*i);
+                                let exit_revenue = (pos.quantity * exit_price) as i64;
                                 let exit_fee =
-                                    calculate_fee(pos.sell_price, pos.quantity, false) as i64;
+                                    calculate_fee(*exit_price, pos.quantity, *is_timeout) as i64;
                                 let entry_cost =
                                     (pos.quantity * pos.entry_price) as i64 + pos.entry_fee as i64;
                                 let pnl = (exit_revenue - exit_fee) - entry_cost;
@@ -1694,6 +1777,10 @@ async fn main() -> Result<()> {
                                 s.sim_balance_cents += exit_revenue - exit_fee;
                                 s.sim_realized_pnl_cents += pnl;
                                 s.sim_total_trades += 1;
+                                s.sim_exits_filled += 1;
+                                if *is_timeout {
+                                    s.sim_timeout_exits += 1;
+                                }
                                 if pnl > 0 {
                                     s.sim_winning_trades += 1;
                                 }
@@ -1708,11 +1795,12 @@ async fn main() -> Result<()> {
                                         (src.to_string(), pipeline::format_fair_value_basis(t))
                                     })
                                     .unwrap_or_default();
+                                let action = if *is_timeout { "TIMEOUT" } else { "SELL" };
                                 s.push_trade(tui::state::TradeRow {
                                     time: chrono::Local::now().format("%H:%M:%S").to_string(),
-                                    action: "SELL".to_string(),
+                                    action: action.to_string(),
                                     ticker: pos.ticker.clone(),
-                                    price: pos.sell_price,
+                                    price: *exit_price,
                                     quantity: pos.quantity,
                                     order_type: "SIM".to_string(),
                                     pnl: Some(pnl as i32),
@@ -1723,8 +1811,8 @@ async fn main() -> Result<()> {
                                 s.push_log(
                                     "TRADE",
                                     format!(
-                                        "SIM SELL {}x {} @ {}c, P&L: {:+}c",
-                                        pos.quantity, pos.ticker, pos.sell_price, pnl
+                                        "SIM {} {}x {} @ {}c, P&L: {:+}c",
+                                        action, pos.quantity, pos.ticker, exit_price, pnl
                                     ),
                                 );
                             }
