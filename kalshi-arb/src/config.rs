@@ -29,6 +29,12 @@ pub struct StrategyConfig {
     pub min_edge_after_fees: u8,
     #[serde(default)]
     pub slippage_buffer_cents: u8,  // Subtracted from edge calculation
+    #[serde(default = "default_max_edge_threshold")]
+    pub max_edge_threshold: u8,  // Skip trades with edge above this (suspicious)
+}
+
+fn default_max_edge_threshold() -> u8 {
+    15
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -142,6 +148,7 @@ pub struct StrategyOverride {
     pub taker_edge_threshold: Option<u8>,
     pub maker_edge_threshold: Option<u8>,
     pub min_edge_after_fees: Option<u8>,
+    pub max_edge_threshold: Option<u8>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -311,6 +318,7 @@ impl StrategyConfig {
                 maker_edge_threshold: o.maker_edge_threshold.unwrap_or(self.maker_edge_threshold),
                 min_edge_after_fees: o.min_edge_after_fees.unwrap_or(self.min_edge_after_fees),
                 slippage_buffer_cents: self.slippage_buffer_cents,
+                max_edge_threshold: o.max_edge_threshold.unwrap_or(self.max_edge_threshold),
             },
         }
     }
@@ -667,17 +675,20 @@ odds_source = "the-odds-api"
             maker_edge_threshold: 2,
             min_edge_after_fees: 1,
             slippage_buffer_cents: 1,
+            max_edge_threshold: 15,
         };
         let ov = StrategyOverride {
             taker_edge_threshold: Some(3),
             maker_edge_threshold: Some(1),
             min_edge_after_fees: None,
+            max_edge_threshold: None,
         };
         let resolved = global.with_override(Some(&ov));
         assert_eq!(resolved.taker_edge_threshold, 3);
         assert_eq!(resolved.maker_edge_threshold, 1);
         assert_eq!(resolved.min_edge_after_fees, 1);
         assert_eq!(resolved.slippage_buffer_cents, 1);
+        assert_eq!(resolved.max_edge_threshold, 15);
     }
 
     #[test]

@@ -1,8 +1,8 @@
 [execution]
 dry_run = false
 maker_timeout_ms = 500
-stale_odds_threshold_ms = 5000
 order_timeout_secs = 30
+stale_odds_threshold_ms = 5000
 
 [kalshi]
 api_base = "https://api.elections.kalshi.com"
@@ -45,14 +45,14 @@ use_break_even_exit = true
 validate_fair_value = false
 
 [simulation.realism]
+apply_latency = true
 enabled = true
+maker_fill_rate = 0.45
+maker_require_price_through = true
+max_hold_seconds = 300
 taker_fill_rate = 0.85
 taker_slippage_mean_cents = 1
 taker_slippage_std_cents = 1
-maker_fill_rate = 0.45
-maker_require_price_through = true
-apply_latency = true
-max_hold_seconds = 300
 timeout_exit_slippage_cents = 2
 
 [sports.american-football]
@@ -77,7 +77,7 @@ fair_value = "score-feed"
 hotkey = "1"
 kalshi_series = "KXNBAGAME"
 label = "NBA"
-odds_source = "scraped-bovada"
+odds_source = "the-odds-api"
 
 [sports.basketball.momentum]
 maker_momentum_threshold = 0
@@ -189,6 +189,7 @@ odds_source = "the-odds-api"
 
 [strategy]
 maker_edge_threshold = 2
+max_edge_threshold = 15
 min_edge_after_fees = 1
 slippage_buffer_cents = 1
 taker_edge_threshold = 5

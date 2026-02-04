@@ -1022,6 +1022,8 @@ pub fn evaluate_matched_market(
             staleness_secs,
             odds_api_fair_value,
             fair_value_source: fv_source,
+            smoothed_bid: yes_bid as f64,
+            smoothed_ask: yes_ask as f64,
         };
         return EvalOutcome::Evaluated(row, None);
     }
@@ -1063,6 +1065,37 @@ pub fn evaluate_matched_market(
     }
     let momentum_gated = pre_gate_action != signal.action && !bypass_momentum;
 
+    // Max edge gate: skip suspiciously high edges
+    if signal.edge > strategy_config.max_edge_threshold as i32
+        && signal.action != strategy::TradeAction::Skip
+    {
+        tracing::warn!(
+            ticker = %ticker,
+            edge = signal.edge,
+            fair_value = fair,
+            bid = bid,
+            ask = ask,
+            threshold = strategy_config.max_edge_threshold,
+            "skipping trade: edge exceeds max threshold"
+        );
+        let row = MarketRow {
+            ticker: ticker.to_string(),
+            fair_value: fair,
+            bid,
+            ask,
+            edge: signal.edge,
+            action: "MAX_EDGE".to_string(),
+            latency_ms: Some(cycle_start.elapsed().as_millis() as u64),
+            momentum_score: momentum,
+            staleness_secs,
+            odds_api_fair_value,
+            fair_value_source: fv_source,
+            smoothed_bid: bid as f64,
+            smoothed_ask: ask as f64,
+        };
+        return EvalOutcome::Evaluated(row, None);
+    }
+
     let action_str = match &signal.action {
         strategy::TradeAction::TakerBuy => "TAKER",
         strategy::TradeAction::MakerBuy { .. } => "MAKER",
@@ -1099,6 +1132,8 @@ pub fn evaluate_matched_market(
         staleness_secs,
         odds_api_fair_value,
         fair_value_source: fv_source,
+        smoothed_bid: bid as f64,
+        smoothed_ask: ask as f64,
     };
 
     if signal.action != strategy::TradeAction::Skip {
@@ -1868,6 +1903,7 @@ mod tests {
             maker_edge_threshold: 2,
             min_edge_after_fees: 1,
             slippage_buffer_cents: 0,
+            max_edge_threshold: 15,
         }
     }
 
@@ -1938,6 +1974,7 @@ mod tests {
                 taker_edge_threshold: Some(3),
                 maker_edge_threshold: Some(1),
                 min_edge_after_fees: None,
+                max_edge_threshold: None,
             }),
             momentum: Some(MomentumOverride {
                 taker_momentum_threshold: Some(0),

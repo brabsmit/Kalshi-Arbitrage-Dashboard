@@ -118,6 +118,14 @@ fn build_global_fields(
             config_path: "strategy.min_edge_after_fees".to_string(),
             read_only: false,
         },
+        ConfigField {
+            label: "strategy.max_edge_threshold".to_string(),
+            value: strategy.max_edge_threshold.to_string(),
+            field_type: FieldType::U8,
+            is_override: false,
+            config_path: "strategy.max_edge_threshold".to_string(),
+            read_only: false,
+        },
         // Risk
         ConfigField {
             label: "risk.kelly_fraction".to_string(),
