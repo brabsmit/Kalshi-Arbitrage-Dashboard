@@ -1250,7 +1250,7 @@ pub fn evaluate_matched_market(
                                 qty, ticker_owned, actual_price, signal_ask, slippage, actual_sell_target
                             ),
                         );
-                        s.sim_total_slippage_cents += slippage as i64;
+                        s.total_slippage_cents += slippage as i64;
                     }
                     crate::engine::FillResult::Missed => {
                         s.sim_entries_missed += 1;

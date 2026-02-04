@@ -158,7 +158,7 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
         (
             state.sim_balance_cents,
             exposure,
-            state.sim_realized_pnl_cents,
+            state.realized_pnl_cents,
         )
     } else {
         (
@@ -192,13 +192,13 @@ fn draw_header(f: &mut Frame, state: &AppState, area: Rect, spinner_frame: u8) {
             ]
         } else {
             let fill_rate = state.sim_entries_filled * 100 / state.sim_entries_attempted;
-            let win_pct = if state.sim_total_trades > 0 {
-                state.sim_winning_trades * 100 / state.sim_total_trades
+            let win_pct = if state.total_trades > 0 {
+                state.winning_trades * 100 / state.total_trades
             } else {
                 0
             };
             let avg_slip = if state.sim_entries_filled > 0 {
-                state.sim_total_slippage_cents as f64 / state.sim_entries_filled as f64
+                state.total_slippage_cents as f64 / state.sim_entries_filled as f64
             } else {
                 0.0
             };

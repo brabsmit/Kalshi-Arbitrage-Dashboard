@@ -1156,10 +1156,10 @@ async fn main() -> Result<()> {
                         let pnl = (exit_revenue - exit_fee) - entry_cost;
 
                         s.sim_balance_cents += exit_revenue - exit_fee;
-                        s.sim_realized_pnl_cents += pnl;
-                        s.sim_total_trades += 1;
+                        s.realized_pnl_cents += pnl;
+                        s.total_trades += 1;
                         if pnl > 0 {
-                            s.sim_winning_trades += 1;
+                            s.winning_trades += 1;
                         }
                         s.push_trade(tui::state::TradeRow {
                             time: chrono::Local::now().format("%H:%M:%S").to_string(),
@@ -1453,9 +1453,16 @@ async fn main() -> Result<()> {
                                             po.complete(&position.ticker, OrderSide::Exit);
                                         }
 
-                                        // Push trade to TUI
+                                        // Push trade to TUI and update global P&L
                                         let action = if is_timeout { "TIMEOUT" } else { "SELL" };
                                         state_tx_engine.send_modify(|s| {
+                                            // Update global P&L counters
+                                            s.realized_pnl_cents += pnl;
+                                            s.total_trades += 1;
+                                            if pnl > 0 {
+                                                s.winning_trades += 1;
+                                            }
+
                                             s.push_trade(tui::state::TradeRow {
                                                 time: chrono::Local::now().format("%H:%M:%S").to_string(),
                                                 action: action.to_string(),
@@ -1811,14 +1818,14 @@ async fn main() -> Result<()> {
                                 let pnl = (exit_revenue - exit_fee) - entry_cost;
 
                                 s.sim_balance_cents += exit_revenue - exit_fee;
-                                s.sim_realized_pnl_cents += pnl;
-                                s.sim_total_trades += 1;
+                                s.realized_pnl_cents += pnl;
+                                s.total_trades += 1;
                                 s.sim_exits_filled += 1;
                                 if *is_timeout {
                                     s.sim_timeout_exits += 1;
                                 }
                                 if pnl > 0 {
-                                    s.sim_winning_trades += 1;
+                                    s.winning_trades += 1;
                                 }
                                 let (sell_source, sell_basis) = pos
                                     .trace
@@ -1921,14 +1928,14 @@ async fn main() -> Result<()> {
                                 let pnl = (exit_revenue - exit_fee) - entry_cost;
 
                                 s.sim_balance_cents += exit_revenue - exit_fee;
-                                s.sim_realized_pnl_cents += pnl;
-                                s.sim_total_trades += 1;
+                                s.realized_pnl_cents += pnl;
+                                s.total_trades += 1;
                                 s.sim_exits_filled += 1;
                                 if *is_timeout {
                                     s.sim_timeout_exits += 1;
                                 }
                                 if pnl > 0 {
-                                    s.sim_winning_trades += 1;
+                                    s.winning_trades += 1;
                                 }
                                 let (sell_source, sell_basis) = pos
                                     .trace
