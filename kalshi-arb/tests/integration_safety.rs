@@ -3,7 +3,7 @@
 #[cfg(test)]
 mod tests {
     use kalshi_arb::config::RiskConfig;
-    use kalshi_arb::engine::pending_orders::PendingOrderRegistry;
+    use kalshi_arb::engine::pending_orders::{OrderSide, PendingOrderRegistry};
     use kalshi_arb::engine::positions::PositionTracker;
     use kalshi_arb::engine::risk::RiskManager;
 
@@ -30,8 +30,8 @@ mod tests {
     #[test]
     fn test_pending_orders_prevent_duplicates() {
         let mut registry = PendingOrderRegistry::new();
-        assert!(registry.try_register("TEST".to_string(), 10, 50, true));
-        assert!(!registry.try_register("TEST".to_string(), 5, 60, false));
+        assert!(registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry));
+        assert!(!registry.try_register("TEST".to_string(), 5, 60, false, OrderSide::Entry));
     }
 
     #[test]

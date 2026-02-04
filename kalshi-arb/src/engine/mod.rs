@@ -10,5 +10,5 @@ pub mod strategy;
 pub mod win_prob;
 
 pub use fill_simulator::{FillResult, FillSimulator};
-pub use pending_orders::PendingOrderRegistry;
+pub use pending_orders::{OrderSide, PendingOrderRegistry};
 pub use positions::PositionTracker;

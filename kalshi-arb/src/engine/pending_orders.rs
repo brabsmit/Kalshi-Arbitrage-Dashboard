@@ -1,10 +1,17 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum OrderSide {
+    Entry,
+    Exit,
+}
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct PendingOrder {
     pub ticker: String,
+    pub side: OrderSide,
     pub quantity: u32,
     pub price: u32,
     pub is_taker: bool,
@@ -13,7 +20,7 @@ pub struct PendingOrder {
 }
 
 pub struct PendingOrderRegistry {
-    orders: HashMap<String, PendingOrder>, // ticker -> pending order
+    orders: HashMap<(String, OrderSide), PendingOrder>, // (ticker, side) -> pending order
 }
 
 impl Default for PendingOrderRegistry {
@@ -36,14 +43,17 @@ impl PendingOrderRegistry {
         quantity: u32,
         price: u32,
         is_taker: bool,
+        side: OrderSide,
     ) -> bool {
-        if self.orders.contains_key(&ticker) {
+        let key = (ticker.clone(), side);
+        if self.orders.contains_key(&key) {
             return false; // Already pending
         }
         self.orders.insert(
-            ticker.clone(),
+            key,
             PendingOrder {
                 ticker,
+                side,
                 quantity,
                 price,
                 is_taker,
@@ -62,14 +72,17 @@ impl PendingOrderRegistry {
         price: u32,
         is_taker: bool,
         order_id: Option<String>,
+        side: OrderSide,
     ) -> bool {
-        if self.orders.contains_key(&ticker) {
+        let key = (ticker.clone(), side);
+        if self.orders.contains_key(&key) {
             return false;
         }
         self.orders.insert(
-            ticker.clone(),
+            key,
             PendingOrder {
                 ticker,
+                side,
                 quantity,
                 price,
                 is_taker,
@@ -80,14 +93,14 @@ impl PendingOrderRegistry {
         true
     }
 
-    /// Get a pending order by ticker.
-    pub fn get(&self, ticker: &str) -> Option<&PendingOrder> {
-        self.orders.get(ticker)
+    /// Get a pending order by ticker and side.
+    pub fn get(&self, ticker: &str, side: OrderSide) -> Option<&PendingOrder> {
+        self.orders.get(&(ticker.to_string(), side))
     }
 
-    /// Get the order ID for a ticker (for cancellation).
-    pub fn get_order_id(&self, ticker: &str) -> Option<String> {
-        self.orders.get(ticker).and_then(|o| o.order_id.clone())
+    /// Get the order ID for a ticker and side (for cancellation).
+    pub fn get_order_id(&self, ticker: &str, side: OrderSide) -> Option<String> {
+        self.orders.get(&(ticker.to_string(), side)).and_then(|o| o.order_id.clone())
     }
 
     /// Get all pending order IDs (for bulk cancellation on kill-switch).
@@ -99,20 +112,21 @@ impl PendingOrderRegistry {
     }
 
     /// Set the order ID after submission succeeds.
-    pub fn set_order_id(&mut self, ticker: &str, order_id: String) {
-        if let Some(order) = self.orders.get_mut(ticker) {
+    pub fn set_order_id(&mut self, ticker: &str, side: OrderSide, order_id: String) {
+        let key = (ticker.to_string(), side);
+        if let Some(order) = self.orders.get_mut(&key) {
             order.order_id = Some(order_id);
         }
     }
 
     /// Mark order as complete (filled or canceled)
-    pub fn complete(&mut self, ticker: &str) -> Option<PendingOrder> {
-        self.orders.remove(ticker)
+    pub fn complete(&mut self, ticker: &str, side: OrderSide) -> Option<PendingOrder> {
+        self.orders.remove(&(ticker.to_string(), side))
     }
 
-    /// Check if ticker has pending order
-    pub fn is_pending(&self, ticker: &str) -> bool {
-        self.orders.contains_key(ticker)
+    /// Check if ticker has pending order for given side
+    pub fn is_pending(&self, ticker: &str, side: OrderSide) -> bool {
+        self.orders.contains_key(&(ticker.to_string(), side))
     }
 
     /// Get all pending orders older than threshold (for timeout detection)
@@ -129,16 +143,16 @@ impl PendingOrderRegistry {
     /// Used for timeout detection - expired orders should be investigated/cancelled.
     pub fn expire_older_than(&mut self, max_age: Duration) -> Vec<PendingOrder> {
         let now = Instant::now();
-        let expired_tickers: Vec<String> = self
+        let expired_keys: Vec<(String, OrderSide)> = self
             .orders
             .iter()
             .filter(|(_, order)| now.duration_since(order.submitted_at) > max_age)
-            .map(|(ticker, _)| ticker.clone())
+            .map(|(key, _)| key.clone())
             .collect();
 
-        expired_tickers
+        expired_keys
             .into_iter()
-            .filter_map(|ticker| self.orders.remove(&ticker))
+            .filter_map(|key| self.orders.remove(&key))
             .collect()
     }
 
@@ -160,52 +174,64 @@ mod tests {
     fn test_new_registry_is_empty() {
         let registry = PendingOrderRegistry::new();
         assert_eq!(registry.count(), 0);
-        assert!(!registry.is_pending("TEST"));
+        assert!(!registry.is_pending("TEST", OrderSide::Entry));
     }
 
     #[test]
     fn test_register_new_order() {
         let mut registry = PendingOrderRegistry::new();
-        let result = registry.try_register("TEST".to_string(), 10, 50, true);
+        let result = registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry);
 
         assert!(result, "should register new order");
-        assert!(registry.is_pending("TEST"));
+        assert!(registry.is_pending("TEST", OrderSide::Entry));
         assert_eq!(registry.count(), 1);
     }
 
     #[test]
     fn test_duplicate_registration_fails() {
         let mut registry = PendingOrderRegistry::new();
-        registry.try_register("TEST".to_string(), 10, 50, true);
+        registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry);
 
-        let result = registry.try_register("TEST".to_string(), 5, 60, false);
+        let result = registry.try_register("TEST".to_string(), 5, 60, false, OrderSide::Entry);
         assert!(!result, "should reject duplicate registration");
         assert_eq!(registry.count(), 1);
     }
 
     #[test]
+    fn test_entry_and_exit_can_coexist() {
+        let mut registry = PendingOrderRegistry::new();
+        registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry);
+        let result = registry.try_register("TEST".to_string(), 10, 55, false, OrderSide::Exit);
+
+        assert!(result, "should allow exit when entry exists");
+        assert!(registry.is_pending("TEST", OrderSide::Entry));
+        assert!(registry.is_pending("TEST", OrderSide::Exit));
+        assert_eq!(registry.count(), 2);
+    }
+
+    #[test]
     fn test_complete_removes_order() {
         let mut registry = PendingOrderRegistry::new();
-        registry.try_register("TEST".to_string(), 10, 50, true);
+        registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry);
 
-        let removed = registry.complete("TEST");
+        let removed = registry.complete("TEST", OrderSide::Entry);
         assert!(removed.is_some());
         assert_eq!(removed.unwrap().quantity, 10);
-        assert!(!registry.is_pending("TEST"));
+        assert!(!registry.is_pending("TEST", OrderSide::Entry));
         assert_eq!(registry.count(), 0);
     }
 
     #[test]
     fn test_complete_nonexistent_returns_none() {
         let mut registry = PendingOrderRegistry::new();
-        let result = registry.complete("NONEXISTENT");
+        let result = registry.complete("NONEXISTENT", OrderSide::Entry);
         assert!(result.is_none());
     }
 
     #[test]
     fn test_old_orders_detection() {
         let mut registry = PendingOrderRegistry::new();
-        registry.try_register("TEST".to_string(), 10, 50, true);
+        registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry);
 
         // Immediately check - orders just submitted are not "old" even with 0 threshold
         // (because duration is 0 seconds, and we check if duration > threshold)
@@ -228,38 +254,38 @@ mod tests {
     #[test]
     fn test_register_with_order_id() {
         let mut registry = PendingOrderRegistry::new();
-        registry.register_with_id("TEST".to_string(), 10, 50, true, Some("order-123".to_string()));
+        registry.register_with_id("TEST".to_string(), 10, 50, true, Some("order-123".to_string()), OrderSide::Entry);
 
-        let order = registry.get("TEST").expect("should have order");
+        let order = registry.get("TEST", OrderSide::Entry).expect("should have order");
         assert_eq!(order.order_id, Some("order-123".to_string()));
     }
 
     #[test]
     fn test_get_order_id_for_cancellation() {
         let mut registry = PendingOrderRegistry::new();
-        registry.register_with_id("TEST".to_string(), 10, 50, true, Some("order-456".to_string()));
+        registry.register_with_id("TEST".to_string(), 10, 50, true, Some("order-456".to_string()), OrderSide::Entry);
 
-        let order_id = registry.get_order_id("TEST");
+        let order_id = registry.get_order_id("TEST", OrderSide::Entry);
         assert_eq!(order_id, Some("order-456".to_string()));
     }
 
     #[test]
     fn test_set_order_id() {
         let mut registry = PendingOrderRegistry::new();
-        registry.try_register("TEST".to_string(), 10, 50, true);
+        registry.try_register("TEST".to_string(), 10, 50, true, OrderSide::Entry);
 
-        assert_eq!(registry.get_order_id("TEST"), None);
+        assert_eq!(registry.get_order_id("TEST", OrderSide::Entry), None);
 
-        registry.set_order_id("TEST", "order-789".to_string());
-        assert_eq!(registry.get_order_id("TEST"), Some("order-789".to_string()));
+        registry.set_order_id("TEST", OrderSide::Entry, "order-789".to_string());
+        assert_eq!(registry.get_order_id("TEST", OrderSide::Entry), Some("order-789".to_string()));
     }
 
     #[test]
     fn test_all_order_ids() {
         let mut registry = PendingOrderRegistry::new();
-        registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()));
-        registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()));
-        registry.try_register("T3".to_string(), 3, 70, true); // No order ID
+        registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()), OrderSide::Entry);
+        registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()), OrderSide::Exit);
+        registry.try_register("T3".to_string(), 3, 70, true, OrderSide::Entry); // No order ID
 
         let ids = registry.all_order_ids();
         assert_eq!(ids.len(), 2);
@@ -270,18 +296,18 @@ mod tests {
     #[test]
     fn test_expire_old_orders() {
         let mut registry = PendingOrderRegistry::new();
-        registry.try_register("OLD".to_string(), 10, 50, true);
+        registry.try_register("OLD".to_string(), 10, 50, true, OrderSide::Entry);
 
         // Fresh order should not be expired with 30 second threshold
         let expired = registry.expire_older_than(Duration::from_secs(30));
         assert_eq!(expired.len(), 0);
-        assert!(registry.is_pending("OLD"));
+        assert!(registry.is_pending("OLD", OrderSide::Entry));
     }
 
     #[test]
     fn test_expire_returns_order_info() {
         let mut registry = PendingOrderRegistry::new();
-        registry.register_with_id("TEST".to_string(), 10, 50, true, Some("order-789".to_string()));
+        registry.register_with_id("TEST".to_string(), 10, 50, true, Some("order-789".to_string()), OrderSide::Entry);
 
         // Fresh orders won't expire immediately with reasonable threshold
         let expired: Vec<PendingOrder> = registry.expire_older_than(Duration::from_secs(30));
@@ -292,9 +318,9 @@ mod tests {
     #[test]
     fn test_drain_removes_all() {
         let mut registry = PendingOrderRegistry::new();
-        registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()));
-        registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()));
-        registry.try_register("T3".to_string(), 3, 70, true);
+        registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()), OrderSide::Entry);
+        registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()), OrderSide::Exit);
+        registry.try_register("T3".to_string(), 3, 70, true, OrderSide::Entry);
 
         let drained = registry.drain();
         assert_eq!(drained.len(), 3);
@@ -304,9 +330,9 @@ mod tests {
     #[test]
     fn test_drain_returns_order_ids() {
         let mut registry = PendingOrderRegistry::new();
-        registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()));
-        registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()));
-        registry.try_register("T3".to_string(), 3, 70, true); // No order ID
+        registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()), OrderSide::Entry);
+        registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()), OrderSide::Exit);
+        registry.try_register("T3".to_string(), 3, 70, true, OrderSide::Entry); // No order ID
 
         let drained = registry.drain();
         let order_ids: Vec<_> = drained.iter().filter_map(|o| o.order_id.as_ref()).collect();

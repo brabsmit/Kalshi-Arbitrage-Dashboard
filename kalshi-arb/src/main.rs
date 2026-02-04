@@ -11,6 +11,7 @@ use config::Config;
 use engine::fees::calculate_fee;
 use engine::matcher;
 use engine::momentum::MomentumScorer;
+use engine::OrderSide;
 use feed::{
     draftkings::DraftKingsFeed, scraped::ScrapedOddsFeed, the_odds_api::TheOddsApi, OddsFeed,
 };
@@ -898,7 +899,17 @@ async fn main() -> Result<()> {
                             rm.record_buy(&pos.ticker, pos.position as u32);
                         }
                         if let Some(ref mut pt) = position_tracker {
-                            pt.record_entry(pos.ticker.clone(), pos.position as u32, 0, 0);
+                            // Conservative defaults for reconciled positions:
+                            // sell_target=99 means manual exit only (bid will never reach 99)
+                            pt.record_entry(
+                                pos.ticker.clone(),
+                                pos.position as u32,
+                                0,    // unknown entry price
+                                0,    // unknown entry cost
+                                99,   // conservative sell target (manual exit only)
+                                Instant::now(),
+                                false,
+                            );
                         }
                     }
                 }
@@ -1190,7 +1201,7 @@ async fn main() -> Result<()> {
 
                         // Gate 2: PendingOrderRegistry - skip if already pending
                         if let Some(ref po) = pending_orders {
-                            if po.is_pending(&intent.ticker) {
+                            if po.is_pending(&intent.ticker, OrderSide::Entry) {
                                 tracing::warn!(
                                     ticker = %intent.ticker,
                                     "BLOCKED: order already pending"
@@ -1230,6 +1241,7 @@ async fn main() -> Result<()> {
                                 intent.quantity,
                                 intent.price,
                                 intent.is_taker,
+                                OrderSide::Entry,
                             ) {
                                 continue; // Race condition: another intent registered first
                             }
@@ -1290,11 +1302,14 @@ async fn main() -> Result<()> {
                                         intent.quantity,
                                         intent.price,
                                         intent.entry_cost_cents,
+                                        intent.sell_target,
+                                        Instant::now(),
+                                        intent.is_taker,
                                     );
                                 }
                                 // Complete pending order
                                 if let Some(ref mut po) = pending_orders {
-                                    po.complete(&intent.ticker);
+                                    po.complete(&intent.ticker, OrderSide::Entry);
                                 }
                                 // Push trade to TUI
                                 state_tx_engine.send_modify(|s| {
@@ -1336,7 +1351,7 @@ async fn main() -> Result<()> {
                                 );
                                 // Release pending order
                                 if let Some(ref mut po) = pending_orders {
-                                    po.complete(&intent.ticker);
+                                    po.complete(&intent.ticker, OrderSide::Entry);
                                 }
                                 // Restore available balance
                                 available_balance_cents += intent.entry_cost_cents as u64;
@@ -1349,6 +1364,137 @@ async fn main() -> Result<()> {
                                         ),
                                     );
                                 });
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Process live exits (live mode only)
+            if !sim_mode_engine {
+                if let Some(ref mut pt) = position_tracker {
+                    let max_hold_seconds = sim_config.realism.max_hold_seconds;
+                    let positions: Vec<_> = pt.all_positions().iter().map(|p| (*p).clone()).collect();
+
+                    for position in positions {
+                        // Skip if exit already pending
+                        if pending_orders.as_ref().map(|po| po.is_pending(&position.ticker, OrderSide::Exit)).unwrap_or(false) {
+                            continue;
+                        }
+
+                        // Get current bid from live book
+                        let yes_bid = live_book_engine.lock().ok()
+                            .and_then(|book| book.get(&position.ticker).map(|d| d.best_bid_ask().0))
+                            .unwrap_or(0);
+
+                        // Check for timeout
+                        let held_secs = position.filled_at.elapsed().as_secs();
+                        let is_timeout = max_hold_seconds > 0 && held_secs > max_hold_seconds;
+
+                        // Exit if timeout OR bid >= sell_target
+                        if is_timeout || yes_bid >= position.sell_target {
+                            let exit_price = if is_timeout { yes_bid } else { position.sell_target };
+                            let is_taker_exit = is_timeout; // Timeout forces taker exit
+
+                            // Skip if price is invalid
+                            if exit_price == 0 || exit_price > 99 {
+                                continue;
+                            }
+
+                            // Register pending exit order
+                            if let Some(ref mut po) = pending_orders {
+                                if !po.try_register(
+                                    position.ticker.clone(),
+                                    position.quantity,
+                                    exit_price,
+                                    is_taker_exit,
+                                    OrderSide::Exit,
+                                ) {
+                                    continue;
+                                }
+                            }
+
+                            tracing::error!(
+                                ticker = %position.ticker,
+                                quantity = position.quantity,
+                                exit_price = exit_price,
+                                sell_target = position.sell_target,
+                                is_timeout = is_timeout,
+                                held_secs = held_secs,
+                                "SUBMITTING EXIT ORDER"
+                            );
+
+                            // Submit sell order
+                            if let Some(ref exec) = executor {
+                                match exec.submit_order(
+                                    &position.ticker,
+                                    position.quantity,
+                                    exit_price,
+                                    false, // is_buy = false for sell
+                                    is_taker_exit,
+                                    "yes",
+                                ).await {
+                                    Ok(_order_id) => {
+                                        // Calculate P&L
+                                        let exit_revenue = (position.quantity * exit_price) as i64;
+                                        let exit_fee = calculate_fee(exit_price, position.quantity, is_taker_exit) as i64;
+                                        let pnl = (exit_revenue - exit_fee) - position.entry_cost_cents as i64;
+
+                                        // Update RiskManager
+                                        if let Some(ref mut rm) = risk_manager {
+                                            rm.record_sell(&position.ticker, position.quantity);
+                                        }
+
+                                        // Update PositionTracker
+                                        pt.record_exit(&position.ticker);
+
+                                        // Complete pending exit order
+                                        if let Some(ref mut po) = pending_orders {
+                                            po.complete(&position.ticker, OrderSide::Exit);
+                                        }
+
+                                        // Push trade to TUI
+                                        let action = if is_timeout { "TIMEOUT" } else { "SELL" };
+                                        state_tx_engine.send_modify(|s| {
+                                            s.push_trade(tui::state::TradeRow {
+                                                time: chrono::Local::now().format("%H:%M:%S").to_string(),
+                                                action: action.to_string(),
+                                                ticker: position.ticker.clone(),
+                                                price: exit_price,
+                                                quantity: position.quantity,
+                                                order_type: if is_taker_exit { "TAKER" } else { "MAKER" }.to_string(),
+                                                pnl: Some(pnl as i32),
+                                                slippage: None,
+                                                source: String::new(),
+                                                fair_value_basis: String::new(),
+                                            });
+                                            s.push_log(
+                                                "ORDER",
+                                                format!(
+                                                    "{} {}x {} @ {}c, P&L: {:+}c",
+                                                    action, position.quantity, position.ticker, exit_price, pnl
+                                                ),
+                                            );
+                                        });
+                                    }
+                                    Err(e) => {
+                                        tracing::error!(
+                                            ticker = %position.ticker,
+                                            error = %e,
+                                            "exit order submission failed"
+                                        );
+                                        // Release pending exit order
+                                        if let Some(ref mut po) = pending_orders {
+                                            po.complete(&position.ticker, OrderSide::Exit);
+                                        }
+                                        state_tx_engine.send_modify(|s| {
+                                            s.push_log(
+                                                "ERROR",
+                                                format!("EXIT FAILED {}: {}", position.ticker, e),
+                                            );
+                                        });
+                                    }
+                                }
                             }
                         }
                     }

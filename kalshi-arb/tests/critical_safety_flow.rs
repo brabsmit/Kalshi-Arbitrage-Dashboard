@@ -1,11 +1,11 @@
 //! Integration test for critical safety mechanisms.
 
 use kalshi_arb::config::RiskConfig;
-use kalshi_arb::engine::pending_orders::PendingOrderRegistry;
+use kalshi_arb::engine::pending_orders::{OrderSide, PendingOrderRegistry};
 use kalshi_arb::engine::positions::PositionTracker;
 use kalshi_arb::engine::risk::RiskManager;
 use kalshi_arb::engine::strategy::{evaluate_with_slippage, TradeAction};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[test]
 fn test_full_safety_gate_flow() {
@@ -21,17 +21,17 @@ fn test_full_safety_gate_flow() {
 
     // 2. Position tracker prevents duplicate
     let mut position_tracker = PositionTracker::new();
-    position_tracker.record_entry("TEST-1".to_string(), 5, 50, 520);
+    position_tracker.record_entry("TEST-1".to_string(), 5, 50, 520, 55, Instant::now(), true);
     assert!(position_tracker.has_position("TEST-1"));
 
     // 3. Pending order registry prevents duplicate submission
     let mut pending_orders = PendingOrderRegistry::new();
-    assert!(pending_orders.try_register("TEST-2".to_string(), 5, 60, true));
-    assert!(!pending_orders.try_register("TEST-2".to_string(), 5, 60, true));
+    assert!(pending_orders.try_register("TEST-2".to_string(), 5, 60, true, OrderSide::Entry));
+    assert!(!pending_orders.try_register("TEST-2".to_string(), 5, 60, true, OrderSide::Entry));
 
     // 4. Order ID tracking for cancellation
-    pending_orders.set_order_id("TEST-2", "order-123".to_string());
-    assert_eq!(pending_orders.get_order_id("TEST-2"), Some("order-123".to_string()));
+    pending_orders.set_order_id("TEST-2", OrderSide::Entry, "order-123".to_string());
+    assert_eq!(pending_orders.get_order_id("TEST-2", OrderSide::Entry), Some("order-123".to_string()));
 
     // 5. Slippage buffer affects strategy
     // Edge of 5 with 3-cent buffer -> effective edge of 2 -> maker only
@@ -46,9 +46,9 @@ fn test_full_safety_gate_flow() {
 #[test]
 fn test_drain_returns_all_orders() {
     let mut registry = PendingOrderRegistry::new();
-    registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()));
-    registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()));
-    registry.try_register("T3".to_string(), 3, 70, true); // No order ID
+    registry.register_with_id("T1".to_string(), 1, 50, true, Some("o1".to_string()), OrderSide::Entry);
+    registry.register_with_id("T2".to_string(), 2, 60, false, Some("o2".to_string()), OrderSide::Exit);
+    registry.try_register("T3".to_string(), 3, 70, true, OrderSide::Entry); // No order ID
 
     let drained = registry.drain();
     assert_eq!(drained.len(), 3);
@@ -61,9 +61,9 @@ fn test_drain_returns_all_orders() {
 #[test]
 fn test_all_order_ids_for_bulk_cancel() {
     let mut registry = PendingOrderRegistry::new();
-    registry.register_with_id("T1".to_string(), 1, 50, true, Some("order-1".to_string()));
-    registry.register_with_id("T2".to_string(), 2, 60, false, Some("order-2".to_string()));
-    registry.try_register("T3".to_string(), 3, 70, true); // No order ID
+    registry.register_with_id("T1".to_string(), 1, 50, true, Some("order-1".to_string()), OrderSide::Entry);
+    registry.register_with_id("T2".to_string(), 2, 60, false, Some("order-2".to_string()), OrderSide::Exit);
+    registry.try_register("T3".to_string(), 3, 70, true, OrderSide::Entry); // No order ID
 
     let order_ids = registry.all_order_ids();
     assert_eq!(order_ids.len(), 2);

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
@@ -7,6 +8,9 @@ pub struct Position {
     pub quantity: u32,
     pub entry_price: u32,
     pub entry_cost_cents: u32, // includes fees
+    pub sell_target: u32,      // break-even exit price
+    pub filled_at: Instant,    // for timeout tracking
+    pub is_taker_entry: bool,  // for fee calculation
 }
 
 pub struct PositionTracker {
@@ -36,6 +40,9 @@ impl PositionTracker {
         quantity: u32,
         entry_price: u32,
         entry_cost_cents: u32,
+        sell_target: u32,
+        filled_at: Instant,
+        is_taker_entry: bool,
     ) {
         self.positions.insert(
             ticker.clone(),
@@ -44,6 +51,9 @@ impl PositionTracker {
                 quantity,
                 entry_price,
                 entry_cost_cents,
+                sell_target,
+                filled_at,
+                is_taker_entry,
             },
         );
     }
@@ -83,7 +93,7 @@ mod tests {
     #[test]
     fn test_record_and_retrieve_position() {
         let mut tracker = PositionTracker::new();
-        tracker.record_entry("TEST-TICKER".to_string(), 10, 50, 520);
+        tracker.record_entry("TEST-TICKER".to_string(), 10, 50, 520, 55, Instant::now(), true);
 
         assert!(tracker.has_position("TEST-TICKER"));
         assert_eq!(tracker.count(), 1);
@@ -93,12 +103,14 @@ mod tests {
         assert_eq!(pos.quantity, 10);
         assert_eq!(pos.entry_price, 50);
         assert_eq!(pos.entry_cost_cents, 520);
+        assert_eq!(pos.sell_target, 55);
+        assert!(pos.is_taker_entry);
     }
 
     #[test]
     fn test_exit_removes_position() {
         let mut tracker = PositionTracker::new();
-        tracker.record_entry("TEST-TICKER".to_string(), 10, 50, 520);
+        tracker.record_entry("TEST-TICKER".to_string(), 10, 50, 520, 55, Instant::now(), false);
 
         let exited = tracker.record_exit("TEST-TICKER");
         assert!(exited.is_some());
@@ -118,8 +130,8 @@ mod tests {
     #[test]
     fn test_multiple_positions() {
         let mut tracker = PositionTracker::new();
-        tracker.record_entry("TICKER-1".to_string(), 5, 40, 210);
-        tracker.record_entry("TICKER-2".to_string(), 8, 60, 490);
+        tracker.record_entry("TICKER-1".to_string(), 5, 40, 210, 45, Instant::now(), false);
+        tracker.record_entry("TICKER-2".to_string(), 8, 60, 490, 65, Instant::now(), true);
 
         assert_eq!(tracker.count(), 2);
         assert!(tracker.has_position("TICKER-1"));
